@@ -10,6 +10,7 @@ import type {
   PtyWriteRequest
 } from '@shared/types'
 import { getAgentConfig } from '../config/agents'
+import { scrollback } from '../scrollback/Scrollback'
 
 interface AgentPty {
   agentId: AgentId
@@ -60,9 +61,10 @@ export class PtyManager {
     const entry: AgentPty = { agentId: req.agentId, proc }
 
     proc.onData((data) => {
-      if (this.webContents.isDestroyed()) return
       // Drop output from a stale proc that's been replaced.
       if (this.ptys.get(req.agentId)?.proc !== proc) return
+      scrollback.append(req.agentId, data)
+      if (this.webContents.isDestroyed()) return
       const event: PtyDataEvent = { agentId: req.agentId, data }
       this.webContents.send('pty:data', event)
     })

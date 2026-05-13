@@ -170,4 +170,5 @@ export interface MuckaApi {
   onPtyExit(handler: (event: PtyExitEvent) => void): () => void
   refreshGit(agentId: AgentId): Promise<GitStatus>
   onGitStatus(handler: (event: GitStatusEvent) => void): () => void
+  getScrollback(agentId: AgentId): Promise<string>
 }

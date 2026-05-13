@@ -33,12 +33,21 @@ const THEME = {
   brightWhite: '#f5f0e6'
 } as const
 
+function separator(): string {
+  const now = new Date()
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const label = `── reconnected · ${time} ──`
+  return `\r\n\x1b[38;5;208m${label}\x1b[0m\r\n`
+}
+
 export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+
+    let cancelled = false
 
     const term = new Terminal({
       cursorBlink: true,
@@ -55,22 +64,12 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
     term.loadAddon(fit)
     term.open(host)
 
-    // Initial fit before spawn so the PTY starts at the right size.
     try {
       fit.fit()
     } catch {
       /* host not laid out yet */
     }
-    const initialCols = term.cols
-    const initialRows = term.rows
 
-    void window.mucka.spawnPty({
-      agentId,
-      cols: initialCols,
-      rows: initialRows
-    })
-
-    // Click anywhere in the terminal area refocuses the hidden textarea.
     const focusTerm = (): void => term.focus()
     host.addEventListener('mousedown', focusTerm)
 
@@ -90,7 +89,6 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
       window.mucka.writePty({ agentId, data })
     })
 
-    // Re-fit on container resize.
     const resizeObserver = new ResizeObserver(() => {
       try {
         fit.fit()
@@ -105,22 +103,34 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
     })
     resizeObserver.observe(host)
 
+    // Replay previous-session scrollback, then spawn the live PTY. Sequenced
+    // so the new prompt arrives strictly after the "reconnected" separator.
+    ;(async () => {
+      const prior = await window.mucka.getScrollback(agentId)
+      if (cancelled) return
+      if (prior.length > 0) {
+        term.write(prior)
+        term.write(separator())
+      }
+      await window.mucka.spawnPty({
+        agentId,
+        cols: term.cols,
+        rows: term.rows
+      })
+    })().catch(() => {
+      /* spawn errors surface as visible failures in the terminal */
+    })
+
     return () => {
+      cancelled = true
       host.removeEventListener('mousedown', focusTerm)
       resizeObserver.disconnect()
       onUserInput.dispose()
       offData()
       offExit()
       term.dispose()
-      // PTY lives on in main; main owns its lifecycle (kills on quit).
     }
   }, [agentId])
 
-  return (
-    <div
-      ref={hostRef}
-      className="size-full bg-[#1a1612]"
-      // xterm.js manages this element — keep React out of its hair.
-    />
-  )
+  return <div ref={hostRef} className="size-full bg-[#1a1612]" />
 }
