@@ -14,6 +14,7 @@ import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
 import { GitService } from './git/GitService'
 import { PtyManager } from './pty/PtyManager'
+import { scrollback } from './scrollback/Scrollback'
 import type {
   AgentId,
   AgentUpdate,
@@ -143,6 +144,10 @@ function registerIpc(): void {
   ipcMain.handle('pty:kill', (_event, agentId: AgentId) => {
     ptyManager?.kill(agentId)
   })
+
+  ipcMain.handle('pty:scrollback', (_event, agentId: AgentId) =>
+    scrollback.get(agentId)
+  )
 }
 
 app.whenReady().then(() => {
@@ -153,12 +158,14 @@ app.whenReady().then(() => {
   })
 
   ensureSeeded()
+  scrollback.loadFromDisk(getAgentConfigs().map((a) => a.id))
   registerIpc()
   createWindow()
 })
 
 app.on('before-quit', () => {
   ptyManager?.killAll()
+  scrollback.flushToDisk()
   closeDb()
 })
 

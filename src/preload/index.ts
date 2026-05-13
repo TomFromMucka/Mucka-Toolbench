@@ -49,7 +49,10 @@ const muckaApi: MuckaApi = {
       handler(payload)
     ipcRenderer.on('git:status', listener)
     return () => ipcRenderer.off('git:status', listener)
-  }
+  },
+
+  getScrollback: (agentId: AgentId) =>
+    ipcRenderer.invoke('pty:scrollback', agentId) as Promise<string>
 }
 
 if (process.contextIsolated) {
