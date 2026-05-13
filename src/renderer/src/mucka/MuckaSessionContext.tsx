@@ -17,6 +17,7 @@ import type {
   MuckaSessionState,
   MuckaStatus
 } from '@shared/types'
+import { buildClientTools } from './tools/index'
 
 interface MuckaSessionValue {
   /** Coarse state for UI. Derived from SDK + local flags. */
@@ -169,7 +170,10 @@ function InnerProvider({
       }
 
       const signedUrl = await window.mucka.mintMuckaSignedUrl()
-      await conversation.startSession({ signedUrl })
+      await conversation.startSession({
+        signedUrl,
+        clientTools: buildClientTools()
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
