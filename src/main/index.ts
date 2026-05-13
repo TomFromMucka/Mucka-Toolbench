@@ -4,7 +4,9 @@ import {
   dialog,
   ipcMain,
   screen,
-  shell
+  session,
+  shell,
+  systemPreferences
 } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -13,8 +15,10 @@ import { ensureSeeded, getAgentConfig, getAgentConfigs } from './config/agents'
 import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
 import { GitService } from './git/GitService'
+import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
 import { PtyManager } from './pty/PtyManager'
 import { scrollback } from './scrollback/Scrollback'
+import type { MicAccess } from '@shared/types'
 import type {
   AgentId,
   AgentUpdate,
@@ -148,6 +152,45 @@ function registerIpc(): void {
   ipcMain.handle('pty:scrollback', (_event, agentId: AgentId) =>
     scrollback.get(agentId)
   )
+
+  ipcMain.handle('mucka:status', () => muckaStatus())
+
+  ipcMain.handle('mucka:signedUrl', () => mintSignedUrl())
+
+  ipcMain.handle('mucka:requestMic', async (): Promise<MicAccess> => {
+    if (process.platform !== 'darwin') return 'granted'
+    try {
+      const ok = await systemPreferences.askForMediaAccess('microphone')
+      return ok ? 'granted' : 'denied'
+    } catch {
+      return 'unknown'
+    }
+  })
+
+  ipcMain.handle('mucka:openMicSettings', async () => {
+    if (process.platform !== 'darwin') return
+    await shell.openExternal(
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+    )
+  })
+}
+
+function configureMediaPermissions(): void {
+  // Electron 28+ needs both the request handler (one-shot grant) and the
+  // check handler (per-call re-validation). Without the check handler, the
+  // second getUserMedia call after a quick restart silently fails.
+  const allow = (permission: string): boolean =>
+    permission === 'media' || permission === 'microphone'
+
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback) => {
+      callback(allow(permission))
+    }
+  )
+
+  session.defaultSession.setPermissionCheckHandler(
+    (_webContents, permission) => allow(permission)
+  )
 }
 
 app.whenReady().then(() => {
@@ -159,6 +202,7 @@ app.whenReady().then(() => {
 
   ensureSeeded()
   scrollback.loadFromDisk(getAgentConfigs().map((a) => a.id))
+  configureMediaPermissions()
   registerIpc()
   createWindow()
 })

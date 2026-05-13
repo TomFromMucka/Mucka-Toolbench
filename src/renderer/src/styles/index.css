@@ -170,6 +170,29 @@ textarea,
   }
 }
 
+/* ─── Mucka voice "live" pip ─────────────────────────────────────────── */
+@utility mucka-live-pip {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-paper-cream);
+  box-shadow: 0 0 8px 1px rgba(255, 255, 255, 0.55);
+  animation: mucka-live-pip 1.4s ease-in-out infinite;
+}
+
+@keyframes mucka-live-pip {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.55;
+  }
+}
+
 /* ─── Ink-style note tape (post-it corners) ──────────────────────────── */
 @utility tape-corner {
   position: relative;

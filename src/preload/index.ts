@@ -6,7 +6,9 @@ import type {
   AgentUpdate,
   GitStatus,
   GitStatusEvent,
+  MicAccess,
   MuckaApi,
+  MuckaStatus,
   PtyDataEvent,
   PtyExitEvent,
   PtyResizeRequest,
@@ -52,7 +54,16 @@ const muckaApi: MuckaApi = {
   },
 
   getScrollback: (agentId: AgentId) =>
-    ipcRenderer.invoke('pty:scrollback', agentId) as Promise<string>
+    ipcRenderer.invoke('pty:scrollback', agentId) as Promise<string>,
+
+  getMuckaStatus: () =>
+    ipcRenderer.invoke('mucka:status') as Promise<MuckaStatus>,
+  mintMuckaSignedUrl: () =>
+    ipcRenderer.invoke('mucka:signedUrl') as Promise<string>,
+  requestMicAccess: () =>
+    ipcRenderer.invoke('mucka:requestMic') as Promise<MicAccess>,
+  openMicSettings: () =>
+    ipcRenderer.invoke('mucka:openMicSettings') as Promise<void>
 }
 
 if (process.contextIsolated) {

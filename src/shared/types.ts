@@ -157,6 +157,24 @@ export interface GitStatusEvent {
   status: GitStatus
 }
 
+/* ─── Mucka PM agent ─────────────────────────────────────────────────── */
+
+export type MuckaStatus =
+  | { kind: 'ok' }
+  | { kind: 'missing-key' }
+  | { kind: 'missing-agent' }
+  | { kind: 'error'; message: string }
+
+export type MuckaSessionState =
+  | 'idle'
+  | 'connecting'
+  | 'listening'
+  | 'speaking'
+  | 'error'
+
+/** What `getMicAccess` reports about the OS-level mic permission (macOS TCC). */
+export type MicAccess = 'granted' | 'denied' | 'not-determined' | 'unknown'
+
 /** Shape exposed on window.mucka (see preload). */
 export interface MuckaApi {
   listAgents(): Promise<AgentConfig[]>
@@ -171,4 +189,13 @@ export interface MuckaApi {
   refreshGit(agentId: AgentId): Promise<GitStatus>
   onGitStatus(handler: (event: GitStatusEvent) => void): () => void
   getScrollback(agentId: AgentId): Promise<string>
+
+  /** Whether Mucka credentials are configured in main's env. */
+  getMuckaStatus(): Promise<MuckaStatus>
+  /** Mint a short-lived signed URL for ElevenLabs Conversational AI. */
+  mintMuckaSignedUrl(): Promise<string>
+  /** Trigger the macOS TCC mic prompt (no-op on other OSes). */
+  requestMicAccess(): Promise<MicAccess>
+  /** Open the macOS System Settings → Privacy → Microphone pane. */
+  openMicSettings(): Promise<void>
 }
