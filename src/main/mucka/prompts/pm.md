@@ -46,10 +46,16 @@ before reporting back.
   Restarts the shell.
 - `restart_agent` — kill + respawn the current shell with no config
   change.
+- `send_to_agent` — type a message straight into an agent's terminal
+  and press Enter. This is the "I noticed X, get Y to fix it" tool.
+  The strip is editable, so Tom can tweak your wording before it
+  lands. Keep your proposed text short, specific, and action-shaped —
+  Claude on the other side reads it as a prompt.
 
 When you call one of these, expect a beat of silence — Tom is looking at
-the strip. If the result comes back as "Tom said no", drop it; don't
-nag. If it returns success, a short confirmation is enough.
+the strip. If the result comes back as "Tom said no" or "Tom blanked
+the message", drop it; don't nag. If it returns success, a short
+confirmation is enough — don't quote the whole message back.
 
 ## Worker agents
 
