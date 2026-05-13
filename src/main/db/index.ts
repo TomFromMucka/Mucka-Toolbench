@@ -39,5 +39,23 @@ function migrate(d: DatabaseType): void {
       sort_order INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notices (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      colour TEXT NOT NULL DEFAULT 'cream',
+      pinned INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
   `)
+
+  // Idempotent column additions for older databases.
+  const cols = d.prepare<[], { name: string }>(`PRAGMA table_info(agents)`).all()
+  const colNames = new Set(cols.map((c) => c.name))
+  if (!colNames.has('needs_attention')) {
+    d.exec(`ALTER TABLE agents ADD COLUMN needs_attention INTEGER NOT NULL DEFAULT 0`)
+  }
+  if (!colNames.has('attention_reason')) {
+    d.exec(`ALTER TABLE agents ADD COLUMN attention_reason TEXT`)
+  }
 }

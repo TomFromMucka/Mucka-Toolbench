@@ -1,8 +1,21 @@
 import type { ClientTools } from '@elevenlabs/react'
-import type { AgentConfig, AgentId, GitStatus } from '@shared/types'
+import type {
+  AgentConfig,
+  AgentId,
+  GitStatus,
+  NoticeColour
+} from '@shared/types'
 import { MUCKA_AGENT_IDS } from '@shared/mucka-tools'
+import type { ConfirmRequest } from '../MuckaSessionContext'
 
-/** Strip ANSI escape sequences so the LLM sees readable text, not control codes. */
+interface ToolDeps {
+  setAmbientStatus: (text: string | null) => void
+  bumpRestart: (agent: AgentId) => void
+  requestConfirm: (req: ConfirmRequest) => Promise<boolean>
+}
+
+/* ─── Helpers ────────────────────────────────────────────────────────── */
+
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
 function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, '')
@@ -24,9 +37,20 @@ function parseAgentId(params: Record<string, unknown>): AgentId {
   return raw as AgentId
 }
 
+function parseString(params: Record<string, unknown>, key: string): string {
+  const v = params[key]
+  if (typeof v !== 'string') {
+    throw new Error(`${key} must be a string — got ${JSON.stringify(v)}`)
+  }
+  return v
+}
+
 function describeAgentLine(cfg: AgentConfig): string {
   const cmd = cfg.command.split('/').pop() || cfg.command
-  return `${cfg.displayName} — branch "${cfg.branch}" — cwd ${cfg.worktreePath} — running ${cmd} ${cfg.args.join(' ')}`.trim()
+  const attention = cfg.needsAttention
+    ? ` [needs Tom${cfg.attentionReason ? `: ${cfg.attentionReason}` : ''}]`
+    : ''
+  return `${cfg.displayName} — branch "${cfg.branch}" — cwd ${cfg.worktreePath} — running ${cmd} ${cfg.args.join(' ')}${attention}`.trim()
 }
 
 function describeGitLine(status: GitStatus): string {
@@ -49,12 +73,12 @@ function describeGitLine(status: GitStatus): string {
   return parts.join(' · ')
 }
 
+/* ─── Read-only tools (phase 2) ──────────────────────────────────────── */
+
 async function listAgents(): Promise<string> {
   const agents = await window.mucka.listAgents()
   if (agents.length === 0) return 'No agents configured.'
-  return agents
-    .map((a, i) => `${i + 1}. ${describeAgentLine(a)}`)
-    .join('\n')
+  return agents.map((a, i) => `${i + 1}. ${describeAgentLine(a)}`).join('\n')
 }
 
 async function getGitStatus(params: Record<string, unknown>): Promise<string> {
@@ -89,23 +113,142 @@ async function whatsHappening(): Promise<string> {
       return [
         `── ${a.displayName} (${a.id}) — ${describeGitLine(git)}`,
         `  cwd: ${a.worktreePath}`,
+        a.needsAttention ? `  ⚑ NEEDS TOM: ${a.attentionReason ?? '(no reason)'}` : null,
         `  last:`,
-        tail
-          .split('\n')
-          .map((l) => `    ${l}`)
-          .join('\n')
-      ].join('\n')
+        tail.split('\n').map((l) => `    ${l}`).join('\n')
+      ]
+        .filter((l): l is string => l !== null)
+        .join('\n')
     })
   )
 
   return lines.join('\n\n')
 }
 
-export function buildClientTools(): ClientTools {
+/* ─── Auto-execute write tools (phase 3) ─────────────────────────────── */
+
+function makeSetBannerStatus(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const text = parseString(params, 'text').trim()
+    if (text.length === 0) {
+      deps.setAmbientStatus(null)
+      return 'Cleared the banner.'
+    }
+    deps.setAmbientStatus(text)
+    return `Banner set to: ${text}`
+  }
+}
+
+const VALID_COLOURS: readonly NoticeColour[] = ['cream', 'yellow', 'pink', 'blue']
+
+async function addNotice(params: Record<string, unknown>): Promise<string> {
+  const title = parseString(params, 'title')
+  const body = parseString(params, 'body')
+  const colourRaw = params['colour']
+  const colour: NoticeColour =
+    typeof colourRaw === 'string' && (VALID_COLOURS as string[]).includes(colourRaw)
+      ? (colourRaw as NoticeColour)
+      : 'cream'
+  const created = await window.mucka.addNotice({ title, body, colour })
+  return `Pinned "${created.title}" to the notice board (${colour}).`
+}
+
+async function removeNotice(params: Record<string, unknown>): Promise<string> {
+  const title = parseString(params, 'title')
+  const n = await window.mucka.removeNoticeByTitle(title)
+  if (n === 0) return `No notice titled "${title}" — nothing to remove.`
+  return `Removed ${n} notice${n === 1 ? '' : 's'} titled "${title}".`
+}
+
+async function flagAttention(params: Record<string, unknown>): Promise<string> {
+  const agentId = parseAgentId(params)
+  const reason = parseString(params, 'reason').slice(0, 120)
+  await window.mucka.updateAgent({
+    id: agentId,
+    needsAttention: true,
+    attentionReason: reason
+  })
+  return `Flagged ${agentId} for Tom — ${reason}`
+}
+
+async function clearAttention(params: Record<string, unknown>): Promise<string> {
+  const agentId = parseAgentId(params)
+  await window.mucka.updateAgent({
+    id: agentId,
+    needsAttention: false,
+    attentionReason: null
+  })
+  return `Cleared ${agentId}'s attention flag.`
+}
+
+/* ─── Confirm-gated write tools (phase 3) ────────────────────────────── */
+
+function makeSetAgentWorktree(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const path = parseString(params, 'path').trim()
+    if (!path) throw new Error('path must not be empty')
+    const ok = await deps.requestConfirm({
+      summary: `Switch ${agentId} to ${path}`,
+      note: `Restarts ${agentId}'s shell at the new path.`
+    })
+    if (!ok) return `Tom said no. ${agentId}'s worktree is unchanged.`
+    await window.mucka.updateAgent({ id: agentId, worktreePath: path })
+    return `Done. ${agentId} is now at ${path} (shell restarted).`
+  }
+}
+
+function makeSetAgentCommand(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const command = parseString(params, 'command').trim()
+    if (!command) throw new Error('command must not be empty')
+    const argsRaw = typeof params['args'] === 'string' ? (params['args'] as string) : ''
+    const args = argsRaw
+      .split(/\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+    const argsStr = args.length > 0 ? ` ${args.join(' ')}` : ''
+    const ok = await deps.requestConfirm({
+      summary: `Switch ${agentId} to run "${command}${argsStr}"`,
+      note: `Restarts ${agentId}'s shell.`
+    })
+    if (!ok) return `Tom said no. ${agentId}'s command is unchanged.`
+    await window.mucka.updateAgent({ id: agentId, command, args })
+    return `Done. ${agentId} is now running ${command}${argsStr}.`
+  }
+}
+
+function makeRestartAgent(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const ok = await deps.requestConfirm({
+      summary: `Restart ${agentId}'s shell`,
+      note: `Kills the current process and starts a fresh one with the same config.`
+    })
+    if (!ok) return `Tom said no. ${agentId}'s shell wasn't restarted.`
+    deps.bumpRestart(agentId)
+    return `Restarted ${agentId}.`
+  }
+}
+
+/* ─── Composition ────────────────────────────────────────────────────── */
+
+export function buildClientTools(deps: ToolDeps): ClientTools {
   return {
     list_agents: () => listAgents(),
     get_git_status: (params) => getGitStatus(params),
     get_recent_output: (params) => getRecentOutput(params),
-    whats_happening: () => whatsHappening()
+    whats_happening: () => whatsHappening(),
+
+    set_banner_status: makeSetBannerStatus(deps),
+    add_notice: (params) => addNotice(params),
+    remove_notice: (params) => removeNotice(params),
+    flag_attention: (params) => flagAttention(params),
+    clear_attention: (params) => clearAttention(params),
+
+    set_agent_worktree: makeSetAgentWorktree(deps),
+    set_agent_command: makeSetAgentCommand(deps),
+    restart_agent: makeRestartAgent(deps)
   }
 }

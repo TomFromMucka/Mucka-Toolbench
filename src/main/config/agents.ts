@@ -16,7 +16,9 @@ const DEFAULTS: AgentConfig[] = [
     branch: 'main',
     worktreePath: HOME,
     command: SHELL,
-    args: ['-l']
+    args: ['-l'],
+    needsAttention: false,
+    attentionReason: null
   },
   {
     id: 'sammy',
@@ -24,7 +26,9 @@ const DEFAULTS: AgentConfig[] = [
     branch: 'main',
     worktreePath: HOME,
     command: SHELL,
-    args: ['-l']
+    args: ['-l'],
+    needsAttention: false,
+    attentionReason: null
   },
   {
     id: 'kev',
@@ -32,7 +36,9 @@ const DEFAULTS: AgentConfig[] = [
     branch: 'main',
     worktreePath: HOME,
     command: SHELL,
-    args: ['-l']
+    args: ['-l'],
+    needsAttention: false,
+    attentionReason: null
   },
   {
     id: 'bren',
@@ -40,7 +46,9 @@ const DEFAULTS: AgentConfig[] = [
     branch: 'main',
     worktreePath: HOME,
     command: SHELL,
-    args: ['-l']
+    args: ['-l'],
+    needsAttention: false,
+    attentionReason: null
   }
 ]
 
