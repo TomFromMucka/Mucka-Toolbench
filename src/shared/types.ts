@@ -121,9 +121,16 @@ export interface PtyResizeRequest {
   rows: number
 }
 
-/** Shape exposed on window.muckaApi (see preload). */
+/** Patch shape for agent updates from the Settings sheet. */
+export type AgentUpdate = Partial<
+  Pick<AgentConfig, 'displayName' | 'branch' | 'worktreePath' | 'command' | 'args'>
+> & { id: AgentId }
+
+/** Shape exposed on window.mucka (see preload). */
 export interface MuckaApi {
   listAgents(): Promise<AgentConfig[]>
+  updateAgent(patch: AgentUpdate): Promise<AgentConfig>
+  pickDirectory(opts?: { defaultPath?: string }): Promise<string | null>
   spawnPty(req: PtySpawnRequest): Promise<void>
   writePty(req: PtyWriteRequest): void
   resizePty(req: PtyResizeRequest): void
