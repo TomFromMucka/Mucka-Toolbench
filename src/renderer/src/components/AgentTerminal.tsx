@@ -70,6 +70,10 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
       rows: initialRows
     })
 
+    // Click anywhere in the terminal area refocuses the hidden textarea.
+    const focusTerm = (): void => term.focus()
+    host.addEventListener('mousedown', focusTerm)
+
     const offData = window.mucka.onPtyData((event) => {
       if (event.agentId !== agentId) return
       term.write(event.data)
@@ -102,6 +106,7 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
     resizeObserver.observe(host)
 
     return () => {
+      host.removeEventListener('mousedown', focusTerm)
       resizeObserver.disconnect()
       onUserInput.dispose()
       offData()
