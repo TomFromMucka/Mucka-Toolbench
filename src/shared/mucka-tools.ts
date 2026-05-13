@@ -228,5 +228,26 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       },
       required: ['agent']
     }
+  },
+  {
+    name: 'send_to_agent',
+    description:
+      "Type a prompt or command into one agent's terminal and press Enter — the agent's Claude session (or whatever shell is running) receives it as input. ALWAYS confirms: Tom sees your proposed text in an editable strip and can tweak it before approving. Use when Tom says 'tell Dave to fix this' / 'I noticed X, get Sammy onto it' / 'have Kev try Y'. Make the text focused and actionable — short instructions work best.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        },
+        text: {
+          type: 'string',
+          description:
+            "The exact text to type into the agent's terminal. Will be sent verbatim with Enter pressed at the end. Don't add quotes around it."
+        }
+      },
+      required: ['agent', 'text']
+    }
   }
 ] as const

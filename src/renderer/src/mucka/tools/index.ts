@@ -6,12 +6,13 @@ import type {
   NoticeColour
 } from '@shared/types'
 import { MUCKA_AGENT_IDS } from '@shared/mucka-tools'
-import type { ConfirmRequest } from '../MuckaSessionContext'
+import type { ConfirmRequest, EditConfirmRequest } from '../MuckaSessionContext'
 
 interface ToolDeps {
   setAmbientStatus: (text: string | null) => void
   bumpRestart: (agent: AgentId) => void
   requestConfirm: (req: ConfirmRequest) => Promise<boolean>
+  requestEditConfirm: (req: EditConfirmRequest) => Promise<string | null>
   /** Pull a fresh agents list from the DB (after a write tool changes one). */
   reloadAgents: () => Promise<void>
   /** Pull a fresh notice list from the DB (after add/remove). */
@@ -250,6 +251,25 @@ function makeRestartAgent(deps: ToolDeps) {
   }
 }
 
+function makeSendToAgent(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const text = parseString(params, 'text')
+    if (!text.trim()) throw new Error('text must not be empty')
+    const approved = await deps.requestEditConfirm({
+      summary: `Send a message to ${agentId}'s terminal`,
+      note: "Will type this and press Enter inside the agent's shell.",
+      editable: { text, multiline: true }
+    })
+    if (approved === null) return `Tom said no. Nothing sent to ${agentId}.`
+    const trimmed = approved.trim()
+    if (!trimmed) return `Tom blanked the message. Nothing sent to ${agentId}.`
+    // \r is what terminals receive when you press Enter.
+    window.mucka.writePty({ agentId, data: trimmed + '\r' })
+    return `Sent to ${agentId}: ${trimmed.slice(0, 200)}${trimmed.length > 200 ? '…' : ''}`
+  }
+}
+
 /* ─── Composition ────────────────────────────────────────────────────── */
 
 export function buildClientTools(deps: ToolDeps): ClientTools {
@@ -267,6 +287,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
 
     set_agent_worktree: makeSetAgentWorktree(deps),
     set_agent_command: makeSetAgentCommand(deps),
-    restart_agent: makeRestartAgent(deps)
+    restart_agent: makeRestartAgent(deps),
+    send_to_agent: makeSendToAgent(deps)
   }
 }

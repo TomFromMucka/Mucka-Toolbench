@@ -29,12 +29,20 @@ export interface ConfirmRequest {
   timeoutMs?: number
 }
 
+export interface EditConfirmRequest extends ConfirmRequest {
+  editable: { text: string; multiline?: boolean }
+}
+
 export interface PendingConfirm {
   id: string
   summary: string
   note: string | null
   expiresAt: number
-  resolve: (yes: boolean) => void
+  /** When set, the strip renders a textarea pre-filled with this. */
+  editable: { text: string; multiline: boolean } | null
+  /** Internal — ConfirmStrip calls this with the user's decision. */
+  resolveSimple: ((yes: boolean) => void) | null
+  resolveEdit: ((text: string | null) => void) | null
 }
 
 export type RestartVersionMap = Partial<Record<AgentId, number>>
@@ -63,6 +71,7 @@ interface MuckaSessionValue {
   setAmbientStatus: (text: string | null) => void
   bumpRestart: (agent: AgentId) => void
   requestConfirm: (req: ConfirmRequest) => Promise<boolean>
+  requestEditConfirm: (req: EditConfirmRequest) => Promise<string | null>
   /** Send a typed message into the live session; auto-starts a session if needed. */
   sendUserMessage: (text: string) => Promise<void>
 }
@@ -159,6 +168,9 @@ function InnerProvider({
           text: message
         }
       ])
+    },
+    onUnhandledClientToolCall: (call) => {
+      console.warn('[mucka] unhandled client tool call from agent:', call)
     }
   })
 
@@ -212,7 +224,48 @@ function InnerProvider({
           summary: req.summary,
           note: req.note ?? null,
           expiresAt: Date.now() + timeoutMs,
-          resolve: finish
+          editable: null,
+          resolveSimple: finish,
+          resolveEdit: null
+        }
+        pendingRef.current = entry
+        setPendingConfirm(entry)
+      })
+    },
+    []
+  )
+
+  const requestEditConfirm = useCallback(
+    (req: EditConfirmRequest): Promise<string | null> => {
+      if (pendingRef.current) {
+        return Promise.reject(
+          new Error(
+            'Another confirmation is already pending — finish it before asking for another.'
+          )
+        )
+      }
+      return new Promise<string | null>((resolve) => {
+        const id = `c${Date.now().toString(36)}`
+        const timeoutMs = req.timeoutMs ?? 60_000
+        let timer: ReturnType<typeof setTimeout>
+        const finish = (text: string | null): void => {
+          clearTimeout(timer)
+          pendingRef.current = null
+          setPendingConfirm(null)
+          resolve(text)
+        }
+        timer = setTimeout(() => finish(null), timeoutMs)
+        const entry: PendingConfirm = {
+          id,
+          summary: req.summary,
+          note: req.note ?? null,
+          expiresAt: Date.now() + timeoutMs,
+          editable: {
+            text: req.editable.text,
+            multiline: req.editable.multiline ?? false
+          },
+          resolveSimple: null,
+          resolveEdit: finish
         }
         pendingRef.current = entry
         setPendingConfirm(entry)
@@ -264,6 +317,7 @@ function InnerProvider({
           setAmbientStatus,
           bumpRestart,
           requestConfirm,
+          requestEditConfirm,
           reloadAgents,
           reloadNotices
         })
@@ -280,6 +334,7 @@ function InnerProvider({
     setAmbientStatus,
     bumpRestart,
     requestConfirm,
+    requestEditConfirm,
     reloadAgents,
     reloadNotices
   ])
@@ -368,6 +423,7 @@ function InnerProvider({
       setAmbientStatus,
       bumpRestart,
       requestConfirm,
+      requestEditConfirm,
       sendUserMessage
     }),
     [
@@ -389,6 +445,7 @@ function InnerProvider({
       setAmbientStatus,
       bumpRestart,
       requestConfirm,
+      requestEditConfirm,
       sendUserMessage
     ]
   )
