@@ -155,10 +155,6 @@ app.whenReady().then(() => {
   ensureSeeded()
   registerIpc()
   createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
 })
 
 app.on('before-quit', () => {
@@ -166,8 +162,10 @@ app.on('before-quit', () => {
   closeDb()
 })
 
+// Single-window dev cockpit — closing the window means quitting the app.
+// On macOS the default is to leave the process alive in the dock; for a
+// tool you launch with `npm run dev`, that leaves a zombie process with
+// no dock entry and no obvious way to bring the window back. Quit cleanly.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  app.quit()
 })
