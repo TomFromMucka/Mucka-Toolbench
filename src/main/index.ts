@@ -18,11 +18,17 @@ import icon from '../../resources/icon.png?asset'
 import { ensureSeeded, getAgentConfig, getAgentConfigs } from './config/agents'
 import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
+import {
+  addNotice,
+  listNotices,
+  removeNotice,
+  removeNoticeByTitle
+} from './db/notices'
 import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
 import { PtyManager } from './pty/PtyManager'
 import { scrollback } from './scrollback/Scrollback'
-import type { MicAccess } from '@shared/types'
+import type { MicAccess, NoticeInput } from '@shared/types'
 import type {
   AgentId,
   AgentUpdate,
@@ -177,6 +183,15 @@ function registerIpc(): void {
       'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
     )
   })
+
+  ipcMain.handle('notices:list', () => listNotices())
+  ipcMain.handle('notices:add', (_event, input: NoticeInput) =>
+    addNotice(input.title, input.body, input.colour ?? 'cream', input.pinned ?? false)
+  )
+  ipcMain.handle('notices:remove', (_event, id: string) => removeNotice(id))
+  ipcMain.handle('notices:removeByTitle', (_event, title: string) =>
+    removeNoticeByTitle(title)
+  )
 }
 
 function configureMediaPermissions(): void {

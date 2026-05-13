@@ -9,6 +9,8 @@ import type {
   MicAccess,
   MuckaApi,
   MuckaStatus,
+  Notice,
+  NoticeInput,
   PtyDataEvent,
   PtyExitEvent,
   PtyResizeRequest,
@@ -63,7 +65,15 @@ const muckaApi: MuckaApi = {
   requestMicAccess: () =>
     ipcRenderer.invoke('mucka:requestMic') as Promise<MicAccess>,
   openMicSettings: () =>
-    ipcRenderer.invoke('mucka:openMicSettings') as Promise<void>
+    ipcRenderer.invoke('mucka:openMicSettings') as Promise<void>,
+
+  listNotices: () => ipcRenderer.invoke('notices:list') as Promise<Notice[]>,
+  addNotice: (input: NoticeInput) =>
+    ipcRenderer.invoke('notices:add', input) as Promise<Notice>,
+  removeNotice: (id: string) =>
+    ipcRenderer.invoke('notices:remove', id) as Promise<boolean>,
+  removeNoticeByTitle: (title: string) =>
+    ipcRenderer.invoke('notices:removeByTitle', title) as Promise<number>
 }
 
 if (process.contextIsolated) {

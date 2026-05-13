@@ -11,14 +11,14 @@ const IDLE_LINE = 'Mucka is here when you need her — hit ⌘M to talk.'
 export function MuckaTopBanner({
   onOpenSettings
 }: MuckaTopBannerProps): React.JSX.Element {
-  const { state, lastMucka, error } = useMuckaSession()
+  const { state, lastMucka, ambientStatus, error } = useMuckaSession()
 
   const line =
     state === 'error' && error
       ? error
       : state === 'connecting'
         ? 'Connecting to Mucka…'
-        : (lastMucka ?? IDLE_LINE)
+        : (ambientStatus ?? lastMucka ?? IDLE_LINE)
 
   const isLive = state === 'listening' || state === 'speaking'
 

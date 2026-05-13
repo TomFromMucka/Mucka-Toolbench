@@ -7,12 +7,13 @@ import type { GitStatusMap } from '../hooks/useGitStatus'
 interface AgentGridProps {
   agents: AgentConfig[]
   gitStatus: GitStatusMap
+  restartVersion: Partial<Record<Agent['id'], number>>
 }
 
 /**
- * Merges live AgentConfig (id, displayName, branch, worktreePath, command)
- * with mock display state (status, headline, needsAttention) until the
- * real agent activity stream lands.
+ * Combines DB-backed AgentConfig with the still-mocked display state
+ * (status, headline). `needsAttention` and `attentionReason` are now
+ * real and live on AgentConfig — Mucka can flip them via tools.
  */
 function mergeWithMockState(cfg: AgentConfig): Agent {
   const mock = mockAgents.find((m) => m.id === cfg.id)
@@ -22,8 +23,9 @@ function mergeWithMockState(cfg: AgentConfig): Agent {
     branch: cfg.branch,
     worktreePath: cfg.worktreePath,
     status: mock?.status ?? 'idle',
-    needsAttention: mock?.needsAttention ?? false,
+    needsAttention: cfg.needsAttention,
     headline:
+      cfg.attentionReason ??
       mock?.headline ??
       `${cfg.displayName} ready at ${cfg.worktreePath}`,
     terminalLines: []
@@ -32,9 +34,9 @@ function mergeWithMockState(cfg: AgentConfig): Agent {
 
 export function AgentGrid({
   agents,
-  gitStatus
+  gitStatus,
+  restartVersion
 }: AgentGridProps): React.JSX.Element {
-  // Fall back to mockAgents in the first paint before the DB list arrives.
   const list: AgentConfig[] =
     agents.length > 0
       ? agents
@@ -44,14 +46,16 @@ export function AgentGrid({
           branch: m.branch,
           worktreePath: m.worktreePath,
           command: 'zsh',
-          args: ['-l']
+          args: ['-l'],
+          needsAttention: false,
+          attentionReason: null
         }))
 
   return (
     <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-3">
       {list.map((cfg) => (
         <AgentClipboard
-          key={spawnKey(cfg)}
+          key={`${spawnKey(cfg)}::r${restartVersion[cfg.id] ?? 0}`}
           agent={mergeWithMockState(cfg)}
           gitStatus={gitStatus[cfg.id]}
         />

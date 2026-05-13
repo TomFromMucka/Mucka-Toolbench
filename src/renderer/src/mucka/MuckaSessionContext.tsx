@@ -12,6 +12,7 @@ import {
   useConversation
 } from '@elevenlabs/react'
 import type {
+  AgentId,
   MicAccess,
   MuckaChatMessage,
   MuckaSessionState,
@@ -19,27 +20,47 @@ import type {
 } from '@shared/types'
 import { buildClientTools } from './tools/index'
 
+export interface ConfirmRequest {
+  summary: string
+  note?: string
+  /** Auto-deny if Tom doesn't answer within this many ms. Default 45_000. */
+  timeoutMs?: number
+}
+
+export interface PendingConfirm {
+  id: string
+  summary: string
+  note: string | null
+  expiresAt: number
+  resolve: (yes: boolean) => void
+}
+
+export type RestartVersionMap = Partial<Record<AgentId, number>>
+
 interface MuckaSessionValue {
-  /** Coarse state for UI. Derived from SDK + local flags. */
   state: MuckaSessionState
-  /** Credential health (env-derived). Set once on mount. */
   credentialStatus: MuckaStatus
-  /** Macos mic permission as last we heard. */
   micAccess: MicAccess
-  /** True while a startSession round-trip is in flight. */
   connecting: boolean
-  /** True when Mucka is currently speaking. */
   isSpeaking: boolean
-  /** Last error string for display. Cleared on next successful start. */
   error: string | null
-  /** Finalised turns, oldest first. */
   transcript: MuckaChatMessage[]
-  /** Most recent Mucka turn, for the top banner. */
   lastMucka: string | null
+  /** Tool-set banner status that overrides idle and lastMucka. */
+  ambientStatus: string | null
+  /** Pop one per agent every time a forced respawn is needed. */
+  restartVersion: RestartVersionMap
+  /** Currently pending tool confirmation, null when none. */
+  pendingConfirm: PendingConfirm | null
+
   start: () => Promise<void>
   stop: () => Promise<void>
   toggle: () => void
   openMicSettings: () => Promise<void>
+
+  setAmbientStatus: (text: string | null) => void
+  bumpRestart: (agent: AgentId) => void
+  requestConfirm: (req: ConfirmRequest) => Promise<boolean>
 }
 
 const MuckaSessionCtx = createContext<MuckaSessionValue | null>(null)
@@ -80,11 +101,17 @@ function InnerProvider({
   const [micAccess, setMicAccess] = useState<MicAccess>('not-determined')
   const [error, setError] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [ambientStatus, setAmbientStatusState] = useState<string | null>(null)
+  const [restartVersion, setRestartVersion] = useState<RestartVersionMap>({})
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
 
-  // Guards against double-start (toggle + hotkey racing) and
-  // stop-pressed-mid-connect (cancel the session as soon as it opens).
   const inFlight = useRef(false)
   const cancelOnConnect = useRef(false)
+  const pendingRef = useRef<PendingConfirm | null>(null)
+
+  useEffect(() => {
+    pendingRef.current = pendingConfirm
+  }, [pendingConfirm])
 
   const conversation = useConversation({
     onConnect: () => {
@@ -116,12 +143,10 @@ function InnerProvider({
     }
   })
 
-  // Fetch credential status once on mount.
   useEffect(() => {
     void window.mucka.getMuckaStatus().then(setCredentialStatus)
   }, [])
 
-  // Ensure the mic + WS are released when the window goes away.
   useEffect(() => {
     const handler = (): void => {
       try {
@@ -134,6 +159,50 @@ function InnerProvider({
     return () => window.removeEventListener('beforeunload', handler)
   }, [conversation])
 
+  // ── Action surface for tools + UI ───────────────────────────────────
+  const setAmbientStatus = useCallback((text: string | null): void => {
+    setAmbientStatusState(text)
+  }, [])
+
+  const bumpRestart = useCallback((agent: AgentId): void => {
+    setRestartVersion((prev) => ({ ...prev, [agent]: (prev[agent] ?? 0) + 1 }))
+  }, [])
+
+  const requestConfirm = useCallback(
+    (req: ConfirmRequest): Promise<boolean> => {
+      if (pendingRef.current) {
+        return Promise.reject(
+          new Error(
+            'Another confirmation is already pending — finish it before asking for another.'
+          )
+        )
+      }
+      return new Promise<boolean>((resolve) => {
+        const id = `c${Date.now().toString(36)}`
+        const timeoutMs = req.timeoutMs ?? 45_000
+        let timer: ReturnType<typeof setTimeout>
+        const finish = (yes: boolean): void => {
+          clearTimeout(timer)
+          pendingRef.current = null
+          setPendingConfirm(null)
+          resolve(yes)
+        }
+        timer = setTimeout(() => finish(false), timeoutMs)
+        const entry: PendingConfirm = {
+          id,
+          summary: req.summary,
+          note: req.note ?? null,
+          expiresAt: Date.now() + timeoutMs,
+          resolve: finish
+        }
+        pendingRef.current = entry
+        setPendingConfirm(entry)
+      })
+    },
+    []
+  )
+
+  // ── Session lifecycle ──────────────────────────────────────────────
   const start = useCallback(async () => {
     if (inFlight.current) return
     if (conversation.status === 'connected' || conversation.status === 'connecting') return
@@ -172,7 +241,11 @@ function InnerProvider({
       const signedUrl = await window.mucka.mintMuckaSignedUrl()
       await conversation.startSession({
         signedUrl,
-        clientTools: buildClientTools()
+        clientTools: buildClientTools({
+          setAmbientStatus,
+          bumpRestart,
+          requestConfirm
+        })
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -180,7 +253,7 @@ function InnerProvider({
       inFlight.current = false
       setConnecting(false)
     }
-  }, [conversation, micAccess])
+  }, [conversation, micAccess, setAmbientStatus, bumpRestart, requestConfirm])
 
   const stop = useCallback(async () => {
     if (inFlight.current && conversation.status !== 'connected') {
@@ -237,10 +310,16 @@ function InnerProvider({
       error,
       transcript,
       lastMucka,
+      ambientStatus,
+      restartVersion,
+      pendingConfirm,
       start,
       stop,
       toggle,
-      openMicSettings
+      openMicSettings,
+      setAmbientStatus,
+      bumpRestart,
+      requestConfirm
     }),
     [
       state,
@@ -251,10 +330,16 @@ function InnerProvider({
       error,
       transcript,
       lastMucka,
+      ambientStatus,
+      restartVersion,
+      pendingConfirm,
       start,
       stop,
       toggle,
-      openMicSettings
+      openMicSettings,
+      setAmbientStatus,
+      bumpRestart,
+      requestConfirm
     ]
   )
 

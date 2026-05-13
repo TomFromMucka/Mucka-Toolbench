@@ -86,6 +86,10 @@ export interface AgentConfig {
   /** Command to launch inside the worktree (e.g. "zsh", "claude"). */
   command: string
   args: string[]
+  /** When true, the clipboard glows brand orange — Tom's attention needed. */
+  needsAttention: boolean
+  /** Optional one-liner Mucka sets when flagging attention. */
+  attentionReason: string | null
 }
 
 /** Renderer → main: start a PTY for an agent at the agent's configured cwd. */
@@ -121,10 +125,37 @@ export interface PtyResizeRequest {
   rows: number
 }
 
-/** Patch shape for agent updates from the Settings sheet. */
+/** Patch shape for agent updates (Settings sheet + Mucka tools). */
 export type AgentUpdate = Partial<
-  Pick<AgentConfig, 'displayName' | 'branch' | 'worktreePath' | 'command' | 'args'>
+  Pick<
+    AgentConfig,
+    | 'displayName'
+    | 'branch'
+    | 'worktreePath'
+    | 'command'
+    | 'args'
+    | 'needsAttention'
+    | 'attentionReason'
+  >
 > & { id: AgentId }
+
+export type NoticeColour = 'cream' | 'yellow' | 'pink' | 'blue'
+
+export interface Notice {
+  id: string
+  title: string
+  body: string
+  colour: NoticeColour
+  pinned: boolean
+  createdAt: number
+}
+
+export interface NoticeInput {
+  title: string
+  body: string
+  colour?: NoticeColour
+  pinned?: boolean
+}
 
 /** Live git state for an agent's worktree. */
 export interface GitStatus {
@@ -198,4 +229,10 @@ export interface MuckaApi {
   requestMicAccess(): Promise<MicAccess>
   /** Open the macOS System Settings → Privacy → Microphone pane. */
   openMicSettings(): Promise<void>
+
+  /* Notices (notice board) */
+  listNotices(): Promise<Notice[]>
+  addNotice(input: NoticeInput): Promise<Notice>
+  removeNotice(id: string): Promise<boolean>
+  removeNoticeByTitle(title: string): Promise<number>
 }

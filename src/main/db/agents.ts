@@ -10,6 +10,8 @@ interface AgentRow {
   args: string
   sort_order: number
   updated_at: number
+  needs_attention: number
+  attention_reason: string | null
 }
 
 function rowToConfig(row: AgentRow): AgentConfig {
@@ -26,7 +28,9 @@ function rowToConfig(row: AgentRow): AgentConfig {
     branch: row.branch,
     worktreePath: row.worktree_path,
     command: row.command,
-    args: parsedArgs
+    args: parsedArgs,
+    needsAttention: row.needs_attention === 1,
+    attentionReason: row.attention_reason ?? null
   }
 }
 
@@ -44,14 +48,11 @@ export function getAgent(id: AgentId): AgentConfig | undefined {
   return row ? rowToConfig(row) : undefined
 }
 
-export function upsertAgent(
-  agent: AgentConfig,
-  sortOrder: number
-): void {
+export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
   getDb()
     .prepare(
-      `INSERT INTO agents (id, display_name, branch, worktree_path, command, args, sort_order, updated_at)
-       VALUES (@id, @displayName, @branch, @worktreePath, @command, @args, @sort_order, @updated_at)
+      `INSERT INTO agents (id, display_name, branch, worktree_path, command, args, sort_order, updated_at, needs_attention, attention_reason)
+       VALUES (@id, @displayName, @branch, @worktreePath, @command, @args, @sort_order, @updated_at, @needs_attention, @attention_reason)
        ON CONFLICT(id) DO UPDATE SET
          display_name = excluded.display_name,
          branch = excluded.branch,
@@ -59,7 +60,9 @@ export function upsertAgent(
          command = excluded.command,
          args = excluded.args,
          sort_order = excluded.sort_order,
-         updated_at = excluded.updated_at`
+         updated_at = excluded.updated_at,
+         needs_attention = excluded.needs_attention,
+         attention_reason = excluded.attention_reason`
     )
     .run({
       id: agent.id,
@@ -69,7 +72,9 @@ export function upsertAgent(
       command: agent.command,
       args: JSON.stringify(agent.args),
       sort_order: sortOrder,
-      updated_at: Date.now()
+      updated_at: Date.now(),
+      needs_attention: agent.needsAttention ? 1 : 0,
+      attention_reason: agent.attentionReason ?? null
     })
 }
 
