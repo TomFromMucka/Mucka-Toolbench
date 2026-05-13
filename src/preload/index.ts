@@ -4,6 +4,8 @@ import type {
   AgentConfig,
   AgentId,
   AgentUpdate,
+  GitStatus,
+  GitStatusEvent,
   MuckaApi,
   PtyDataEvent,
   PtyExitEvent,
@@ -37,6 +39,16 @@ const muckaApi: MuckaApi = {
       handler(payload)
     ipcRenderer.on('pty:exit', listener)
     return () => ipcRenderer.off('pty:exit', listener)
+  },
+
+  refreshGit: (agentId: AgentId) =>
+    ipcRenderer.invoke('git:refresh', agentId) as Promise<GitStatus>,
+
+  onGitStatus: (handler: (event: GitStatusEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: GitStatusEvent) =>
+      handler(payload)
+    ipcRenderer.on('git:status', listener)
+    return () => ipcRenderer.off('git:status', listener)
   }
 }
 

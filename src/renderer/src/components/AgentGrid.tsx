@@ -2,9 +2,11 @@ import type { AgentConfig, Agent } from '@shared/types'
 import { mockAgents } from '../data/mockAgents'
 import { AgentClipboard } from './AgentClipboard'
 import { spawnKey } from '../hooks/useAgents'
+import type { GitStatusMap } from '../hooks/useGitStatus'
 
 interface AgentGridProps {
   agents: AgentConfig[]
+  gitStatus: GitStatusMap
 }
 
 /**
@@ -28,7 +30,10 @@ function mergeWithMockState(cfg: AgentConfig): Agent {
   }
 }
 
-export function AgentGrid({ agents }: AgentGridProps): React.JSX.Element {
+export function AgentGrid({
+  agents,
+  gitStatus
+}: AgentGridProps): React.JSX.Element {
   // Fall back to mockAgents in the first paint before the DB list arrives.
   const list: AgentConfig[] =
     agents.length > 0
@@ -48,6 +53,7 @@ export function AgentGrid({ agents }: AgentGridProps): React.JSX.Element {
         <AgentClipboard
           key={spawnKey(cfg)}
           agent={mergeWithMockState(cfg)}
+          gitStatus={gitStatus[cfg.id]}
         />
       ))}
     </div>

@@ -126,6 +126,37 @@ export type AgentUpdate = Partial<
   Pick<AgentConfig, 'displayName' | 'branch' | 'worktreePath' | 'command' | 'args'>
 > & { id: AgentId }
 
+/** Live git state for an agent's worktree. */
+export interface GitStatus {
+  /** True when the configured worktreePath exists and is inside a git repo. */
+  isRepo: boolean
+  /** Branch name, e.g. "main" or "feat/onboarding". Null when detached or unknown. */
+  branch: string | null
+  /** Short SHA when HEAD is detached. */
+  detachedAt: string | null
+  /** Has an upstream configured (e.g. origin/main). */
+  hasUpstream: boolean
+  ahead: number
+  behind: number
+  /** Files modified in the working tree (not staged). */
+  modified: number
+  /** Files staged for commit. */
+  staged: number
+  /** Untracked files. */
+  untracked: number
+  /** Conflicted files (UU/AA/etc). */
+  conflicted: number
+  /** Last poll timestamp in ms. */
+  checkedAt: number
+  /** When isRepo is false, optional reason for display (e.g. "path missing"). */
+  reason?: string
+}
+
+export interface GitStatusEvent {
+  agentId: AgentId
+  status: GitStatus
+}
+
 /** Shape exposed on window.mucka (see preload). */
 export interface MuckaApi {
   listAgents(): Promise<AgentConfig[]>
@@ -137,4 +168,6 @@ export interface MuckaApi {
   killPty(agentId: AgentId): Promise<void>
   onPtyData(handler: (event: PtyDataEvent) => void): () => void
   onPtyExit(handler: (event: PtyExitEvent) => void): () => void
+  refreshGit(agentId: AgentId): Promise<GitStatus>
+  onGitStatus(handler: (event: GitStatusEvent) => void): () => void
 }

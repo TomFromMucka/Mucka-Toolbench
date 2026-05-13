@@ -12,6 +12,7 @@ import icon from '../../resources/icon.png?asset'
 import { ensureSeeded, getAgentConfig, getAgentConfigs } from './config/agents'
 import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
+import { GitService } from './git/GitService'
 import { PtyManager } from './pty/PtyManager'
 import type {
   AgentId,
@@ -22,6 +23,7 @@ import type {
 } from '@shared/types'
 
 let ptyManager: PtyManager | null = null
+let gitService: GitService | null = null
 let mainWindowRef: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -48,8 +50,18 @@ function createWindow(): void {
 
   mainWindowRef = mainWindow
   ptyManager = new PtyManager(mainWindow.webContents)
+  gitService = new GitService({
+    webContents: mainWindow.webContents,
+    getAgents: () => getAgentConfigs()
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    gitService?.start()
+  })
 
   mainWindow.on('closed', () => {
+    gitService?.stop()
+    gitService = null
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
@@ -77,7 +89,7 @@ function createWindow(): void {
 function registerIpc(): void {
   ipcMain.handle('agents:list', () => getAgentConfigs())
 
-  ipcMain.handle('agents:update', (_event, patch: AgentUpdate) => {
+  ipcMain.handle('agents:update', async (_event, patch: AgentUpdate) => {
     const current = getAgentConfig(patch.id)
     if (!current) throw new Error(`Unknown agent: ${patch.id}`)
     const updated = {
@@ -88,7 +100,14 @@ function registerIpc(): void {
     const ordered = listAgentsFromDb()
     const sortOrder = ordered.findIndex((a) => a.id === updated.id)
     upsertAgent(updated, sortOrder < 0 ? ordered.length : sortOrder)
+    // Push a fresh git status immediately so the new path shows real state.
+    void gitService?.refreshOne(updated.id)
     return updated
+  })
+
+  ipcMain.handle('git:refresh', async (_event, agentId: AgentId) => {
+    if (!gitService) throw new Error('git service not ready')
+    return gitService.refreshOne(agentId)
   })
 
   ipcMain.handle(

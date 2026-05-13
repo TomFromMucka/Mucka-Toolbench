@@ -1,7 +1,8 @@
 import clsx from 'clsx'
-import type { Agent, AgentStatus } from '@shared/types'
+import type { Agent, AgentStatus, GitStatus } from '@shared/types'
 import { Clipboard } from './Clipboard'
 import { AgentTerminal } from './AgentTerminal'
+import { GitStatusBadges } from './GitStatusBadges'
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
   idle: 'idle',
@@ -25,15 +26,19 @@ const STATUS_DOT: Record<AgentStatus, string> = {
 
 interface AgentClipboardProps {
   agent: Agent
+  gitStatus?: GitStatus
 }
 
 export function AgentClipboard({
-  agent
+  agent,
+  gitStatus
 }: AgentClipboardProps): React.JSX.Element {
   return (
     <Clipboard
       title={agent.displayName}
-      subtitle={agent.branch}
+      subtitle={
+        <GitStatusBadges status={gitStatus} fallbackLabel={agent.branch} />
+      }
       attention={agent.needsAttention}
       paper="plain"
       bodyClassName="bg-[#1a1612]"
@@ -50,7 +55,6 @@ export function AgentClipboard({
       }
     >
       <div className="flex h-full min-h-0 flex-col">
-        {/* sub-headline (paper-coloured strip above the screen) */}
         <div
           className={clsx(
             'border-b border-black/60 bg-paper-cream px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug',
@@ -60,7 +64,6 @@ export function AgentClipboard({
           {agent.headline}
         </div>
 
-        {/* real terminal */}
         <div className="min-h-0 flex-1 overflow-hidden p-1">
           <AgentTerminal agentId={agent.id} />
         </div>
