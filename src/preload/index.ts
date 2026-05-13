@@ -1,22 +1,50 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type {
+  AgentConfig,
+  AgentId,
+  MuckaApi,
+  PtyDataEvent,
+  PtyExitEvent,
+  PtyResizeRequest,
+  PtySpawnRequest,
+  PtyWriteRequest
+} from '@shared/types'
 
-// Custom APIs for renderer
-const api = {}
+const muckaApi: MuckaApi = {
+  listAgents: () => ipcRenderer.invoke('agents:list') as Promise<AgentConfig[]>,
+  spawnPty: (req: PtySpawnRequest) =>
+    ipcRenderer.invoke('pty:spawn', req) as Promise<void>,
+  writePty: (req: PtyWriteRequest) => ipcRenderer.send('pty:write', req),
+  resizePty: (req: PtyResizeRequest) => ipcRenderer.send('pty:resize', req),
+  killPty: (agentId: AgentId) =>
+    ipcRenderer.invoke('pty:kill', agentId) as Promise<void>,
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
+  onPtyData: (handler: (event: PtyDataEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: PtyDataEvent) =>
+      handler(payload)
+    ipcRenderer.on('pty:data', listener)
+    return () => ipcRenderer.off('pty:data', listener)
+  },
+
+  onPtyExit: (handler: (event: PtyExitEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: PtyExitEvent) =>
+      handler(payload)
+    ipcRenderer.on('pty:exit', listener)
+    return () => ipcRenderer.off('pty:exit', listener)
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
+    contextBridge.exposeInMainWorld('mucka', muckaApi)
   } catch (error) {
     console.error(error)
   }
 } else {
-  // @ts-ignore (define in dts)
+  // @ts-ignore: define in dts
   window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
+  // @ts-ignore: define in dts
+  window.mucka = muckaApi
 }

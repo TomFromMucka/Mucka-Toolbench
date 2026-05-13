@@ -71,3 +71,63 @@ export interface PreviewSlot {
   /** Mock screenshot description or status — shown when iframe is empty. */
   placeholder: string
 }
+
+/* ─── PTY IPC contract ───────────────────────────────────────────────── */
+
+/**
+ * Stable agent config — defines what command runs in each clipboard.
+ * Loaded from src/main/config/agents.ts today; will move to sqlite next session.
+ */
+export interface AgentConfig {
+  id: AgentId
+  displayName: string
+  branch: string
+  worktreePath: string
+  /** Command to launch inside the worktree (e.g. "zsh", "claude"). */
+  command: string
+  args: string[]
+}
+
+/** Renderer → main: start a PTY for an agent at the agent's configured cwd. */
+export interface PtySpawnRequest {
+  agentId: AgentId
+  cols: number
+  rows: number
+}
+
+/** Main → renderer: a chunk of terminal output. */
+export interface PtyDataEvent {
+  agentId: AgentId
+  data: string
+}
+
+/** Main → renderer: the PTY process exited. */
+export interface PtyExitEvent {
+  agentId: AgentId
+  exitCode: number
+  signal: number | null
+}
+
+/** Renderer → main: forward user input to the PTY's stdin. */
+export interface PtyWriteRequest {
+  agentId: AgentId
+  data: string
+}
+
+/** Renderer → main: PTY size changed (xterm fit-addon). */
+export interface PtyResizeRequest {
+  agentId: AgentId
+  cols: number
+  rows: number
+}
+
+/** Shape exposed on window.muckaApi (see preload). */
+export interface MuckaApi {
+  listAgents(): Promise<AgentConfig[]>
+  spawnPty(req: PtySpawnRequest): Promise<void>
+  writePty(req: PtyWriteRequest): void
+  resizePty(req: PtyResizeRequest): void
+  killPty(agentId: AgentId): Promise<void>
+  onPtyData(handler: (event: PtyDataEvent) => void): () => void
+  onPtyExit(handler: (event: PtyExitEvent) => void): () => void
+}
