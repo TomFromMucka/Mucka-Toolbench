@@ -5,3 +5,5 @@ out
 .eslintcache
 *.log*
 .claude/settings.local.json
+.env
+.env.local
