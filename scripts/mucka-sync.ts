@@ -2,8 +2,9 @@
 /**
  * Create-or-update the Mucka Workstation PM agent on ElevenLabs.
  *
- *   npm run mucka:sync          # create if MUCKA_AGENT_ID missing, else update
- *   npm run mucka:sync -- --dry-run  # show diff vs live agent, write nothing
+ *   npm run mucka:sync                 # create-or-update; pushes prompt + tools
+ *   npm run mucka:sync -- --dry-run    # diff vs live agent, write nothing
+ *   npm run mucka:sync -- --verbose    # also log the live conversation_config
  *
  * Env vars (see CLAUDE.md):
  *   ELEVENLABS_API_KEY            required
@@ -11,15 +12,15 @@
  *   MUCKA_AGENT_ID                optional — if present, update; else create
  *                                 and print the new id for you to add to env
  *
- * The exact path to the prompt inside conversation_config has been renamed
- * in the dashboard before, so on every run we GET the agent first, log the
- * current shape under verbose mode, and PATCH the smallest possible
- * subtree.
+ * Tool schemas are imported from src/shared/mucka-tools.ts so the renderer
+ * handlers and the dashboard declarations stay in lockstep (matching by
+ * tool name, case-sensitive).
  */
 
 import 'dotenv/config'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { TOOL_DEFINITIONS } from '../src/shared/mucka-tools.js'
 
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io'
 const PROMPT_PATH = resolve('src/main/mucka/prompts/pm.md')
@@ -75,29 +76,48 @@ function readPrompt(): string {
   return readFileSync(PROMPT_PATH, 'utf8').trim()
 }
 
-function diff(localPrompt: string, livePrompt: string): void {
-  if (localPrompt === livePrompt) {
-    console.log('Prompt is in sync — nothing to do.')
+function buildToolSchemas(): Array<Record<string, unknown>> {
+  return TOOL_DEFINITIONS.map((t) => ({
+    type: 'client',
+    name: t.name,
+    description: t.description,
+    expects_response: true,
+    response_timeout_secs: 20,
+    parameters: t.parameters
+  }))
+}
+
+function diff(local: string, live: string, label: string): void {
+  if (local === live) {
+    console.log(`${label}: in sync`)
     return
   }
-  console.log('--- live (remote)')
-  console.log(livePrompt)
-  console.log('+++ local (pm.md)')
-  console.log(localPrompt)
+  console.log(`--- live ${label}`)
+  console.log(live)
+  console.log(`+++ local ${label}`)
+  console.log(local)
 }
 
 function extractLivePrompt(agent: Record<string, unknown>): string {
-  // The path has been renamed in the dashboard before — be defensive.
   const cfg = (agent.conversation_config as Record<string, unknown>) ?? {}
   const agentBlock = (cfg.agent as Record<string, unknown>) ?? {}
   const promptBlock = (agentBlock.prompt as Record<string, unknown>) ?? {}
   return typeof promptBlock.prompt === 'string' ? promptBlock.prompt : ''
 }
 
+function extractLiveTools(agent: Record<string, unknown>): unknown[] {
+  const cfg = (agent.conversation_config as Record<string, unknown>) ?? {}
+  const agentBlock = (cfg.agent as Record<string, unknown>) ?? {}
+  const promptBlock = (agentBlock.prompt as Record<string, unknown>) ?? {}
+  const tools = promptBlock.tools
+  return Array.isArray(tools) ? tools : []
+}
+
 async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2))
   const env = readEnv()
   const localPrompt = readPrompt()
+  const localTools = buildToolSchemas()
 
   if (!env.agentId) {
     if (flags.dryRun) {
@@ -106,9 +126,8 @@ async function main(): Promise<void> {
       )
       console.log(`\nWill create agent "${AGENT_NAME}" with:`)
       console.log(`  voice_id: ${env.voiceId ?? '(not set — required to create)'}`)
-      console.log(`  prompt (${localPrompt.length} chars):`)
-      console.log(localPrompt.split('\n').slice(0, 10).join('\n'))
-      console.log('  …')
+      console.log(`  prompt: ${localPrompt.length} chars`)
+      console.log(`  tools: ${localTools.map((t) => (t as { name: string }).name).join(', ')}`)
       return
     }
     if (!env.voiceId) {
@@ -122,7 +141,7 @@ async function main(): Promise<void> {
       name: AGENT_NAME,
       conversation_config: {
         agent: {
-          prompt: { prompt: localPrompt },
+          prompt: { prompt: localPrompt, tools: localTools },
           first_message: 'Mucka, ready.',
           language: 'en'
         },
@@ -131,7 +150,7 @@ async function main(): Promise<void> {
         }
       }
     })
-    console.log(`\n✓ Created. Add this to your env:\n`)
+    console.log(`\n✓ Created. Add this to your .env:\n`)
     console.log(`  MUCKA_AGENT_ID=${created.agent_id}\n`)
     return
   }
@@ -142,6 +161,9 @@ async function main(): Promise<void> {
     `/v1/convai/agents/${env.agentId}`
   )
   const livePrompt = extractLivePrompt(liveAgent)
+  const liveTools = extractLiveTools(liveAgent)
+  const liveToolsJson = JSON.stringify(liveTools, null, 2)
+  const localToolsJson = JSON.stringify(localTools, null, 2)
 
   if (flags.verbose) {
     console.log('— live conversation_config —')
@@ -150,19 +172,26 @@ async function main(): Promise<void> {
   }
 
   if (flags.dryRun) {
-    diff(localPrompt, livePrompt)
+    diff(localPrompt, livePrompt, 'prompt')
+    diff(localToolsJson, liveToolsJson, 'tools')
     return
   }
 
-  if (localPrompt === livePrompt && !env.voiceId) {
-    console.log('Prompt unchanged and no voice override — nothing to do.')
+  const promptChanged = localPrompt !== livePrompt
+  const toolsChanged = localToolsJson !== liveToolsJson
+
+  if (!promptChanged && !toolsChanged && !env.voiceId) {
+    console.log('Prompt + tools unchanged. Nothing to do.')
     return
   }
 
   const patch: Record<string, unknown> = {
     conversation_config: {
       agent: {
-        prompt: { prompt: localPrompt }
+        prompt: {
+          prompt: localPrompt,
+          tools: localTools
+        }
       },
       ...(env.voiceId ? { tts: { voice_id: env.voiceId } } : {})
     }
@@ -170,8 +199,13 @@ async function main(): Promise<void> {
 
   await api(env.apiKey, 'PATCH', `/v1/convai/agents/${env.agentId}`, patch)
   console.log(`✓ Updated agent ${env.agentId}.`)
-  if (localPrompt !== livePrompt) {
+  if (promptChanged) {
     console.log(`  prompt: ${livePrompt.length} → ${localPrompt.length} chars`)
+  }
+  if (toolsChanged) {
+    console.log(
+      `  tools: ${liveTools.length} → ${localTools.length} (${localTools.map((t) => (t as { name: string }).name).join(', ')})`
+    )
   }
   if (env.voiceId) console.log(`  voice_id: ${env.voiceId}`)
 }
