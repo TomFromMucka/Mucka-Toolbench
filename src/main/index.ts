@@ -1,3 +1,7 @@
+// Load .env from the project root before any module reads process.env.
+// Kept at the very top so getAgentConfigs / Mucka.ts see the values.
+import 'dotenv/config'
+
 import {
   app,
   BrowserWindow,

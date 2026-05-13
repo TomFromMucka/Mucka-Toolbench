@@ -168,15 +168,19 @@ it.
 
 **Env vars (read by main process only):**
 
+Stored in `.env` at the project root (git-ignored). Copy
+`.env.example` → `.env` and fill in:
+
 - `ELEVENLABS_API_KEY` — your account key.
 - `MUCKA_AGENT_ID` — the Conv AI agent id. Leave unset on first run;
-  `mucka:sync` creates the agent and prints the id to add to env.
+  `mucka:sync` creates the agent and prints the id to add to `.env`.
 - `ELEVENLABS_MUCKA_VOICE_ID` — same voice id used in Mucka Pro.
   Required on first create; used by `mucka:sync` to (re-)set the agent's
   voice on any run.
 
-If creds are missing the rest of the cockpit keeps working — the voice
-button shows the reason as a tooltip.
+`.env` is loaded via `dotenv/config` at the top of `src/main/index.ts`
+and the `mucka:sync` script. If creds are missing the rest of the
+cockpit keeps working — the voice button shows the reason as a tooltip.
 
 **Architecture.** Mucka runs in the renderer via `@elevenlabs/react`
 (`useConversation`). Signed URLs are minted in main from
