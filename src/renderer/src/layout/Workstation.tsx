@@ -6,9 +6,11 @@ import { MiddleColumn } from '../components/MiddleColumn'
 import { RightColumn } from '../components/RightColumn'
 import { SettingsModal } from '../components/SettingsModal'
 import { useAgents } from '../hooks/useAgents'
+import { useGitStatus } from '../hooks/useGitStatus'
 
 export function Workstation(): React.JSX.Element {
   const { agents, reload } = useAgents()
+  const gitStatus = useGitStatus()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Cmd+, opens settings (mac convention).
@@ -41,7 +43,7 @@ export function Workstation(): React.JSX.Element {
         className="grid min-h-0 flex-1 gap-3 px-3 pb-3 pt-2"
         style={{ gridTemplateColumns: '2fr 1.1fr 1.2fr' }}
       >
-        <AgentGrid agents={agents} />
+        <AgentGrid agents={agents} gitStatus={gitStatus} />
         <MiddleColumn />
         <RightColumn />
       </main>

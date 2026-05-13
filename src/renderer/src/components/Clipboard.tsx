@@ -2,7 +2,7 @@ import clsx from 'clsx'
 
 interface ClipboardProps {
   title: string
-  subtitle?: string
+  subtitle?: React.ReactNode
   /** When true, the clipboard glows brand orange — Tom's attention needed. */
   attention?: boolean
   /** Paper texture variant. */
