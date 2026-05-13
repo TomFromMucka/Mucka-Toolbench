@@ -30,6 +30,9 @@ export class PtyManager {
   }
 
   spawn(req: PtySpawnRequest): void {
+    // Tear down any previous PTY for this agent. We don't delete from the
+    // map here — the previous proc's onExit closure (below) is responsible
+    // for cleaning up only its own entry, never the new one.
     const existing = this.ptys.get(req.agentId)
     if (existing) {
       try {
@@ -37,7 +40,6 @@ export class PtyManager {
       } catch {
         /* already dead */
       }
-      this.ptys.delete(req.agentId)
     }
 
     const cfg = getAgentConfig(req.agentId)
@@ -55,15 +57,23 @@ export class PtyManager {
       }
     })
 
+    const entry: AgentPty = { agentId: req.agentId, proc }
+
     proc.onData((data) => {
       if (this.webContents.isDestroyed()) return
+      // Drop output from a stale proc that's been replaced.
+      if (this.ptys.get(req.agentId)?.proc !== proc) return
       const event: PtyDataEvent = { agentId: req.agentId, data }
       this.webContents.send('pty:data', event)
     })
 
     proc.onExit(({ exitCode, signal }) => {
-      this.ptys.delete(req.agentId)
-      if (this.webContents.isDestroyed()) return
+      const current = this.ptys.get(req.agentId)
+      const isCurrent = current?.proc === proc
+      if (isCurrent) {
+        this.ptys.delete(req.agentId)
+      }
+      if (this.webContents.isDestroyed() || !isCurrent) return
       const event: PtyExitEvent = {
         agentId: req.agentId,
         exitCode,
@@ -72,7 +82,7 @@ export class PtyManager {
       this.webContents.send('pty:exit', event)
     })
 
-    this.ptys.set(req.agentId, { agentId: req.agentId, proc })
+    this.ptys.set(req.agentId, entry)
   }
 
   write({ agentId, data }: PtyWriteRequest): void {

@@ -46,9 +46,23 @@ body,
 
 body {
   font-family: var(--font-sans);
-  user-select: none;
   -webkit-font-smoothing: antialiased;
   cursor: default;
+}
+
+/* Block accidental selection on chrome, but never on inputs/terminals. */
+.no-select,
+button,
+header,
+nav {
+  user-select: none;
+}
+
+input,
+textarea,
+.xterm,
+.xterm * {
+  user-select: text;
 }
 
 ::-webkit-scrollbar {
