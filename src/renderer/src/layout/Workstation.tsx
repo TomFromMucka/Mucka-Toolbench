@@ -7,25 +7,30 @@ import { RightColumn } from '../components/RightColumn'
 import { SettingsModal } from '../components/SettingsModal'
 import { useAgents } from '../hooks/useAgents'
 import { useGitStatus } from '../hooks/useGitStatus'
+import { useMuckaSession } from '../mucka/MuckaSessionContext'
 
 export function Workstation(): React.JSX.Element {
   const { agents, reload } = useAgents()
   const gitStatus = useGitStatus()
+  const { toggle: toggleMucka } = useMuckaSession()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // Cmd+, opens settings (mac convention).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key === ',') {
         e.preventDefault()
         setSettingsOpen(true)
+      } else if (mod && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault()
+        toggleMucka()
       } else if (e.key === 'Escape' && settingsOpen) {
         setSettingsOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen])
+  }, [settingsOpen, toggleMucka])
 
   const handleSave = useCallback(
     async (patch: AgentUpdate) => {

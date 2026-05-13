@@ -152,28 +152,51 @@ brief. Vertical proportions inside each column live in `MiddleColumn` and
 | `npm run lint`       | ESLint (config in `eslint.config.mjs`). |
 | `npm run build`      | Typecheck + electron-vite production build. |
 | `npm run build:mac`  | Build + electron-builder mac DMG. |
+| `npm run mucka:sync` | Create-or-update the Mucka PM agent + push prompt. |
+
+## Mucka the PM agent
+
+The fifth agent lives in the top banner. Powered by ElevenLabs
+Conversational AI — Tom toggles a session with the voice button (or
+`⌘M`), Mucka responds in voice and as bubbles in the `MuckaChat` panel.
+
+**Prompt is source-of-truth in the repo.** Edit
+`src/main/mucka/prompts/pm.md`, run `npm run mucka:sync --dry-run` to
+diff against the live agent, then `npm run mucka:sync` to push. Never
+edit the prompt in the ElevenLabs dashboard — the next sync overwrites
+it.
+
+**Env vars (read by main process only):**
+
+- `ELEVENLABS_API_KEY` — your account key.
+- `MUCKA_AGENT_ID` — the Conv AI agent id. Leave unset on first run;
+  `mucka:sync` creates the agent and prints the id to add to env.
+- `ELEVENLABS_MUCKA_VOICE_ID` — same voice id used in Mucka Pro.
+  Required on first create; used by `mucka:sync` to (re-)set the agent's
+  voice on any run.
+
+If creds are missing the rest of the cockpit keeps working — the voice
+button shows the reason as a tooltip.
+
+**Architecture.** Mucka runs in the renderer via `@elevenlabs/react`
+(`useConversation`). Signed URLs are minted in main from
+`src/main/mucka/Mucka.ts` so the API key never reaches the renderer.
+`src/renderer/src/mucka/MuckaSessionContext.tsx` wraps the SDK,
+exposes state to the rest of the app via `useMuckaSession()`, and
+guards against double-start / stop-during-connect races. macOS mic
+TCC prompt is triggered through `mucka:requestMic` IPC the first time
+the user starts a session.
+
+**Tools (later phases).** Voice-only client tools that touch local
+state (PTY, sqlite, git, scrollback) belong in
+`src/renderer/src/mucka/tools/` and are registered with `startSession`
+via the `clientTools` map; the dashboard tool name must match the
+handler name exactly (case-sensitive). For tools that mutate state and
+write to a real shell, render a `ConfirmStrip` before executing.
+Chrome tools (banner status, notice board, attention flag) auto-execute.
 
 ## Wiring guide for next session (cheatsheet)
 
-When picking up the real plumbing:
-
-1. `node-pty` + `xterm.js` — install, then spawn one PTY per `Agent` in
-   the main process. Stream chunks over `ipcMain.handle('pty:write')` /
-   `webContents.send('pty:data')`. In the renderer, replace the mock
-   `terminalLines` rendering in `AgentClipboard.tsx` with an `<xterm>`
-   mount that subscribes to that channel.
-2. `better-sqlite3` — put the DB connection in `src/main/db/`. Expose
-   typed read/write methods through the preload, and replace
-   `mockJobSheet` / `mockNoticeBoard` / `mockSnags` with hooks that
-   subscribe to DB changes.
-3. **Git worktree orchestration** — `simple-git` or shelling out from
-   the main process. The four agents map to four worktrees; the displayed
-   `branch` and `worktreePath` on each `Agent` come from this.
-4. **Mucka PM agent** — a fifth Claude Code session (or Anthropic SDK
-   call) whose transcript fills `MuckaChat.tsx` and whose latest summary
-   fills `MuckaTopBanner.tsx`. Hook it into the same job-sheet table the
-   four worktree agents write to.
-
-Keep the visual contract stable while you do all of this — every panel
-should look identical the moment the data source flips from mock to
-real.
+The cockpit's real plumbing is now in place — PTYs, sqlite, git, voice.
+Future sessions add Mucka tools (phase 2+), the right-column previews,
+and any cloud integrations.
