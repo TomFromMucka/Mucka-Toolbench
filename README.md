@@ -1,34 +1,29 @@
-# mucka-tmp
+# Mucka Workstation
 
-An Electron application with React and TypeScript
+A personal dev cockpit. One Electron window that supervises four parallel
+Claude Code agents working on the same project (in separate git worktrees),
+plus a fifth "Mucka" PM agent.
 
-## Recommended IDE Setup
+Built for a 3840×1200 ultrawide display.
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+## Status
 
-## Project Setup
+Visual shell only — runs in dev mode and shows the full paper-and-ink
+cockpit with mock data. Real PTYs, sqlite, git worktrees, and PM-agent
+wiring are next. See `CLAUDE.md` for the layout, brand system, and the
+plan for the next session.
 
-### Install
-
-```bash
-$ npm install
-```
-
-### Development
-
-```bash
-$ npm run dev
-```
-
-### Build
+## Run it
 
 ```bash
-# For windows
-$ npm run build:win
-
-# For macOS
-$ npm run build:mac
-
-# For Linux
-$ npm run build:linux
+npm install
+npm run dev
 ```
+
+The window opens at the work area of the primary display. The brand
+attention-glow shows on Sammy's clipboard — he needs you.
+
+## Stack
+
+Electron · electron-vite · React 19 · TypeScript (strict) · Tailwind v4.
+xterm.js + node-pty and better-sqlite3 ship in the next session.
