@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import type { Agent, AgentStatus } from '@shared/types'
 import { Clipboard } from './Clipboard'
+import { AgentTerminal } from './AgentTerminal'
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
   idle: 'idle',
@@ -35,6 +36,7 @@ export function AgentClipboard({
       subtitle={agent.branch}
       attention={agent.needsAttention}
       paper="plain"
+      bodyClassName="bg-[#1a1612]"
       rightSlot={
         <span className="flex items-center gap-1.5 text-paper-cream/80">
           <span
@@ -48,39 +50,19 @@ export function AgentClipboard({
       }
     >
       <div className="flex h-full min-h-0 flex-col">
-        {/* sub-headline (the agent's plain-English current activity) */}
+        {/* sub-headline (paper-coloured strip above the screen) */}
         <div
           className={clsx(
-            'border-b border-ink/10 px-3 py-2 font-[var(--font-hand)] text-[0.95rem] leading-snug',
+            'border-b border-black/60 bg-paper-cream px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug',
             agent.needsAttention ? 'text-mucka-deep' : 'text-ink-soft'
           )}
         >
           {agent.headline}
         </div>
 
-        {/* Mock terminal output — paper styled, not literal xterm yet */}
-        <div className="min-h-0 flex-1 overflow-hidden px-3 py-2 font-mono text-[0.78rem] leading-[1.35]">
-          <div className="flex h-full flex-col gap-[2px]">
-            {agent.terminalLines.map((line, idx) => (
-              <div
-                key={idx}
-                className={clsx(
-                  'whitespace-pre-wrap',
-                  line.kind === 'stderr' && 'text-status-bad',
-                  line.kind === 'system' && 'text-ink-faint italic',
-                  line.kind === 'prompt' && 'text-mucka-deep font-semibold',
-                  line.kind === 'stdout' && 'text-ink'
-                )}
-              >
-                {line.text}
-              </div>
-            ))}
-            {/* blinking cursor */}
-            <div className="mt-1 flex items-center gap-1 text-ink-soft">
-              <span>▌</span>
-              <span className="text-ink-faint">cursor</span>
-            </div>
-          </div>
+        {/* real terminal */}
+        <div className="min-h-0 flex-1 overflow-hidden p-1">
+          <AgentTerminal agentId={agent.id} />
         </div>
       </div>
     </Clipboard>
