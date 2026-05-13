@@ -18,6 +18,8 @@ import type {
   MuckaSessionState,
   MuckaStatus
 } from '@shared/types'
+import { useAgentsState } from '../state/AgentsContext'
+import { useNoticesState } from '../state/NoticesContext'
 import { buildClientTools } from './tools/index'
 
 export interface ConfirmRequest {
@@ -61,6 +63,8 @@ interface MuckaSessionValue {
   setAmbientStatus: (text: string | null) => void
   bumpRestart: (agent: AgentId) => void
   requestConfirm: (req: ConfirmRequest) => Promise<boolean>
+  /** Send a typed message into the live session; auto-starts a session if needed. */
+  sendUserMessage: (text: string) => Promise<void>
 }
 
 const MuckaSessionCtx = createContext<MuckaSessionValue | null>(null)
@@ -108,6 +112,10 @@ function InnerProvider({
   const inFlight = useRef(false)
   const cancelOnConnect = useRef(false)
   const pendingRef = useRef<PendingConfirm | null>(null)
+  const pendingTextRef = useRef<string | null>(null)
+
+  const { reload: reloadAgents } = useAgentsState()
+  const { reload: reloadNotices } = useNoticesState()
 
   useEffect(() => {
     pendingRef.current = pendingConfirm
@@ -119,6 +127,17 @@ function InnerProvider({
       if (cancelOnConnect.current) {
         cancelOnConnect.current = false
         conversation.endSession()
+        pendingTextRef.current = null
+        return
+      }
+      const pendingText = pendingTextRef.current
+      if (pendingText) {
+        pendingTextRef.current = null
+        try {
+          conversation.sendUserMessage(pendingText)
+        } catch {
+          /* SDK not ready yet — drop. */
+        }
       }
     },
     onDisconnect: () => {
@@ -244,7 +263,9 @@ function InnerProvider({
         clientTools: buildClientTools({
           setAmbientStatus,
           bumpRestart,
-          requestConfirm
+          requestConfirm,
+          reloadAgents,
+          reloadNotices
         })
       })
     } catch (err) {
@@ -253,7 +274,15 @@ function InnerProvider({
       inFlight.current = false
       setConnecting(false)
     }
-  }, [conversation, micAccess, setAmbientStatus, bumpRestart, requestConfirm])
+  }, [
+    conversation,
+    micAccess,
+    setAmbientStatus,
+    bumpRestart,
+    requestConfirm,
+    reloadAgents,
+    reloadNotices
+  ])
 
   const stop = useCallback(async () => {
     if (inFlight.current && conversation.status !== 'connected') {
@@ -282,6 +311,25 @@ function InnerProvider({
   const openMicSettings = useCallback(async () => {
     await window.mucka.openMicSettings()
   }, [])
+
+  const sendUserMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim()
+      if (!trimmed) return
+      if (conversation.status === 'connected') {
+        try {
+          conversation.sendUserMessage(trimmed)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+        return
+      }
+      // Queue it; onConnect will flush.
+      pendingTextRef.current = trimmed
+      await start()
+    },
+    [conversation, start]
+  )
 
   const state: MuckaSessionState = useMemo(() => {
     if (error) return 'error'
@@ -319,7 +367,8 @@ function InnerProvider({
       openMicSettings,
       setAmbientStatus,
       bumpRestart,
-      requestConfirm
+      requestConfirm,
+      sendUserMessage
     }),
     [
       state,
@@ -339,7 +388,8 @@ function InnerProvider({
       openMicSettings,
       setAmbientStatus,
       bumpRestart,
-      requestConfirm
+      requestConfirm,
+      sendUserMessage
     ]
   )
 

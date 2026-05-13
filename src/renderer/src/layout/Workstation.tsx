@@ -6,12 +6,12 @@ import { ConfirmStrip } from '../components/ConfirmStrip'
 import { MiddleColumn } from '../components/MiddleColumn'
 import { RightColumn } from '../components/RightColumn'
 import { SettingsModal } from '../components/SettingsModal'
-import { useAgents } from '../hooks/useAgents'
 import { useGitStatus } from '../hooks/useGitStatus'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
+import { useAgentsState } from '../state/AgentsContext'
 
 export function Workstation(): React.JSX.Element {
-  const { agents, reload } = useAgents()
+  const { agents, reload } = useAgentsState()
   const gitStatus = useGitStatus()
   const { toggle: toggleMucka, restartVersion } = useMuckaSession()
   const [settingsOpen, setSettingsOpen] = useState(false)

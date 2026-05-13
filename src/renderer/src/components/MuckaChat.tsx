@@ -1,16 +1,18 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Clipboard } from './Clipboard'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
 
 const PLACEHOLDER =
-  "When you're ready to talk, hit ⌘M. Mucka will reply with the voice."
+  "When you're ready, hit ⌘M to talk or just type below."
 
 export function MuckaChat(): React.JSX.Element {
-  const { transcript, state, isSpeaking } = useMuckaSession()
+  const { transcript, state, isSpeaking, sendUserMessage, credentialStatus } =
+    useMuckaSession()
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
 
-  // Auto-stick to the bottom as new turns arrive.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -27,6 +29,27 @@ export function MuckaChat(): React.JSX.Element {
           : state === 'error'
             ? 'voice issue'
             : 'idle'
+
+  const credsOk = credentialStatus.kind === 'ok'
+
+  async function handleSend(): Promise<void> {
+    const text = draft.trim()
+    if (!text || sending || !credsOk) return
+    setSending(true)
+    setDraft('')
+    try {
+      await sendUserMessage(text)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLInputElement>): void {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void handleSend()
+    }
+  }
 
   return (
     <Clipboard
@@ -87,16 +110,34 @@ export function MuckaChat(): React.JSX.Element {
         <div className="flex items-center gap-2 border-t border-ink/15 bg-paper-shadow/60 px-2 py-1.5">
           <input
             type="text"
-            disabled
-            placeholder="Voice only for now — text reply coming later"
-            className="flex-1 cursor-not-allowed rounded-sm bg-paper-cream px-2 py-1 font-[var(--font-hand)] text-[0.92rem] text-ink-faint placeholder:text-ink-faint focus:outline-none"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKey}
+            disabled={!credsOk || sending}
+            placeholder={
+              credsOk
+                ? state === 'listening' || state === 'speaking'
+                  ? 'Type to Mucka…'
+                  : 'Type — starts a session and sends'
+                : 'Voice unavailable — check env vars'
+            }
+            className={clsx(
+              'flex-1 rounded-sm bg-paper-cream px-2 py-1 font-[var(--font-hand)] text-[0.92rem] text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-mucka/50',
+              !credsOk && 'cursor-not-allowed text-ink-faint'
+            )}
           />
           <button
             type="button"
-            disabled
-            className="cursor-not-allowed rounded-sm bg-mucka/40 px-2 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-paper-cream/70"
+            onClick={() => void handleSend()}
+            disabled={!credsOk || sending || draft.trim().length === 0}
+            className={clsx(
+              'rounded-sm px-2 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.2)]',
+              draft.trim().length > 0 && credsOk && !sending
+                ? 'bg-mucka hover:bg-mucka-deep'
+                : 'cursor-not-allowed bg-mucka/40 text-paper-cream/70'
+            )}
           >
-            send
+            {sending ? '…' : 'send'}
           </button>
         </div>
       </div>

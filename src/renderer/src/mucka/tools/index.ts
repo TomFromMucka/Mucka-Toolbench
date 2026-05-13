@@ -12,6 +12,10 @@ interface ToolDeps {
   setAmbientStatus: (text: string | null) => void
   bumpRestart: (agent: AgentId) => void
   requestConfirm: (req: ConfirmRequest) => Promise<boolean>
+  /** Pull a fresh agents list from the DB (after a write tool changes one). */
+  reloadAgents: () => Promise<void>
+  /** Pull a fresh notice list from the DB (after add/remove). */
+  reloadNotices: () => Promise<void>
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────────── */
@@ -141,44 +145,56 @@ function makeSetBannerStatus(deps: ToolDeps) {
 
 const VALID_COLOURS: readonly NoticeColour[] = ['cream', 'yellow', 'pink', 'blue']
 
-async function addNotice(params: Record<string, unknown>): Promise<string> {
-  const title = parseString(params, 'title')
-  const body = parseString(params, 'body')
-  const colourRaw = params['colour']
-  const colour: NoticeColour =
-    typeof colourRaw === 'string' && (VALID_COLOURS as string[]).includes(colourRaw)
-      ? (colourRaw as NoticeColour)
-      : 'cream'
-  const created = await window.mucka.addNotice({ title, body, colour })
-  return `Pinned "${created.title}" to the notice board (${colour}).`
+function makeAddNotice(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const title = parseString(params, 'title')
+    const body = parseString(params, 'body')
+    const colourRaw = params['colour']
+    const colour: NoticeColour =
+      typeof colourRaw === 'string' && (VALID_COLOURS as string[]).includes(colourRaw)
+        ? (colourRaw as NoticeColour)
+        : 'cream'
+    const created = await window.mucka.addNotice({ title, body, colour })
+    await deps.reloadNotices()
+    return `Pinned "${created.title}" to the notice board (${colour}).`
+  }
 }
 
-async function removeNotice(params: Record<string, unknown>): Promise<string> {
-  const title = parseString(params, 'title')
-  const n = await window.mucka.removeNoticeByTitle(title)
-  if (n === 0) return `No notice titled "${title}" — nothing to remove.`
-  return `Removed ${n} notice${n === 1 ? '' : 's'} titled "${title}".`
+function makeRemoveNotice(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const title = parseString(params, 'title')
+    const n = await window.mucka.removeNoticeByTitle(title)
+    if (n === 0) return `No notice titled "${title}" — nothing to remove.`
+    await deps.reloadNotices()
+    return `Removed ${n} notice${n === 1 ? '' : 's'} titled "${title}".`
+  }
 }
 
-async function flagAttention(params: Record<string, unknown>): Promise<string> {
-  const agentId = parseAgentId(params)
-  const reason = parseString(params, 'reason').slice(0, 120)
-  await window.mucka.updateAgent({
-    id: agentId,
-    needsAttention: true,
-    attentionReason: reason
-  })
-  return `Flagged ${agentId} for Tom — ${reason}`
+function makeFlagAttention(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const reason = parseString(params, 'reason').slice(0, 120)
+    await window.mucka.updateAgent({
+      id: agentId,
+      needsAttention: true,
+      attentionReason: reason
+    })
+    await deps.reloadAgents()
+    return `Flagged ${agentId} for Tom — ${reason}`
+  }
 }
 
-async function clearAttention(params: Record<string, unknown>): Promise<string> {
-  const agentId = parseAgentId(params)
-  await window.mucka.updateAgent({
-    id: agentId,
-    needsAttention: false,
-    attentionReason: null
-  })
-  return `Cleared ${agentId}'s attention flag.`
+function makeClearAttention(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    await window.mucka.updateAgent({
+      id: agentId,
+      needsAttention: false,
+      attentionReason: null
+    })
+    await deps.reloadAgents()
+    return `Cleared ${agentId}'s attention flag.`
+  }
 }
 
 /* ─── Confirm-gated write tools (phase 3) ────────────────────────────── */
@@ -194,6 +210,7 @@ function makeSetAgentWorktree(deps: ToolDeps) {
     })
     if (!ok) return `Tom said no. ${agentId}'s worktree is unchanged.`
     await window.mucka.updateAgent({ id: agentId, worktreePath: path })
+    await deps.reloadAgents()
     return `Done. ${agentId} is now at ${path} (shell restarted).`
   }
 }
@@ -215,6 +232,7 @@ function makeSetAgentCommand(deps: ToolDeps) {
     })
     if (!ok) return `Tom said no. ${agentId}'s command is unchanged.`
     await window.mucka.updateAgent({ id: agentId, command, args })
+    await deps.reloadAgents()
     return `Done. ${agentId} is now running ${command}${argsStr}.`
   }
 }
@@ -242,10 +260,10 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     whats_happening: () => whatsHappening(),
 
     set_banner_status: makeSetBannerStatus(deps),
-    add_notice: (params) => addNotice(params),
-    remove_notice: (params) => removeNotice(params),
-    flag_attention: (params) => flagAttention(params),
-    clear_attention: (params) => clearAttention(params),
+    add_notice: makeAddNotice(deps),
+    remove_notice: makeRemoveNotice(deps),
+    flag_attention: makeFlagAttention(deps),
+    clear_attention: makeClearAttention(deps),
 
     set_agent_worktree: makeSetAgentWorktree(deps),
     set_agent_command: makeSetAgentCommand(deps),
