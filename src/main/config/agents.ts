@@ -1,69 +1,63 @@
 import os from 'node:os'
-import fs from 'node:fs'
-import type { AgentConfig } from '@shared/types'
+import type { AgentConfig, AgentId } from '@shared/types'
+import { getAgent, listAgents, seedIfEmpty } from '../db/agents'
 
 /**
- * The four worktree agents.
- *
- * Today: zsh in $HOME for all four — proves the PTY plumbing works.
- * Next session: this list moves into sqlite and the user edits it via the UI.
- * Until then, edit the array below to point each agent at a real worktree
- * and change `command` from "zsh" to "claude" when you're ready.
+ * Default agent set used only on first launch (seeded into sqlite once,
+ * then user edits via the Settings sheet).
  */
 const HOME = os.homedir()
+const SHELL = process.env.SHELL?.includes('zsh') ? process.env.SHELL : '/bin/zsh'
 
-const SHELL = process.env.SHELL?.includes('zsh')
-  ? process.env.SHELL
-  : '/bin/zsh'
-
-function existingDirOrHome(path: string): string {
-  try {
-    if (fs.statSync(path).isDirectory()) return path
-  } catch {
-    /* fall through */
-  }
-  return HOME
-}
-
-const AGENTS: AgentConfig[] = [
+const DEFAULTS: AgentConfig[] = [
   {
     id: 'dave',
     displayName: 'Dave',
-    branch: 'feat/onboarding-redesign',
-    worktreePath: existingDirOrHome(`${HOME}/work/mucka-pro-dave`),
+    branch: 'main',
+    worktreePath: HOME,
     command: SHELL,
     args: ['-l']
   },
   {
     id: 'sammy',
     displayName: 'Sammy',
-    branch: 'fix/voice-agent-timeout',
-    worktreePath: existingDirOrHome(`${HOME}/work/mucka-pro-sammy`),
+    branch: 'main',
+    worktreePath: HOME,
     command: SHELL,
     args: ['-l']
   },
   {
     id: 'kev',
     displayName: 'Kev',
-    branch: 'chore/upgrade-next-16',
-    worktreePath: existingDirOrHome(`${HOME}/work/mucka-pro-kev`),
+    branch: 'main',
+    worktreePath: HOME,
     command: SHELL,
     args: ['-l']
   },
   {
     id: 'bren',
     displayName: 'Bren',
-    branch: 'feat/dashboard-charts',
-    worktreePath: existingDirOrHome(`${HOME}/work/mucka-pro-bren`),
+    branch: 'main',
+    worktreePath: HOME,
     command: SHELL,
     args: ['-l']
   }
 ]
 
-export function getAgentConfigs(): AgentConfig[] {
-  return AGENTS
+let seeded = false
+
+export function ensureSeeded(): void {
+  if (seeded) return
+  seedIfEmpty(DEFAULTS)
+  seeded = true
 }
 
-export function getAgentConfig(id: AgentConfig['id']): AgentConfig | undefined {
-  return AGENTS.find((a) => a.id === id)
+export function getAgentConfigs(): AgentConfig[] {
+  ensureSeeded()
+  return listAgents()
+}
+
+export function getAgentConfig(id: AgentId): AgentConfig | undefined {
+  ensureSeeded()
+  return getAgent(id)
 }

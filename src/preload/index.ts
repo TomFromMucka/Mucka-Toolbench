@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AgentConfig,
   AgentId,
+  AgentUpdate,
   MuckaApi,
   PtyDataEvent,
   PtyExitEvent,
@@ -13,6 +14,10 @@ import type {
 
 const muckaApi: MuckaApi = {
   listAgents: () => ipcRenderer.invoke('agents:list') as Promise<AgentConfig[]>,
+  updateAgent: (patch: AgentUpdate) =>
+    ipcRenderer.invoke('agents:update', patch) as Promise<AgentConfig>,
+  pickDirectory: (opts?: { defaultPath?: string }) =>
+    ipcRenderer.invoke('dialog:pickDirectory', opts) as Promise<string | null>,
   spawnPty: (req: PtySpawnRequest) =>
     ipcRenderer.invoke('pty:spawn', req) as Promise<void>,
   writePty: (req: PtyWriteRequest) => ipcRenderer.send('pty:write', req),

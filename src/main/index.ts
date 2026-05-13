@@ -1,17 +1,28 @@
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  screen,
+  shell
+} from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { getAgentConfigs } from './config/agents'
+import { ensureSeeded, getAgentConfig, getAgentConfigs } from './config/agents'
+import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
+import { closeDb } from './db/index'
 import { PtyManager } from './pty/PtyManager'
 import type {
   AgentId,
+  AgentUpdate,
   PtyResizeRequest,
   PtySpawnRequest,
   PtyWriteRequest
 } from '@shared/types'
 
 let ptyManager: PtyManager | null = null
+let mainWindowRef: BrowserWindow | null = null
 
 function createWindow(): void {
   const { workArea } = screen.getPrimaryDisplay()
@@ -35,15 +46,20 @@ function createWindow(): void {
     }
   })
 
+  mainWindowRef = mainWindow
   ptyManager = new PtyManager(mainWindow.webContents)
 
   mainWindow.on('closed', () => {
     ptyManager?.killAll()
     ptyManager = null
+    mainWindowRef = null
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    if (is.dev) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' })
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -60,6 +76,38 @@ function createWindow(): void {
 
 function registerIpc(): void {
   ipcMain.handle('agents:list', () => getAgentConfigs())
+
+  ipcMain.handle('agents:update', (_event, patch: AgentUpdate) => {
+    const current = getAgentConfig(patch.id)
+    if (!current) throw new Error(`Unknown agent: ${patch.id}`)
+    const updated = {
+      ...current,
+      ...patch,
+      args: patch.args ?? current.args
+    }
+    const ordered = listAgentsFromDb()
+    const sortOrder = ordered.findIndex((a) => a.id === updated.id)
+    upsertAgent(updated, sortOrder < 0 ? ordered.length : sortOrder)
+    return updated
+  })
+
+  ipcMain.handle(
+    'dialog:pickDirectory',
+    async (_event, opts?: { defaultPath?: string }) => {
+      const owner = mainWindowRef
+      const result = await (owner
+        ? dialog.showOpenDialog(owner, {
+            properties: ['openDirectory', 'createDirectory'],
+            defaultPath: opts?.defaultPath
+          })
+        : dialog.showOpenDialog({
+            properties: ['openDirectory', 'createDirectory'],
+            defaultPath: opts?.defaultPath
+          }))
+      if (result.canceled || result.filePaths.length === 0) return null
+      return result.filePaths[0]
+    }
+  )
 
   ipcMain.handle('pty:spawn', (_event, req: PtySpawnRequest) => {
     ptyManager?.spawn(req)
@@ -85,6 +133,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  ensureSeeded()
   registerIpc()
   createWindow()
 
@@ -95,6 +144,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   ptyManager?.killAll()
+  closeDb()
 })
 
 app.on('window-all-closed', () => {
