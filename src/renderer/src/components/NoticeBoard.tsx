@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import type { Notice, NoticeColour } from '@shared/types'
-import { useNotices } from '../hooks/useNotices'
+import { useNoticesState } from '../state/NoticesContext'
 import { Clipboard } from './Clipboard'
 
 const POSTIT_COLOUR: Record<NoticeColour, string> = {
@@ -11,7 +11,7 @@ const POSTIT_COLOUR: Record<NoticeColour, string> = {
 }
 
 export function NoticeBoard(): React.JSX.Element {
-  const { notices, loading } = useNotices()
+  const { notices, loading } = useNoticesState()
 
   return (
     <Clipboard
