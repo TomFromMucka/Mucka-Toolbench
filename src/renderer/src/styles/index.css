@@ -1,0 +1,173 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&display=swap');
+@import 'tailwindcss';
+
+/* ─── Mucka brand tokens ─────────────────────────────────────────────── */
+@theme {
+  /* Dark wood backdrop */
+  --color-wood-deep: #1a1612;
+  --color-wood-soft: #2a2520;
+  --color-wood-clip: #3a2f25;
+  --color-wood-clip-edge: #1f1812;
+
+  /* Paper-and-ink */
+  --color-paper-cream: #f5f0e6;
+  --color-paper-shadow: #e6dfd0;
+  --color-paper-line: #c9bfa8;
+  --color-ink: #2a221a;
+  --color-ink-soft: #5a4f42;
+  --color-ink-faint: #8a7e6c;
+
+  /* Mucka brand orange — used sparingly for PM voice and attention */
+  --color-mucka: #ff4e00;
+  --color-mucka-deep: #c63d00;
+  --color-mucka-glow: #ff7b3a;
+
+  /* Status colours (kept muted to fit the workshop palette) */
+  --color-status-ok: #4f7a3a;
+  --color-status-warn: #c08a30;
+  --color-status-bad: #a13a2a;
+
+  /* Typography */
+  --font-display: 'Caveat', 'Segoe Print', 'Comic Sans MS', cursive;
+  --font-hand: 'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ─── Global resets ──────────────────────────────────────────────────── */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  cursor: default;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #5a4f42;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7a6f62;
+}
+
+/* ─── Paper textures ─────────────────────────────────────────────────── */
+@utility paper-lined {
+  background-color: var(--color-paper-cream);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 27px,
+    var(--color-paper-line) 27px,
+    var(--color-paper-line) 28px
+  );
+  background-size: 100% 28px;
+  background-position: 0 6px;
+}
+
+@utility paper-grid {
+  background-color: var(--color-paper-cream);
+  background-image:
+    linear-gradient(to right, rgba(201, 191, 168, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(201, 191, 168, 0.4) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+@utility paper-plain {
+  background-color: var(--color-paper-cream);
+  background-image: radial-gradient(
+    ellipse at top left,
+    rgba(255, 255, 255, 0.4),
+    transparent 60%
+  );
+}
+
+/* ─── Wood textures ──────────────────────────────────────────────────── */
+@utility wood-grain {
+  background-color: var(--color-wood-soft);
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.04) 0px,
+      rgba(0, 0, 0, 0.04) 1px,
+      transparent 1px,
+      transparent 6px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 220, 180, 0.025) 0px,
+      rgba(255, 220, 180, 0.025) 2px,
+      transparent 2px,
+      transparent 11px
+    );
+}
+
+/* ─── Clipboard wooden clip header ───────────────────────────────────── */
+@utility clip-header {
+  background-image: linear-gradient(
+    180deg,
+    #4a3a2c 0%,
+    #3a2f25 45%,
+    #2a2018 100%
+  );
+  border-bottom: 2px solid #16100a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 180, 0.08),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Orange attention glow (used on Sammy etc.) ─────────────────────── */
+@utility attention-glow {
+  box-shadow:
+    0 0 0 2px var(--color-mucka),
+    0 0 18px 4px rgba(255, 78, 0, 0.55),
+    0 0 32px 8px rgba(255, 78, 0, 0.25);
+  animation: mucka-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes mucka-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--color-mucka),
+      0 0 18px 4px rgba(255, 78, 0, 0.55),
+      0 0 32px 8px rgba(255, 78, 0, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--color-mucka-glow),
+      0 0 28px 6px rgba(255, 78, 0, 0.75),
+      0 0 48px 14px rgba(255, 78, 0, 0.35);
+  }
+}
+
+/* ─── Ink-style note tape (post-it corners) ──────────────────────────── */
+@utility tape-corner {
+  position: relative;
+}
+.tape-corner::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 60px;
+  height: 16px;
+  transform: translateX(-50%) rotate(-2deg);
+  background: rgba(241, 222, 154, 0.85);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
