@@ -38,7 +38,8 @@ export function MuckaTopBanner({
           style={{
             width: '40px',
             height: '26px',
-            background: 'var(--charcoal)',
+            /* Softer grey-on-orange — full charcoal was too harsh. */
+            background: '#5e5d5c',
             WebkitMaskImage: 'url(/brand/mucka-icon-m.svg)',
             maskImage: 'url(/brand/mucka-icon-m.svg)',
             WebkitMaskRepeat: 'no-repeat',
@@ -50,25 +51,7 @@ export function MuckaTopBanner({
           }}
         />
         <span
-          role="img"
-          aria-label="Mucka Workstation"
-          className="block"
-          style={{
-            width: '128px',
-            height: '22px',
-            background: 'var(--charcoal)',
-            WebkitMaskImage: 'url(/brand/mucka-wordmark.svg)',
-            maskImage: 'url(/brand/mucka-wordmark.svg)',
-            WebkitMaskRepeat: 'no-repeat',
-            maskRepeat: 'no-repeat',
-            WebkitMaskSize: 'contain',
-            maskSize: 'contain',
-            WebkitMaskPosition: 'left center',
-            maskPosition: 'left center'
-          }}
-        />
-        <span
-          className="ml-1 text-[0.68rem] uppercase tracking-[0.22em]"
+          className="text-[0.68rem] uppercase tracking-[0.22em]"
           style={{ color: 'rgba(35, 31, 32, 0.55)' }}
         >
           Workstation
