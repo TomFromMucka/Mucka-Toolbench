@@ -6,6 +6,10 @@ import type {
   AgentStatusEvent,
   AgentUpdate,
   CockpitDocPayload,
+  Memory,
+  MemoryListItem,
+  MemoryListQuery,
+  MemoryWriteInput,
   GitStatus,
   GitStatusEvent,
   JobEvent,
@@ -105,6 +109,15 @@ const muckaApi: MuckaApi = {
     ipcRenderer.send('mucka:voice-transcript', input),
   getCockpitDoc: (section?: string) =>
     ipcRenderer.invoke('mucka:cockpit-doc', section) as Promise<CockpitDocPayload>,
+
+  listMemories: (query?: MemoryListQuery) =>
+    ipcRenderer.invoke('memory:list', query) as Promise<MemoryListItem[]>,
+  getMemory: (topic: string) =>
+    ipcRenderer.invoke('memory:get', topic) as Promise<Memory | null>,
+  rememberMemory: (input: MemoryWriteInput) =>
+    ipcRenderer.invoke('memory:remember', input) as Promise<Memory>,
+  forgetMemory: (topic: string) =>
+    ipcRenderer.invoke('memory:forget', topic) as Promise<boolean>,
   onChatStream: (handler: (event: MuckaTextStreamEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextStreamEvent) =>
       handler(payload)

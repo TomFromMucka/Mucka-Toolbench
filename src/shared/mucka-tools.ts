@@ -109,6 +109,91 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     }
   },
   {
+    name: 'list_memories',
+    description:
+      "Returns a topic + preview index of your persistent memory store. Use this BEFORE answering anything that depends on what you've remembered about Tom or past decisions — your prompt has only the always-on basics. Each entry is one line: topic · type · 120-char preview. Then call get_memory for the full body of the one you need. Filter by `type` (profile / preference / project / decision / note) or `tag`. Default limit 50, capped 100.",
+    parameters: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          description: 'Optional — narrow to one memory type.',
+          enum: ['profile', 'preference', 'project', 'decision', 'note']
+        },
+        tag: {
+          type: 'string',
+          description: 'Optional — only return memories tagged with this string.'
+        },
+        limit: {
+          type: 'number',
+          description: 'How many entries to return. Default 50, max 100.'
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'get_memory',
+    description:
+      "Returns the full body of one memory by its topic slug. Call this after list_memories has shown you something relevant. If the topic doesn't exist, returns an explicit 'not found' note — don't fabricate.",
+    parameters: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description: 'The exact topic slug as returned by list_memories.'
+        }
+      },
+      required: ['topic']
+    }
+  },
+  {
+    name: 'remember',
+    description:
+      "Save a fact for future sessions. Use when Tom tells you something worth keeping (a preference, an ongoing initiative, a decision and why, a note about himself or a project). Topic is the upsert key — same topic OVERWRITES the existing body, so reuse the same topic to update an existing memory rather than duplicating. Body should be 1-3 sentences; for preferences/decisions include a brief 'Why' so future-you can judge edge cases. Pick a fitting type: profile / preference / project / decision / note. Auto-executes — no confirmation needed.",
+    parameters: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description:
+            "Short kebab-case slug (e.g. 'voice-style', 'mucka-pro-stack', 'worktree-layout'). Reuse to update."
+        },
+        type: {
+          type: 'string',
+          description: 'Which bucket this memory belongs to.',
+          enum: ['profile', 'preference', 'project', 'decision', 'note']
+        },
+        body: {
+          type: 'string',
+          description:
+            "The fact itself. 1-3 sentences. For preferences/decisions, lead with the rule then a brief 'Why:' line."
+        },
+        tags: {
+          type: 'string',
+          description:
+            'Optional comma-separated tags for filtering later (e.g. "ui,brand" or "deploy,vercel").'
+        }
+      },
+      required: ['topic', 'type', 'body']
+    }
+  },
+  {
+    name: 'forget',
+    description:
+      "Remove a memory by topic. REQUIRES Tom's confirmation — losing context is destructive. Only call when Tom explicitly says 'forget that' or the memory is plainly wrong and an update via `remember` doesn't fit.",
+    parameters: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description: 'The exact topic slug to delete.'
+        }
+      },
+      required: ['topic']
+    }
+  },
+  {
     name: 'get_cockpit_doc',
     description:
       "Reads the cockpit's living spec at MUCKA.md (mission, current capabilities, systems, recent changes, roadmap). Call this BEFORE answering questions about what the workstation can do, what's coming next, what shipped recently, or when Tom asks for priority suggestions — the doc is the source of truth and isn't in your prompt by default. Pass `section` to fetch just one block (e.g. \"Roadmap\", \"Capabilities\", \"Recent changes\"); omit for the whole file.",

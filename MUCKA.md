@@ -68,20 +68,21 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (19).**
+**Mucka tools (23).**
 
 Read-only (auto-execute):
 - `list_agents`, `get_git_status`, `get_recent_output`,
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
-  `get_pr_status`, `get_cockpit_doc`.
+  `get_pr_status`, `get_cockpit_doc`, `list_memories`, `get_memory`.
 
 Chrome writes (auto-execute):
 - `set_banner_status`, `append_note`, `flag_attention`,
-  `clear_attention`, `set_agent_preview`.
+  `clear_attention`, `set_agent_preview`, `remember`.
 
 Confirm-gated:
 - `set_agent_worktree`, `set_agent_command`, `restart_agent`,
-  `send_to_agent` (edit-confirm), `deploy_to_vercel`, `open_pr`.
+  `send_to_agent` (edit-confirm), `deploy_to_vercel`, `open_pr`,
+  `forget`.
 
 ## Systems
 
@@ -139,10 +140,23 @@ to `ephemeral`.
 from the project root, caches by mtime, optionally returns a single
 `##` section. Mucka pulls it via the `get_cockpit_doc` tool.
 
+**Long-term memory (`src/main/db/memories.ts`).** sqlite `memories`
+table, upserted by topic. Five types: `profile`, `preference`,
+`project`, `decision`, `note`. Mucka has four tools — `list_memories`
+returns a cheap topic+preview index (no bodies), `get_memory` pulls
+one full body, `remember` writes/updates, `forget` is confirm-gated.
+Designed so a small "Tom — at a glance" slice lives in the prompt
+and everything else stays out until Mucka pulls it.
+
 ## Recent changes
 
 (newest first — append here when shipping)
 
+- **2026-05-14** — Long-term memory. New `memories` table + four
+  Mucka tools (`list_memories`, `get_memory`, `remember`, `forget`).
+  Small "Tom — at a glance" slice in `pm.md` keeps the always-on
+  context tight; everything else lives on disk and is pulled on
+  demand.
 - **2026-05-14** — Living `MUCKA.md` + `get_cockpit_doc` tool. Mucka
   can read the cockpit's own spec on demand.
 - **2026-05-14** — Voice + text shared transcript. ElevenLabs

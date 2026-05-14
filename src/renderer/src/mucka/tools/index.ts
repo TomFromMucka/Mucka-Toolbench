@@ -5,11 +5,21 @@ import type {
   GitHubAgentSummary,
   GitStatus,
   JobEvent,
+  MemoryListItem,
+  MemoryType,
   VercelAgentSummary,
   VercelDeployment
 } from '@shared/types'
 import { MUCKA_AGENT_IDS } from '@shared/mucka-tools'
 import type { ConfirmRequest, EditConfirmRequest } from '../MuckaSessionContext'
+
+const MEMORY_TYPES: readonly MemoryType[] = [
+  'profile',
+  'preference',
+  'project',
+  'decision',
+  'note'
+] as const
 
 interface ToolDeps {
   setAmbientStatus: (text: string | null) => void
@@ -219,6 +229,120 @@ async function getRecentEvents(params: Record<string, unknown>): Promise<string>
   const slice = filtered.slice(0, limit)
   if (slice.length === 0) return 'No recent events in the job sheet.'
   return slice.map(describeEventLine).join('\n')
+}
+
+function formatMemoryListLine(item: MemoryListItem): string {
+  const ago = relativeAgo(item.updatedAt)
+  const tagPart = item.tags.length > 0 ? ` [${item.tags.join(', ')}]` : ''
+  return `${item.topic} · ${item.type}${tagPart} · ${ago} · ${item.preview}`
+}
+
+function relativeAgo(ms: number): string {
+  if (!ms) return 'never'
+  const diff = Date.now() - ms
+  if (diff < 60_000) return 'just now'
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function parseMemoryType(raw: unknown, label: string): MemoryType {
+  if (typeof raw !== 'string' || !(MEMORY_TYPES as readonly string[]).includes(raw)) {
+    throw new Error(
+      `${label} must be one of: ${MEMORY_TYPES.join(', ')} — got ${JSON.stringify(raw)}`
+    )
+  }
+  return raw as MemoryType
+}
+
+async function listMemoriesHandler(
+  params: Record<string, unknown>
+): Promise<string> {
+  const rawType = params['type']
+  const type =
+    typeof rawType === 'string' && rawType.length > 0
+      ? parseMemoryType(rawType, 'type')
+      : undefined
+  const tag =
+    typeof params['tag'] === 'string' && (params['tag'] as string).trim().length > 0
+      ? (params['tag'] as string).trim()
+      : undefined
+  const limit =
+    typeof params['limit'] === 'number'
+      ? Math.max(1, Math.min(100, Math.floor(params['limit'] as number)))
+      : 50
+
+  const items = await window.mucka.listMemories({ type, tag, limit })
+  if (items.length === 0) {
+    const filterDesc =
+      type || tag ? ` matching ${type ?? ''}${type && tag ? ' + ' : ''}${tag ?? ''}` : ''
+    return `No memories yet${filterDesc}.`
+  }
+  return items.map(formatMemoryListLine).join('\n')
+}
+
+async function getMemoryHandler(
+  params: Record<string, unknown>
+): Promise<string> {
+  const topic = parseString(params, 'topic').trim()
+  if (!topic) throw new Error('topic must not be empty')
+  const memory = await window.mucka.getMemory(topic)
+  if (!memory) {
+    return `No memory with topic "${topic}". Use list_memories to see what's stored.`
+  }
+  const tagLine = memory.tags.length > 0 ? `\ntags: ${memory.tags.join(', ')}` : ''
+  return [
+    `${memory.topic} (${memory.type}) · updated ${relativeAgo(memory.updatedAt)}${tagLine}`,
+    '',
+    memory.body
+  ].join('\n')
+}
+
+async function rememberHandler(
+  params: Record<string, unknown>
+): Promise<string> {
+  const topic = parseString(params, 'topic').trim()
+  if (!topic) throw new Error('topic must not be empty')
+  const type = parseMemoryType(params['type'], 'type')
+  const body = parseString(params, 'body').trim()
+  if (!body) throw new Error('body must not be empty')
+  const rawTags = params['tags']
+  const tags =
+    typeof rawTags === 'string'
+      ? rawTags
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0)
+      : []
+
+  const existing = await window.mucka.getMemory(topic)
+  const saved = await window.mucka.rememberMemory({ topic, type, body, tags })
+  const verb = existing ? 'Updated' : 'Saved'
+  const tagPart = saved.tags.length > 0 ? ` [${saved.tags.join(', ')}]` : ''
+  return `${verb} memory "${saved.topic}" (${saved.type})${tagPart}.`
+}
+
+function makeForgetHandler(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const topic = parseString(params, 'topic').trim()
+    if (!topic) throw new Error('topic must not be empty')
+    const existing = await window.mucka.getMemory(topic)
+    if (!existing) {
+      return `No memory with topic "${topic}" — nothing to forget.`
+    }
+    const ok = await deps.requestConfirm({
+      summary: `Forget memory "${topic}" (${existing.type})`,
+      note: existing.body.slice(0, 200) + (existing.body.length > 200 ? '…' : '')
+    })
+    if (!ok) return `Tom said no. "${topic}" kept.`
+    const removed = await window.mucka.forgetMemory(topic)
+    return removed
+      ? `Forgot "${topic}".`
+      : `Tried to forget "${topic}" but it was already gone.`
+  }
 }
 
 async function getCockpitDoc(params: Record<string, unknown>): Promise<string> {
@@ -460,6 +584,10 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     get_pr_status: (params) => getPrStatus(params),
     get_recent_events: (params) => getRecentEvents(params),
     get_cockpit_doc: (params) => getCockpitDoc(params),
+    list_memories: (params) => listMemoriesHandler(params),
+    get_memory: (params) => getMemoryHandler(params),
+    remember: (params) => rememberHandler(params),
+    forget: makeForgetHandler(deps),
 
     set_banner_status: makeSetBannerStatus(deps),
     append_note: makeAppendNote(),
