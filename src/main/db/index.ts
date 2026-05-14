@@ -68,6 +68,16 @@ function migrate(d: DatabaseType): void {
       segments_json TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS chat_ts_idx ON chat_messages(ts ASC);
+    CREATE TABLE IF NOT EXISTS memories (
+      topic TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      body TEXT NOT NULL,
+      tags TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS memories_type_idx ON memories(type);
+    CREATE INDEX IF NOT EXISTS memories_updated_idx ON memories(updated_at DESC);
   `)
 
   // Idempotent column additions for older databases.

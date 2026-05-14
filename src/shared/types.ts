@@ -265,6 +265,49 @@ export interface CockpitDocPayload {
   found: boolean
 }
 
+/* ─── Long-term memory ───────────────────────────────────────────────── */
+
+/**
+ * Kinds of memory Mucka can write/recall:
+ * - profile     facts about Tom (role, what he cares about)
+ * - preference  how Tom wants things done (style, defaults)
+ * - project     ongoing initiatives, deadlines, who's doing what
+ * - decision    choices made and why — load-bearing for future edge cases
+ * - note        catch-all for anything else worth keeping
+ */
+export type MemoryType = 'profile' | 'preference' | 'project' | 'decision' | 'note'
+
+export interface Memory {
+  topic: string
+  type: MemoryType
+  body: string
+  tags: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+/** Lightweight index entry — body omitted so Mucka can scan cheaply. */
+export interface MemoryListItem {
+  topic: string
+  type: MemoryType
+  preview: string
+  tags: string[]
+  updatedAt: number
+}
+
+export interface MemoryListQuery {
+  type?: MemoryType
+  tag?: string
+  limit?: number
+}
+
+export interface MemoryWriteInput {
+  topic: string
+  type: MemoryType
+  body: string
+  tags?: string[]
+}
+
 export interface MuckaTextMessage {
   id: string
   ts: number
@@ -343,6 +386,12 @@ export interface MuckaApi {
    * whole doc. `sections` always lists available headings.
    */
   getCockpitDoc(section?: string): Promise<CockpitDocPayload>
+
+  /* Long-term memory (Mucka's persistent notes about Tom + projects) */
+  listMemories(query?: MemoryListQuery): Promise<MemoryListItem[]>
+  getMemory(topic: string): Promise<Memory | null>
+  rememberMemory(input: MemoryWriteInput): Promise<Memory>
+  forgetMemory(topic: string): Promise<boolean>
 
   /* Free-form notes (replaces the notice board) */
   getNote(): Promise<string>

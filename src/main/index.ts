@@ -20,6 +20,12 @@ import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
 import { appendValue, getValue, setValue } from './db/kv'
 import {
+  forgetMemory,
+  getMemory,
+  listMemories,
+  rememberMemory
+} from './db/memories'
+import {
   bindEventsBroadcaster,
   listEvents,
   logEvent,
@@ -49,6 +55,8 @@ import { VercelPoller } from './vercel/VercelPoller'
 import { getStatus as githubStatus } from './github/GitHub'
 import { GitHubPoller } from './github/GitHubPoller'
 import type {
+  MemoryListQuery,
+  MemoryWriteInput,
   MicAccess,
   MuckaTextToolResult,
   VoiceTranscriptInput
@@ -367,6 +375,18 @@ function registerIpc(): void {
   ipcMain.on('app:notify-attention', (_event, count: number) => {
     applyAttentionToShell(typeof count === 'number' ? count : 0)
   })
+
+  ipcMain.handle('memory:list', (_event, query?: MemoryListQuery) =>
+    listMemories(query ?? {})
+  )
+
+  ipcMain.handle('memory:get', (_event, topic: string) => getMemory(topic))
+
+  ipcMain.handle('memory:remember', (_event, input: MemoryWriteInput) =>
+    rememberMemory(input)
+  )
+
+  ipcMain.handle('memory:forget', (_event, topic: string) => forgetMemory(topic))
 
   ipcMain.handle(
     'mucka:cockpit-doc',
