@@ -148,10 +148,44 @@ one full body, `remember` writes/updates, `forget` is confirm-gated.
 Designed so a small "Tom — at a glance" slice lives in the prompt
 and everything else stays out until Mucka pulls it.
 
+**Design system v2 (`src/renderer/src/styles/index.css` + `components/ui/`).**
+The cockpit is dark-mode by default, sharing tokens and primitives with
+Mucka Pro mobile. Brand tokens: `--orange #ff4e00` (reserved for Mucka
+voice / attention), `--charcoal` (header bands + chunky CTAs),
+`--van-white` (text), `--dirty-grey` (muted), `--surface` (cards),
+`--surface2` (page bg, deepest). Typography is Söhne (Breit Kräftig for
+display, regular for body/UI) via `t-display-*` / `t-heading-*` /
+`t-body-*` / `t-label-*` utility classes. Universal panel is a
+chamfered (octagonal) card — `chamfer-card` utility with 14 px corner
+notches, charcoal header band, no wooden-clip or paper texture. Three
+shared primitives in `components/ui/`:
+- `<Button>` — primary / secondary / dark / tertiary / ghost ×
+  lg(50px) / md(42px) / sm(34px), with V-notch on the primary's
+  trailing arrow and the secondary's leading chip. Verbatim port.
+- `<StatusPill>` — six variants: `on-site`, `pending`,
+  `scheduled`, `completed`, `quote-sent`, `cancelled`. Orange tints
+  = Mucka engaged, green = finished, grey = inert. Used by Vercel
+  + Git panels.
+- `<Icon>` — Lucide wrapper, defaults to size 24, stroke 2.25.
+
 ## Recent changes
 
 (newest first — append here when shipping)
 
+- **2026-05-15** — Mucka rebrand · Slices 1–4. The cockpit is now on
+  the same design system as Mucka Pro mobile, in a dark-mode skin.
+  Söhne (Sohne Breit Kräftig display + Sohne body) replaces Caveat
+  + Patrick Hand. Brand tokens (`--orange`, `--charcoal`,
+  `--van-white`, `--dirty-grey`, `--surface`, `--surface2`,
+  status-pill tokens) drive every surface. Chamfered (octagonal)
+  cards replace the wooden-clip + paper Clipboard. Button +
+  StatusPill + Icon primitives ported verbatim. Attention glow
+  switched to `filter: drop-shadow` so it follows the chamfered
+  silhouette. Header band sits at charcoal with Söhne Breit title;
+  the title now insets past the 14 px corner chamfers. Status
+  pills (Vercel state, GitHub CI summary) now use the brand
+  StatusPill vocabulary (`completed` / `pending` / `cancelled`),
+  with ad-hoc red for `error` / `failure`.
 - **2026-05-14** — Settings sheet gets a *Memory* tab. List of
   everything Mucka has stored, grouped by type filter, expandable
   rows with body + tags. Inline edit / forget. Closes the loop on

@@ -42,16 +42,21 @@ export function MuckaVoiceButton(): React.JSX.Element {
         title={title}
         aria-label={LABEL[state]}
         className={clsx(
-          'group inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.78rem] font-semibold uppercase tracking-[0.14em] transition-colors',
-          unavailable &&
-            'cursor-not-allowed border-paper-cream/20 bg-mucka-deep/20 text-paper-cream/45',
-          !unavailable &&
-            !active &&
-            'border-paper-cream/35 bg-mucka-deep/30 text-paper-cream hover:bg-mucka-deep/60',
-          !unavailable &&
-            active &&
-            'border-paper-cream/70 bg-paper-cream/20 text-paper-cream'
+          'group chamfer-sm inline-flex items-center gap-2 px-3 py-1.5 text-[0.72rem] uppercase tracking-[0.14em] transition-colors',
+          unavailable && 'cursor-not-allowed'
         )}
+        style={{
+          fontFamily: 'var(--font-soehne)',
+          fontWeight: 500,
+          background: unavailable
+            ? 'rgba(35, 31, 32, 0.25)'
+            : active
+              ? 'var(--charcoal)'
+              : 'rgba(35, 31, 32, 0.4)',
+          color: unavailable
+            ? 'rgba(35, 31, 32, 0.5)'
+            : 'var(--van-white)'
+        }}
       >
         {/* mic glyph */}
         <svg
@@ -78,7 +83,13 @@ export function MuckaVoiceButton(): React.JSX.Element {
         <button
           type="button"
           onClick={openMicSettings}
-          className="rounded-full border border-paper-cream/35 bg-mucka-deep/40 px-2 py-1 text-[0.7rem] uppercase tracking-wide text-paper-cream hover:bg-mucka-deep/70"
+          className="chamfer-sm px-2 py-1 text-[0.68rem] uppercase tracking-wide"
+          style={{
+            background: 'var(--charcoal)',
+            color: 'var(--van-white)',
+            fontFamily: 'var(--font-soehne)',
+            fontWeight: 500
+          }}
           title="Open System Settings → Privacy → Microphone"
         >
           Fix

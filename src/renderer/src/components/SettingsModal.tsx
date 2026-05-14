@@ -367,17 +367,22 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
         <button
           type="button"
           onClick={onClose}
-          className="rounded-sm border border-ink/30 px-3 py-1 font-sans text-[0.8rem] text-ink hover:bg-paper-shadow"
+          className="mucka-btn mucka-btn-tertiary mucka-btn-sm"
         >
-          Cancel
+          <span className="mucka-btn-label">Cancel</span>
         </button>
         <button
           type="button"
           onClick={handleSave}
           disabled={saving || dirtyCount === 0}
-          className="rounded-sm bg-mucka px-3 py-1 font-sans text-[0.8rem] font-semibold uppercase tracking-wide text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
+          className={clsx(
+            'mucka-btn mucka-btn-primary mucka-btn-sm',
+            (saving || dirtyCount === 0) && 'cursor-not-allowed opacity-50'
+          )}
         >
-          {saving ? 'Saving…' : 'Save & restart'}
+          <span className="mucka-btn-label">
+            {saving ? 'Saving…' : 'Save & restart'}
+          </span>
         </button>
       </div>
     </>
@@ -601,17 +606,23 @@ function MemoryTab(): React.JSX.Element {
                           <button
                             type="button"
                             onClick={() => setDraft(null)}
-                            className="rounded-sm border border-ink/30 px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow"
+                            className="mucka-btn mucka-btn-tertiary mucka-btn-sm"
                           >
-                            Cancel
+                            <span className="mucka-btn-label">Cancel</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => void saveDraft(full)}
                             disabled={saving || draft.body.trim().length === 0}
-                            className="rounded-sm bg-mucka px-2 py-1 font-sans text-[0.75rem] font-semibold uppercase tracking-wide text-paper-cream disabled:cursor-not-allowed disabled:opacity-50"
+                            className={clsx(
+                              'mucka-btn mucka-btn-primary mucka-btn-sm',
+                              (saving || draft.body.trim().length === 0) &&
+                                'cursor-not-allowed opacity-50'
+                            )}
                           >
-                            {saving ? 'Saving…' : 'Save'}
+                            <span className="mucka-btn-label">
+                              {saving ? 'Saving…' : 'Save'}
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -636,17 +647,20 @@ function MemoryTab(): React.JSX.Element {
                           <button
                             type="button"
                             onClick={() => beginEdit(full)}
-                            className="rounded-sm border border-ink/30 px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow"
+                            className="mucka-btn mucka-btn-tertiary mucka-btn-sm"
                           >
-                            Edit
+                            <span className="mucka-btn-label">Edit</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => void deleteMemory(m.topic)}
                             disabled={saving}
-                            className="rounded-sm border border-status-bad/50 bg-status-bad/10 px-2 py-1 font-sans text-[0.75rem] text-status-bad hover:bg-status-bad/20 disabled:cursor-not-allowed disabled:opacity-50"
+                            className={clsx(
+                              'mucka-btn mucka-btn-tertiary mucka-btn-tone-danger mucka-btn-sm',
+                              saving && 'cursor-not-allowed opacity-50'
+                            )}
                           >
-                            Forget
+                            <span className="mucka-btn-label">Forget</span>
                           </button>
                         </div>
                       </>
