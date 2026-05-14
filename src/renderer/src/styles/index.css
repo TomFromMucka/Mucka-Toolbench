@@ -248,28 +248,31 @@ textarea,
     inset 0 -3px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* ─── Orange attention glow (used on Sammy etc.) ─────────────────────── */
+/* ─── Orange attention glow ──────────────────────────────────────────
+   Uses `filter: drop-shadow` so the halo traces the actual visible
+   silhouette — works on chamfered cards (where clip-path would clip
+   away a box-shadow) and on plain rectangles alike. */
 @utility attention-glow {
-  box-shadow:
-    0 0 0 2px var(--color-mucka),
-    0 0 18px 4px rgba(255, 78, 0, 0.55),
-    0 0 32px 8px rgba(255, 78, 0, 0.25);
+  filter:
+    drop-shadow(0 0 2px var(--orange))
+    drop-shadow(0 0 10px rgba(255, 78, 0, 0.6))
+    drop-shadow(0 0 22px rgba(255, 78, 0, 0.3));
   animation: mucka-pulse 2.2s ease-in-out infinite;
 }
 
 @keyframes mucka-pulse {
   0%,
   100% {
-    box-shadow:
-      0 0 0 2px var(--color-mucka),
-      0 0 18px 4px rgba(255, 78, 0, 0.55),
-      0 0 32px 8px rgba(255, 78, 0, 0.25);
+    filter:
+      drop-shadow(0 0 2px var(--orange))
+      drop-shadow(0 0 10px rgba(255, 78, 0, 0.55))
+      drop-shadow(0 0 22px rgba(255, 78, 0, 0.25));
   }
   50% {
-    box-shadow:
-      0 0 0 2px var(--color-mucka-glow),
-      0 0 28px 6px rgba(255, 78, 0, 0.75),
-      0 0 48px 14px rgba(255, 78, 0, 0.35);
+    filter:
+      drop-shadow(0 0 3px var(--orange-glow))
+      drop-shadow(0 0 16px rgba(255, 78, 0, 0.75))
+      drop-shadow(0 0 32px rgba(255, 78, 0, 0.4));
   }
 }
 

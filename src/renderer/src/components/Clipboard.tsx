@@ -3,9 +3,13 @@ import clsx from 'clsx'
 interface ClipboardProps {
   title: string
   subtitle?: React.ReactNode
-  /** When true, the clipboard glows brand orange — Tom's attention needed. */
+  /** When true, the card glows brand orange — Tom's attention needed. */
   attention?: boolean
-  /** Paper texture variant. */
+  /**
+   * Legacy paper-texture prop. Ignored in the v2 design system; kept
+   * on the API so callers don't all need updating at once. Slice 4
+   * will sweep this prop out.
+   */
   paper?: 'lined' | 'grid' | 'plain'
   rightSlot?: React.ReactNode
   children: React.ReactNode
@@ -14,66 +18,80 @@ interface ClipboardProps {
 }
 
 /**
- * A "clipboard" panel: dark wooden clip header with a paper page below.
- * The visual primitive used everywhere in the workstation.
+ * The cockpit's universal panel — a chamfered (octagonal) card with a
+ * charcoal header band and a light interior. Pure Mucka brand
+ * silhouette; replaces the wooden-clip-on-paper metaphor from the
+ * pre-v2 cockpit.
  */
 export function Clipboard({
   title,
   subtitle,
   attention = false,
-  paper = 'lined',
   rightSlot,
   children,
   className,
   bodyClassName
 }: ClipboardProps): React.JSX.Element {
-  const paperUtility =
-    paper === 'lined'
-      ? 'paper-lined'
-      : paper === 'grid'
-        ? 'paper-grid'
-        : 'paper-plain'
-
   return (
     <section
       className={clsx(
-        'relative flex flex-col overflow-hidden rounded-md border border-black/40 shadow-[0_6px_18px_rgba(0,0,0,0.45)]',
+        'relative flex min-h-0 flex-col overflow-hidden bg-surface chamfer-card',
         attention && 'attention-glow',
         className
       )}
     >
-      {/* Wooden clip header */}
-      <header className="clip-header relative flex items-center gap-3 px-3 py-1.5">
-        {/* metal screw nubs */}
-        <span className="size-1.5 rounded-full bg-[#7a6a55] shadow-[inset_0_-1px_0_rgba(0,0,0,0.5)]" />
-        <span className="size-1.5 rounded-full bg-[#7a6a55] shadow-[inset_0_-1px_0_rgba(0,0,0,0.5)]" />
-        <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          <h2 className="truncate font-[var(--font-display)] text-[1.05rem] font-semibold leading-none tracking-wide text-paper-cream">
-            {title}
-          </h2>
-          {subtitle ? (
-            <span className="truncate font-[var(--font-hand)] text-[0.78rem] text-paper-cream/55">
-              {subtitle}
-            </span>
-          ) : null}
-        </div>
+      <header
+        className="flex items-center gap-2 px-3 py-2"
+        style={{ background: 'var(--charcoal)', color: 'var(--van-white)' }}
+      >
+        <h2
+          className="min-w-0 flex-shrink truncate"
+          style={{
+            fontFamily: 'var(--font-soehne-breit), system-ui, sans-serif',
+            fontWeight: 500,
+            fontSize: '17px',
+            letterSpacing: '-0.005em',
+            lineHeight: 1
+          }}
+        >
+          {title}
+        </h2>
+        {subtitle ? (
+          <span
+            className="min-w-0 flex-1 truncate"
+            style={{
+              fontFamily: 'var(--font-soehne), system-ui, sans-serif',
+              fontWeight: 400,
+              fontSize: '12px',
+              color: 'rgba(234, 233, 232, 0.65)'
+            }}
+          >
+            {subtitle}
+          </span>
+        ) : null}
         {rightSlot ? (
-          <div className="shrink-0 text-[0.7rem] text-paper-cream/75">
+          <div
+            className="shrink-0"
+            style={{
+              fontFamily: 'var(--font-soehne), system-ui, sans-serif',
+              fontSize: '11px',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              color: 'rgba(234, 233, 232, 0.85)'
+            }}
+          >
             {rightSlot}
           </div>
         ) : null}
       </header>
 
-      {/* Paper page */}
       <div
         className={clsx(
-          paperUtility,
-          'relative min-h-0 flex-1 text-ink',
+          'relative min-h-0 flex-1',
           bodyClassName
         )}
+        style={{ color: 'var(--charcoal)' }}
       >
-        {/* faint shadow under the clip onto the page */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/30 to-transparent" />
         {children}
       </div>
     </section>

@@ -42,7 +42,10 @@ export function Workstation(): React.JSX.Element {
   )
 
   return (
-    <div className="wood-grain flex h-screen w-screen flex-col">
+    <div
+      className="flex h-screen w-screen flex-col"
+      style={{ background: 'var(--surface2)' }}
+    >
       <MuckaTopBanner onOpenSettings={() => setSettingsOpen(true)} />
       <ConfirmStrip />
 
