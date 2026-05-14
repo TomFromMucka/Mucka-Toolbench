@@ -221,6 +221,26 @@ async function getRecentEvents(params: Record<string, unknown>): Promise<string>
   return slice.map(describeEventLine).join('\n')
 }
 
+async function getCockpitDoc(params: Record<string, unknown>): Promise<string> {
+  const rawSection = params['section']
+  const section =
+    typeof rawSection === 'string' && rawSection.trim().length > 0
+      ? rawSection.trim()
+      : undefined
+  const doc = await window.mucka.getCockpitDoc(section)
+  if (!doc.found && section) {
+    const available =
+      doc.sections.length > 0
+        ? doc.sections.join(', ')
+        : '(none — MUCKA.md may be missing)'
+    return `No section "${section}" in MUCKA.md. Available sections: ${available}.`
+  }
+  if (!doc.found) {
+    return 'MUCKA.md not found at the cockpit root. Ask Tom — the file should live next to package.json.'
+  }
+  return doc.text
+}
+
 async function whatsHappening(): Promise<string> {
   const agents = await window.mucka.listAgents()
   if (agents.length === 0) return 'No agents configured.'
@@ -439,6 +459,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     get_vercel_status: (params) => getVercelStatus(params),
     get_pr_status: (params) => getPrStatus(params),
     get_recent_events: (params) => getRecentEvents(params),
+    get_cockpit_doc: (params) => getCockpitDoc(params),
 
     set_banner_status: makeSetBannerStatus(deps),
     append_note: makeAppendNote(),

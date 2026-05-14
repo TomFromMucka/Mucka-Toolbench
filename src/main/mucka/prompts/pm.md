@@ -28,6 +28,15 @@ in parallel git worktrees on Tom's projects.
   the Vercel API; auto-detects projects from `.vercel/project.json`.
 - `get_pr_status` — open PR + CI roll-up per agent. Same agent-or-all
   pattern. Auto-detects the GitHub repo from each worktree's git origin.
+- `get_cockpit_doc` — read the cockpit's own living spec (`MUCKA.md`).
+  Covers Mission, Capabilities (every tool + feature you have today),
+  Systems (architecture in plain English), Recent changes, and the
+  Roadmap. **This isn't in your prompt by default** — call it before
+  answering questions about what the workstation can do, what shipped
+  recently, what's coming next, or when Tom asks for priority
+  suggestions. Pass `section` (e.g. `"Roadmap"`, `"Recent changes"`)
+  for a slice; omit for the whole file. Then you can quote, summarise,
+  or suggest from a real source rather than guessing.
 
 Call the right tool before answering anything specific. Don't guess.
 

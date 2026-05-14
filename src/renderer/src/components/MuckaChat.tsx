@@ -32,13 +32,15 @@ function SegmentBubble({ segment, role }: SegmentBubbleProps): React.JSX.Element
       </div>
     )
   }
+  const isVoice = segment.source === 'voice'
   return (
     <div
       className={clsx(
         'max-w-[88%] rounded-md px-2.5 py-1.5 font-[var(--font-hand)] text-[0.92rem] leading-snug shadow-[0_1px_2px_rgba(0,0,0,0.12)] whitespace-pre-wrap',
         role === 'assistant'
           ? 'bg-mucka/95 text-paper-cream'
-          : 'bg-ink/10 text-ink'
+          : 'bg-ink/10 text-ink',
+        isVoice && 'border-l-2 border-mucka/70 italic'
       )}
     >
       {segment.text}
@@ -46,16 +48,22 @@ function SegmentBubble({ segment, role }: SegmentBubbleProps): React.JSX.Element
   )
 }
 
+function messageHasVoice(m: MuckaTextMessage): boolean {
+  return m.segments.some((s) => s.kind === 'text' && s.source === 'voice')
+}
+
 function ChatMessage({ message }: { message: MuckaTextMessage }): React.JSX.Element {
   const side = message.role === 'user' ? 'items-end' : 'items-start'
   const label = message.role === 'user' ? 'Tom' : 'Mucka'
+  const viaVoice = messageHasVoice(message)
   return (
     <div className={clsx('flex flex-col gap-1', side)}>
       {message.segments.map((seg, idx) => (
         <SegmentBubble key={idx} segment={seg} role={message.role} />
       ))}
       <span className="text-[0.65rem] text-ink-faint">
-        {label} · {formatTime(message.ts)}
+        {label} · {viaVoice ? 'voice · ' : ''}
+        {formatTime(message.ts)}
       </span>
     </div>
   )

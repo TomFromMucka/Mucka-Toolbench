@@ -25,10 +25,16 @@ import {
   logEvent,
   unbindEventsBroadcaster
 } from './events/Events'
+import {
+  extractDocSection,
+  listDocSections,
+  readCockpitDoc
+} from './doc/CockpitDoc'
 import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
 import {
   acceptToolResult as muckaTextAcceptToolResult,
+  appendVoiceMessage as muckaTextAppendVoice,
   bindMuckaTextBroadcaster,
   clearHistory as muckaTextClearHistory,
   getStatus as muckaTextStatus,
@@ -42,7 +48,11 @@ import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
 import { getStatus as githubStatus } from './github/GitHub'
 import { GitHubPoller } from './github/GitHubPoller'
-import type { MicAccess, MuckaTextToolResult } from '@shared/types'
+import type {
+  MicAccess,
+  MuckaTextToolResult,
+  VoiceTranscriptInput
+} from '@shared/types'
 import type {
   AgentId,
   AgentUpdate,
@@ -59,6 +69,27 @@ let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
 let mainWindowRef: BrowserWindow | null = null
+let lastAttentionCount = 0
+
+function applyAttentionToShell(count: number): void {
+  const safe = Math.max(0, Math.floor(count))
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setBadge(safe > 0 ? String(safe) : '')
+    // Bounce only on a rising edge — repeated bounces while still flagged
+    // are annoying. Bounce again whenever the count grows.
+    if (safe > lastAttentionCount) {
+      app.dock.bounce('informational')
+    }
+  }
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    try {
+      mainWindowRef.flashFrame(safe > lastAttentionCount)
+    } catch {
+      /* not supported on every platform/window state */
+    }
+  }
+  lastAttentionCount = safe
+}
 
 function createWindow(): void {
   const { workArea } = screen.getPrimaryDisplay()
@@ -118,6 +149,10 @@ function createWindow(): void {
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
+    if (process.platform === 'darwin' && app.dock) {
+      app.dock.setBadge('')
+    }
+    lastAttentionCount = 0
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -322,6 +357,36 @@ function registerIpc(): void {
   ipcMain.on('mucka:text-tool-result', (_event, result: MuckaTextToolResult) => {
     muckaTextAcceptToolResult(result)
   })
+
+  ipcMain.on('mucka:voice-transcript', (_event, input: VoiceTranscriptInput) => {
+    if (!input || typeof input.text !== 'string') return
+    if (input.role !== 'user' && input.role !== 'assistant') return
+    muckaTextAppendVoice(input.role, input.text, input.ts)
+  })
+
+  ipcMain.on('app:notify-attention', (_event, count: number) => {
+    applyAttentionToShell(typeof count === 'number' ? count : 0)
+  })
+
+  ipcMain.handle(
+    'mucka:cockpit-doc',
+    (_event, section?: string): { text: string; sections: string[]; found: boolean } => {
+      const doc = readCockpitDoc()
+      const sections = doc.found ? listDocSections(doc.text) : []
+      if (!doc.found) {
+        return { text: '', sections, found: false }
+      }
+      const wantSection =
+        typeof section === 'string' && section.trim().length > 0
+          ? section.trim()
+          : null
+      if (!wantSection) {
+        return { text: doc.text, sections, found: true }
+      }
+      const slice = extractDocSection(doc.text, wantSection)
+      return { text: slice, sections, found: slice.length > 0 }
+    }
+  )
 }
 
 function configureMediaPermissions(): void {

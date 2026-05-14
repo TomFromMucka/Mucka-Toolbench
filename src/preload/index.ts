@@ -3,7 +3,9 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AgentConfig,
   AgentId,
+  AgentStatusEvent,
   AgentUpdate,
+  CockpitDocPayload,
   GitStatus,
   GitStatusEvent,
   JobEvent,
@@ -15,6 +17,7 @@ import type {
   MuckaTextStreamEvent,
   MuckaTextToolCall,
   MuckaTextToolResult,
+  VoiceTranscriptInput,
   PtyDataEvent,
   PtyExitEvent,
   PtyResizeRequest,
@@ -66,8 +69,18 @@ const muckaApi: MuckaApi = {
     return () => ipcRenderer.off('git:status', listener)
   },
 
+  onAgentStatus: (handler: (event: AgentStatusEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: AgentStatusEvent) =>
+      handler(payload)
+    ipcRenderer.on('agent:status', listener)
+    return () => ipcRenderer.off('agent:status', listener)
+  },
+
   getScrollback: (terminalId: TerminalId) =>
     ipcRenderer.invoke('pty:scrollback', terminalId) as Promise<string>,
+
+  notifyAttention: (count: number) =>
+    ipcRenderer.send('app:notify-attention', count),
 
   getMuckaStatus: () =>
     ipcRenderer.invoke('mucka:status') as Promise<MuckaStatus>,
@@ -88,6 +101,10 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('mucka:text-clear') as Promise<void>,
   sendChatToolResult: (result: MuckaTextToolResult) =>
     ipcRenderer.send('mucka:text-tool-result', result),
+  appendVoiceTranscript: (input: VoiceTranscriptInput) =>
+    ipcRenderer.send('mucka:voice-transcript', input),
+  getCockpitDoc: (section?: string) =>
+    ipcRenderer.invoke('mucka:cockpit-doc', section) as Promise<CockpitDocPayload>,
   onChatStream: (handler: (event: MuckaTextStreamEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextStreamEvent) =>
       handler(payload)
