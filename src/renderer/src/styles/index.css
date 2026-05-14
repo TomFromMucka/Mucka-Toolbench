@@ -1,39 +1,136 @@
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&display=swap');
 @import 'tailwindcss';
 
-/* ─── Mucka brand tokens ─────────────────────────────────────────────── */
+/* ─── Söhne (Mucka brand display + body) ─────────────────────────────── */
+@font-face {
+  font-family: 'Sohne';
+  src: url('/fonts/soehne/Sohne-Buch.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sohne';
+  src: url('/fonts/soehne/Sohne-Kraftig.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sohne';
+  src: url('/fonts/soehne/Sohne-Halbfett.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sohne Breit';
+  src: url('/fonts/soehne/SohneBreit-Buch.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sohne Breit';
+  src: url('/fonts/soehne/SohneBreit-Kraftig.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sohne Breit';
+  src: url('/fonts/soehne/SohneBreit-Halbfett.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+
+/* ─── Mucka brand tokens (Tailwind-exposed via @theme) ───────────────── */
 @theme {
-  /* Dark wood backdrop */
+  /* Brand tokens — canonical names match Mucka Pro */
+  --color-orange: #ff4e00;
+  --color-orange-deep: #c43e00;
+  --color-orange-glow: #ff7b3a;
+  --color-charcoal: #231f20;
+  --color-van-white: #eae9e8;
+  --color-dirty-grey: #5e5d5c;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5f4f3;
+  --color-border-soft: rgba(35, 31, 32, 0.09);
+  --color-border-mid: rgba(35, 31, 32, 0.14);
+
+  /* StatusPill foregrounds (backgrounds are computed at use-site) */
+  --color-pill-onsite-fg: #c43e00;
+  --color-pill-pending-fg: #b8650f;
+  --color-pill-scheduled-fg: #5e5d5c;
+  --color-pill-completed-fg: #0f7a44;
+
+  /* Existing cockpit tokens — kept during transition. Removed in slice 4. */
   --color-wood-deep: #1a1612;
   --color-wood-soft: #2a2520;
   --color-wood-clip: #3a2f25;
   --color-wood-clip-edge: #1f1812;
-
-  /* Paper-and-ink */
   --color-paper-cream: #f5f0e6;
   --color-paper-shadow: #e6dfd0;
   --color-paper-line: #c9bfa8;
   --color-ink: #2a221a;
   --color-ink-soft: #5a4f42;
   --color-ink-faint: #8a7e6c;
-
-  /* Mucka brand orange — used sparingly for PM voice and attention */
   --color-mucka: #ff4e00;
   --color-mucka-deep: #c63d00;
   --color-mucka-glow: #ff7b3a;
-
-  /* Status colours (kept muted to fit the workshop palette) */
   --color-status-ok: #4f7a3a;
   --color-status-warn: #c08a30;
   --color-status-bad: #a13a2a;
 
   /* Typography */
-  --font-display: 'Caveat', 'Segoe Print', 'Comic Sans MS', cursive;
-  --font-hand: 'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  --font-display: 'Sohne Breit', 'Sohne', system-ui, sans-serif;
+  --font-brand: 'Sohne Breit', 'Sohne', system-ui, sans-serif;
+  --font-hand: 'Sohne', system-ui, sans-serif;
   --font-sans:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+    'Sohne', -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ─── Bare-name brand variables (for raw CSS in primitives) ──────────── */
+:root {
+  --orange: #ff4e00;
+  --orange-deep: #c43e00;
+  --orange-glow: #ff7b3a;
+  --charcoal: #231f20;
+  --van-white: #eae9e8;
+  --dirty-grey: #5e5d5c;
+  --ui-grey: #5e5d5c;
+  --black: #231f20;
+  --white: #eae9e8;
+  --surface: #ffffff;
+  --surface2: #f5f4f3;
+  --border: rgba(35, 31, 32, 0.09);
+  --border-mid: rgba(35, 31, 32, 0.14);
+
+  /* StatusPill tokens */
+  --pill-onsite-bg: rgba(255, 78, 0, 0.10);
+  --pill-onsite-fg: #c43e00;
+  --pill-pending-bg: rgba(255, 78, 0, 0.06);
+  --pill-pending-fg: #b8650f;
+  --pill-scheduled-bg: rgba(35, 31, 32, 0.06);
+  --pill-scheduled-fg: #5e5d5c;
+  --pill-completed-bg: rgba(15, 158, 86, 0.10);
+  --pill-completed-fg: #0f7a44;
+  --pill-quote-bg: rgba(15, 158, 86, 0.10);
+  --pill-quote-fg: #0f7a44;
+  --pill-cancelled-bg: rgba(35, 31, 32, 0.06);
+  --pill-cancelled-fg: #5e5d5c;
+
+  /* Chamfer / V-notch geometry — for buttons and chamfered cards */
+  --notch-lg: 7px;
+  --notch-md: 6px;
+  --notch-sm: 5px;
+  --notch-card: 14px;
+  --vnotch-pos-lg: 36px;
+  --vnotch-pos-md: 30px;
+  --vnotch-pos-sm: 24px;
+  --vnotch-w-lg: 8px;
+  --vnotch-w-md: 7px;
+  --vnotch-w-sm: 6px;
+  --vnotch-d-lg: 5px;
+  --vnotch-d-md: 4px;
+  --vnotch-d-sm: 3px;
 }
 
 /* ─── Global resets ──────────────────────────────────────────────────── */
@@ -207,4 +304,142 @@ textarea,
   transform: translateX(-50%) rotate(-2deg);
   background: rgba(241, 222, 154, 0.85);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Mucka Pro design system v2 — typography scale (ported from Mucka Pro).
+   These DO NOT replace the legacy display/hand fonts yet; they live in
+   parallel so we can sweep components onto them in slices 2-4.
+   ────────────────────────────────────────────────────────────────────── */
+.t-display-xl {
+  font-family: var(--font-brand);
+  font-weight: 500;
+  font-size: 56px;
+  line-height: 0.95;
+  letter-spacing: -0.005em;
+}
+.t-display-lg {
+  font-family: var(--font-brand);
+  font-weight: 500;
+  font-size: 40px;
+  line-height: 0.95;
+  letter-spacing: -0.005em;
+}
+.t-display-md {
+  font-family: var(--font-brand);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1;
+}
+.t-heading-lg {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.2;
+}
+.t-heading-md {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1.25;
+}
+.t-heading-sm {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.t-body-lg {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.45;
+}
+.t-body-md {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.t-body-sm {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.t-label-lg {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.t-label-md {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.t-label-sm {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Chamfered silhouettes — the octagonal "tools-on-the-van" shape used
+   on cards, buttons, avatars, status pills. Each variant clips to an
+   octagon with corner chamfers controlled by --notch-* variables.
+   ────────────────────────────────────────────────────────────────────── */
+@utility chamfer-card {
+  clip-path: polygon(
+    var(--notch-card) 0%,
+    calc(100% - var(--notch-card)) 0%,
+    100% var(--notch-card),
+    100% calc(100% - var(--notch-card)),
+    calc(100% - var(--notch-card)) 100%,
+    var(--notch-card) 100%,
+    0% calc(100% - var(--notch-card)),
+    0% var(--notch-card)
+  );
+}
+@utility chamfer-lg {
+  clip-path: polygon(
+    var(--notch-lg) 0%,
+    calc(100% - var(--notch-lg)) 0%,
+    100% var(--notch-lg),
+    100% calc(100% - var(--notch-lg)),
+    calc(100% - var(--notch-lg)) 100%,
+    var(--notch-lg) 100%,
+    0% calc(100% - var(--notch-lg)),
+    0% var(--notch-lg)
+  );
+}
+@utility chamfer-md {
+  clip-path: polygon(
+    var(--notch-md) 0%,
+    calc(100% - var(--notch-md)) 0%,
+    100% var(--notch-md),
+    100% calc(100% - var(--notch-md)),
+    calc(100% - var(--notch-md)) 100%,
+    var(--notch-md) 100%,
+    0% calc(100% - var(--notch-md)),
+    0% var(--notch-md)
+  );
+}
+@utility chamfer-sm {
+  clip-path: polygon(
+    var(--notch-sm) 0%,
+    calc(100% - var(--notch-sm)) 0%,
+    100% var(--notch-sm),
+    100% calc(100% - var(--notch-sm)),
+    calc(100% - var(--notch-sm)) 100%,
+    var(--notch-sm) 100%,
+    0% calc(100% - var(--notch-sm)),
+    0% var(--notch-sm)
+  );
 }
