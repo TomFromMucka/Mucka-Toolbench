@@ -39,25 +39,30 @@
   font-display: swap;
 }
 
-/* ─── Mucka brand tokens (Tailwind-exposed via @theme) ───────────────── */
+/* ─── Mucka brand tokens — DARK MODE (cockpit-specific) ──────────────── */
+/* Mucka Pro mobile is light; the cockpit is dark-by-default. Same token
+   names + semantics, different values. Surfaces lift from the deepest
+   page-bg upward to card body to header band. */
 @theme {
   /* Brand tokens — canonical names match Mucka Pro */
   --color-orange: #ff4e00;
   --color-orange-deep: #c43e00;
   --color-orange-glow: #ff7b3a;
-  --color-charcoal: #231f20;
+  /* The hierarchy on dark canvas: surface2 (deepest) → surface (cards)
+     → charcoal (header band, slightly lifted) → van-white (text). */
+  --color-surface-2: #0c0b0a;
+  --color-surface: #18171c;
+  --color-charcoal: #2a2624;
   --color-van-white: #eae9e8;
-  --color-dirty-grey: #5e5d5c;
-  --color-surface: #ffffff;
-  --color-surface-2: #f5f4f3;
-  --color-border-soft: rgba(35, 31, 32, 0.09);
-  --color-border-mid: rgba(35, 31, 32, 0.14);
+  --color-dirty-grey: #9a9794;
+  --color-border-soft: rgba(234, 233, 232, 0.10);
+  --color-border-mid: rgba(234, 233, 232, 0.18);
 
-  /* StatusPill foregrounds (backgrounds are computed at use-site) */
-  --color-pill-onsite-fg: #c43e00;
-  --color-pill-pending-fg: #b8650f;
-  --color-pill-scheduled-fg: #5e5d5c;
-  --color-pill-completed-fg: #0f7a44;
+  /* StatusPill foregrounds — brighter tones for legibility on dark */
+  --color-pill-onsite-fg: #ff7b3a;
+  --color-pill-pending-fg: #ff9a4a;
+  --color-pill-scheduled-fg: #9a9794;
+  --color-pill-completed-fg: #37c373;
 
   /* Existing cockpit tokens — kept during transition. Removed in slice 4. */
   --color-wood-deep: #1a1612;
@@ -88,20 +93,21 @@
 }
 
 /* ─── Bare-name brand variables (for raw CSS in primitives) ──────────── */
+/* DARK MODE values — must stay in sync with the @theme block above. */
 :root {
   --orange: #ff4e00;
   --orange-deep: #c43e00;
   --orange-glow: #ff7b3a;
-  --charcoal: #231f20;
+  --charcoal: #2a2624;
   --van-white: #eae9e8;
-  --dirty-grey: #5e5d5c;
-  --ui-grey: #5e5d5c;
-  --black: #231f20;
+  --dirty-grey: #9a9794;
+  --ui-grey: #9a9794;
+  --black: #0c0b0a;
   --white: #eae9e8;
-  --surface: #ffffff;
-  --surface2: #f5f4f3;
-  --border: rgba(35, 31, 32, 0.09);
-  --border-mid: rgba(35, 31, 32, 0.14);
+  --surface: #18171c;
+  --surface2: #0c0b0a;
+  --border: rgba(234, 233, 232, 0.10);
+  --border-mid: rgba(234, 233, 232, 0.18);
   --red: #c42b2b;
   --red-bg: rgba(196, 43, 43, 0.09);
 
@@ -109,19 +115,19 @@
   --font-soehne: 'Sohne', system-ui, sans-serif;
   --font-soehne-breit: 'Sohne Breit', 'Sohne', system-ui, sans-serif;
 
-  /* StatusPill tokens */
-  --pill-onsite-bg: rgba(255, 78, 0, 0.10);
-  --pill-onsite-fg: #c43e00;
-  --pill-pending-bg: rgba(255, 78, 0, 0.06);
-  --pill-pending-fg: #b8650f;
-  --pill-scheduled-bg: rgba(35, 31, 32, 0.06);
-  --pill-scheduled-fg: #5e5d5c;
-  --pill-completed-bg: rgba(15, 158, 86, 0.10);
-  --pill-completed-fg: #0f7a44;
-  --pill-quote-bg: rgba(15, 158, 86, 0.10);
-  --pill-quote-fg: #0f7a44;
-  --pill-cancelled-bg: rgba(35, 31, 32, 0.06);
-  --pill-cancelled-fg: #5e5d5c;
+  /* StatusPill tokens — stronger tints + brighter fg for dark canvas */
+  --pill-onsite-bg: rgba(255, 78, 0, 0.16);
+  --pill-onsite-fg: #ff7b3a;
+  --pill-pending-bg: rgba(255, 78, 0, 0.10);
+  --pill-pending-fg: #ff9a4a;
+  --pill-scheduled-bg: rgba(234, 233, 232, 0.08);
+  --pill-scheduled-fg: #9a9794;
+  --pill-completed-bg: rgba(15, 158, 86, 0.18);
+  --pill-completed-fg: #37c373;
+  --pill-quote-bg: rgba(15, 158, 86, 0.18);
+  --pill-quote-fg: #37c373;
+  --pill-cancelled-bg: rgba(234, 233, 232, 0.08);
+  --pill-cancelled-fg: #9a9794;
 
   /* Chamfer / V-notch geometry — for buttons and chamfered cards */
   --notch-lg: 7px;
@@ -638,11 +644,17 @@ textarea,
 .mucka-btn-tertiary {
   position: relative;
   background: transparent;
-  color: var(--charcoal);
+  /* DARK MODE: outline + text colour is van-white so the outlined
+     button reads against the surface2 page bg. Light-mode flip would
+     use --charcoal here. */
+  color: var(--van-white);
   border: none;
   isolation: isolate;
-  --tertiary-bg: var(--surface2);
-  --tertiary-bg-hover: color-mix(in srgb, var(--tertiary-bg), var(--charcoal) 5%);
+  /* Interior fill defaults to the card body (--surface) so a tertiary
+     button placed inside a Clipboard stays visually flush. Hover
+     mixes a hint of van-white in to lift it. */
+  --tertiary-bg: var(--surface);
+  --tertiary-bg-hover: color-mix(in srgb, var(--tertiary-bg), var(--van-white) 8%);
 }
 .mucka-btn-tertiary::before,
 .mucka-btn-tertiary::after {
@@ -699,10 +711,10 @@ textarea,
 
 .mucka-btn-ghost {
   background: transparent;
-  color: var(--charcoal);
+  color: var(--van-white);
   border-radius: 8px;
 }
-.mucka-btn-ghost:hover { background: rgba(35, 31, 32, 0.06); }
+.mucka-btn-ghost:hover { background: rgba(234, 233, 232, 0.08); }
 
 .mucka-btn-icononly {
   padding: 0;
