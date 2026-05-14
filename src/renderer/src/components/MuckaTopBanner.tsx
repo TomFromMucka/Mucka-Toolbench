@@ -30,33 +30,46 @@ export function MuckaTopBanner({
       )}
       style={{ color: 'var(--charcoal)' }}
     >
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-3">
         <span
-          className="chamfer-sm grid size-7 place-items-center font-semibold leading-none"
+          role="img"
+          aria-label="Mucka"
+          className="block"
           style={{
+            width: '40px',
+            height: '26px',
             background: 'var(--charcoal)',
-            color: 'var(--van-white)',
-            fontFamily: 'var(--font-soehne-breit)',
-            fontSize: '17px'
+            WebkitMaskImage: 'url(/brand/mucka-icon-m.svg)',
+            maskImage: 'url(/brand/mucka-icon-m.svg)',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskPosition: 'left center',
+            maskPosition: 'left center'
           }}
-          aria-hidden
-        >
-          M
-        </span>
+        />
         <span
-          className="leading-none tracking-tight"
+          role="img"
+          aria-label="Mucka Workstation"
+          className="block"
           style={{
-            fontFamily: 'var(--font-soehne-breit)',
-            fontWeight: 600,
-            fontSize: '22px',
-            letterSpacing: '-0.005em'
+            width: '128px',
+            height: '22px',
+            background: 'var(--charcoal)',
+            WebkitMaskImage: 'url(/brand/mucka-wordmark.svg)',
+            maskImage: 'url(/brand/mucka-wordmark.svg)',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskPosition: 'left center',
+            maskPosition: 'left center'
           }}
-        >
-          Mucka
-        </span>
+        />
         <span
-          className="text-[0.7rem] uppercase tracking-[0.18em]"
-          style={{ color: 'rgba(35, 31, 32, 0.65)' }}
+          className="ml-1 text-[0.68rem] uppercase tracking-[0.22em]"
+          style={{ color: 'rgba(35, 31, 32, 0.55)' }}
         >
           Workstation
         </span>
