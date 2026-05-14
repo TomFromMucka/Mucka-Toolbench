@@ -24,11 +24,13 @@ export function MuckaTopBanner({
 
   return (
     <header
-      className={clsx(
-        'relative flex items-center gap-4 px-5 py-2 transition-colors',
-        isLive ? 'bg-orange-glow' : 'bg-orange'
-      )}
-      style={{ color: 'var(--charcoal)' }}
+      className="relative flex items-center gap-4 px-5 py-2 transition-colors"
+      style={{
+        background: 'var(--charcoal)',
+        color: 'var(--van-white)',
+        /* Subtle orange ribbon underneath when a voice session is live. */
+        boxShadow: isLive ? 'inset 0 -2px 0 var(--orange)' : 'none'
+      }}
     >
       <div className="flex shrink-0 items-center gap-3">
         <span
@@ -38,8 +40,7 @@ export function MuckaTopBanner({
           style={{
             width: '40px',
             height: '26px',
-            /* Softer grey-on-orange — full charcoal was too harsh. */
-            background: '#5e5d5c',
+            background: 'var(--orange)',
             WebkitMaskImage: 'url(/brand/mucka-icon-m.svg)',
             maskImage: 'url(/brand/mucka-icon-m.svg)',
             WebkitMaskRepeat: 'no-repeat',
@@ -52,7 +53,7 @@ export function MuckaTopBanner({
         />
         <span
           className="text-[0.68rem] uppercase tracking-[0.22em]"
-          style={{ color: 'rgba(35, 31, 32, 0.55)' }}
+          style={{ color: 'rgba(234, 233, 232, 0.55)' }}
         >
           Workstation
         </span>
@@ -61,9 +62,9 @@ export function MuckaTopBanner({
       <div className="min-w-0 flex-1">
         <p
           className="t-body-md truncate leading-tight"
-          style={{ color: 'var(--charcoal)' }}
+          style={{ color: 'var(--van-white)' }}
         >
-          <span className="opacity-65">PM:</span>{' '}
+          <span style={{ opacity: 0.55 }}>PM:</span>{' '}
           <span style={{ fontWeight: 500 }}>{line}</span>
         </p>
       </div>
@@ -75,10 +76,10 @@ export function MuckaTopBanner({
         onClick={onOpenSettings}
         title="Settings (⌘,)"
         aria-label="Open settings"
-        className="chamfer-sm ml-1 grid size-8 shrink-0 place-items-center"
+        className="chamfer-sm ml-1 grid size-8 shrink-0 place-items-center hover:bg-van-white/15"
         style={{
-          background: 'rgba(35, 31, 32, 0.18)',
-          color: 'var(--charcoal)'
+          background: 'rgba(234, 233, 232, 0.08)',
+          color: 'var(--van-white)'
         }}
       >
         <svg
