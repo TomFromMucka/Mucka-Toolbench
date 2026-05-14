@@ -88,6 +88,27 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     parameters: { type: 'object', properties: {}, required: [] }
   },
   {
+    name: 'get_recent_events',
+    description:
+      "Returns recent entries from the cockpit's job sheet — Vercel deploys, GitHub PR + CI transitions, attention flags, config changes. Prefer this for 'what's been going on?' since it's a chronological summary of state changes across every system. Pass `agent` to filter to one source; pass `limit` to widen the window (default 15).",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description:
+            'Optional — one of dave, sammy, kev, or bren. Omit for all sources (including mucka and system events).',
+          enum: MUCKA_AGENT_IDS
+        },
+        limit: {
+          type: 'number',
+          description: 'How many entries to return. Defaults to 15, capped at 50.'
+        }
+      },
+      required: []
+    }
+  },
+  {
     name: 'get_pr_status',
     description:
       "Returns GitHub PR + CI state for the agent's branch. With no `agent` arg, summarises across all four. With `agent` set, refreshes that one. Reports PR number, title, draft/open, mergeable state, rolled-up check status, and a link to the PR. Use when Tom asks 'is Sammy's PR green?', 'who's still got an open PR?', etc.",

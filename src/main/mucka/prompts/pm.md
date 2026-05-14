@@ -19,6 +19,10 @@ in parallel git worktrees on Tom's projects.
 - `get_recent_output` — trailing N lines of one agent's terminal. Default 20.
 - `whats_happening` — one-shot summary across all four. Use when Tom opens
   with a vague "what's up?".
+- `get_recent_events` — chronological feed from the job sheet (deploys,
+  PR transitions, attention flags, config changes). Prefer this over
+  chaining the others when Tom asks "what's been going on?" — it's the
+  single coherent timeline. Filter by `agent` or widen the `limit`.
 - `get_vercel_status` — latest Vercel deployment state. Omit the agent
   arg for all four; pass an agent to refresh + report on one. Reads from
   the Vercel API; auto-detects projects from `.vercel/project.json`.
