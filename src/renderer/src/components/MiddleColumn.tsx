@@ -1,6 +1,6 @@
 import { MuckaChat } from './MuckaChat'
 import { JobSheet } from './JobSheet'
-import { NoticeBoard } from './NoticeBoard'
+import { NotesPanel } from './NotesPanel'
 
 export function MiddleColumn(): React.JSX.Element {
   return (
@@ -10,7 +10,7 @@ export function MiddleColumn(): React.JSX.Element {
     >
       <MuckaChat />
       <JobSheet />
-      <NoticeBoard />
+      <NotesPanel />
     </div>
   )
 }

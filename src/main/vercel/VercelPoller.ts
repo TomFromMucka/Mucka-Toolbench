@@ -4,9 +4,11 @@ import type {
   AgentId,
   VercelAgentSummary,
   VercelDeployment,
+  VercelDeploymentState,
   VercelUpdateEvent
 } from '@shared/types'
 import { listDeployments, resolveProject, getStatus } from './Vercel'
+import { logEvent } from '../events/Events'
 
 const POLL_INTERVAL_MS = 30_000
 const DEPLOYMENT_LIMIT = 20
@@ -160,7 +162,9 @@ export class VercelPoller {
         checkedAt: Date.now(),
         error: null
       }
+      const previous = this.cache.get(agent.id) ?? null
       this.cache.set(agent.id, summary)
+      this.emitTransitionEvents(agent, previous, summary)
       this.broadcast(summary)
       return summary
     } catch (err) {
@@ -181,5 +185,60 @@ export class VercelPoller {
     if (this.webContents.isDestroyed()) return
     const event: VercelUpdateEvent = { agentId: summary.agentId, summary }
     this.webContents.send('vercel:update', event)
+  }
+
+  /**
+   * Inspect the relevant pair of deployments (latestForBranch ?? latestAny)
+   * and emit a job-sheet event when the deployment id or readyState
+   * changed. Skipped on first poll (no previous cache) to avoid a noisy
+   * boot-time burst.
+   */
+  private emitTransitionEvents(
+    agent: AgentConfig,
+    prior: VercelAgentSummary | null,
+    next: VercelAgentSummary
+  ): void {
+    if (!prior) return
+    const pickRelevant = (s: VercelAgentSummary): VercelDeployment | null =>
+      s.latestForBranch ?? s.latestAny ?? null
+    const before = pickRelevant(prior)
+    const after = pickRelevant(next)
+    if (!after) return
+    // Only log when the deployment id changed or its state moved.
+    const sameId = before?.id === after.id
+    const sameState = before?.state === after.state
+    if (sameId && sameState) return
+
+    const action = sameId ? 'transitioned' : 'started'
+    const stateLabel = labelForState(after.state)
+    const target = after.isProduction ? 'prod' : 'preview'
+    const branch = after.branch ?? agent.branch
+    const message = sameId
+      ? `Vercel ${target} on ${branch} — ${stateLabel}`
+      : `Vercel ${target} ${action} on ${branch} (${stateLabel})`
+    const tone = after.state === 'error' ? 'bad' : after.state === 'ready' ? 'win' : 'normal'
+    logEvent({
+      source: agent.id,
+      kind: `vercel.${after.state}`,
+      message,
+      tone
+    })
+  }
+}
+
+function labelForState(s: VercelDeploymentState): string {
+  switch (s) {
+    case 'queued':
+      return 'queued'
+    case 'building':
+      return 'building'
+    case 'ready':
+      return 'ready ✓'
+    case 'error':
+      return 'failed ✗'
+    case 'canceled':
+      return 'canceled'
+    default:
+      return s
   }
 }

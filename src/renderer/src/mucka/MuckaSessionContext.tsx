@@ -19,7 +19,6 @@ import type {
   MuckaStatus
 } from '@shared/types'
 import { useAgentsState } from '../state/AgentsContext'
-import { useNoticesState } from '../state/NoticesContext'
 import { buildClientTools } from './tools/index'
 
 export interface ConfirmRequest {
@@ -124,7 +123,6 @@ function InnerProvider({
   const pendingTextRef = useRef<string | null>(null)
 
   const { reload: reloadAgents } = useAgentsState()
-  const { reload: reloadNotices } = useNoticesState()
 
   useEffect(() => {
     pendingRef.current = pendingConfirm
@@ -318,8 +316,7 @@ function InnerProvider({
           bumpRestart,
           requestConfirm,
           requestEditConfirm,
-          reloadAgents,
-          reloadNotices
+          reloadAgents
         })
       })
     } catch (err) {
@@ -335,8 +332,7 @@ function InnerProvider({
     bumpRestart,
     requestConfirm,
     requestEditConfirm,
-    reloadAgents,
-    reloadNotices
+    reloadAgents
   ])
 
   const stop = useCallback(async () => {

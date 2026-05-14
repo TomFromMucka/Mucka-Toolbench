@@ -4,7 +4,6 @@ import type {
   AgentId,
   GitHubAgentSummary,
   GitStatus,
-  NoticeColour,
   VercelAgentSummary,
   VercelDeployment
 } from '@shared/types'
@@ -18,8 +17,6 @@ interface ToolDeps {
   requestEditConfirm: (req: EditConfirmRequest) => Promise<string | null>
   /** Pull a fresh agents list from the DB (after a write tool changes one). */
   reloadAgents: () => Promise<void>
-  /** Pull a fresh notice list from the DB (after add/remove). */
-  reloadNotices: () => Promise<void>
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────────── */
@@ -237,30 +234,12 @@ function makeSetBannerStatus(deps: ToolDeps) {
   }
 }
 
-const VALID_COLOURS: readonly NoticeColour[] = ['cream', 'yellow', 'pink', 'blue']
-
-function makeAddNotice(deps: ToolDeps) {
+function makeAppendNote() {
   return async (params: Record<string, unknown>): Promise<string> => {
-    const title = parseString(params, 'title')
-    const body = parseString(params, 'body')
-    const colourRaw = params['colour']
-    const colour: NoticeColour =
-      typeof colourRaw === 'string' && (VALID_COLOURS as string[]).includes(colourRaw)
-        ? (colourRaw as NoticeColour)
-        : 'cream'
-    const created = await window.mucka.addNotice({ title, body, colour })
-    await deps.reloadNotices()
-    return `Pinned "${created.title}" to the notice board (${colour}).`
-  }
-}
-
-function makeRemoveNotice(deps: ToolDeps) {
-  return async (params: Record<string, unknown>): Promise<string> => {
-    const title = parseString(params, 'title')
-    const n = await window.mucka.removeNoticeByTitle(title)
-    if (n === 0) return `No notice titled "${title}" — nothing to remove.`
-    await deps.reloadNotices()
-    return `Removed ${n} notice${n === 1 ? '' : 's'} titled "${title}".`
+    const text = parseString(params, 'text').trim()
+    if (!text) return 'Empty note — nothing written.'
+    await window.mucka.appendNote(text)
+    return `Note appended: ${text.slice(0, 120)}${text.length > 120 ? '…' : ''}`
   }
 }
 
@@ -434,8 +413,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     get_pr_status: (params) => getPrStatus(params),
 
     set_banner_status: makeSetBannerStatus(deps),
-    add_notice: makeAddNotice(deps),
-    remove_notice: makeRemoveNotice(deps),
+    append_note: makeAppendNote(),
     flag_attention: makeFlagAttention(deps),
     clear_attention: makeClearAttention(deps),
     set_agent_preview: makeSetAgentPreview(deps),

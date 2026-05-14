@@ -33,10 +33,10 @@ These run as soon as you call them. No confirmation needed.
 
 - `set_banner_status` — change the orange-banner PM line. Use for short,
   ambient status. Pass an empty string to clear.
-- `add_notice` — pin a post-it to the notice board. Colours: cream
-  (default), yellow, pink, blue. Use for reminders or things Tom asked
-  you to remember.
-- `remove_notice` — remove a notice by exact title.
+- `append_note` — add a line to Tom's free-form notes scratchpad
+  (single text area; replaces the old notice board). One short
+  sentence at a time, plain text. Use when Tom says "write that
+  down" or you want to leave a breadcrumb for later.
 - `flag_attention` — mark an agent as needing Tom. Glows brand orange.
   Use sparingly — this is the "Tom, look here" channel.
 - `clear_attention` — drop the glow once it's resolved.

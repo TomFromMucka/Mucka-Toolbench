@@ -1,22 +1,25 @@
 import { Workstation } from './layout/Workstation'
 import { MuckaSessionProvider } from './mucka/MuckaSessionContext'
 import { AgentsProvider } from './state/AgentsContext'
-import { NoticesProvider } from './state/NoticesContext'
+import { EventsProvider } from './state/EventsContext'
+import { NotesProvider } from './state/NotesContext'
 import { VercelProvider } from './state/VercelContext'
 import { GitHubProvider } from './state/GitHubContext'
 
 function App(): React.JSX.Element {
   return (
     <AgentsProvider>
-      <NoticesProvider>
-        <VercelProvider>
-          <GitHubProvider>
-            <MuckaSessionProvider>
-              <Workstation />
-            </MuckaSessionProvider>
-          </GitHubProvider>
-        </VercelProvider>
-      </NoticesProvider>
+      <NotesProvider>
+        <EventsProvider>
+          <VercelProvider>
+            <GitHubProvider>
+              <MuckaSessionProvider>
+                <Workstation />
+              </MuckaSessionProvider>
+            </GitHubProvider>
+          </VercelProvider>
+        </EventsProvider>
+      </NotesProvider>
     </AgentsProvider>
   )
 }
