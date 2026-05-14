@@ -1,14 +1,20 @@
-import type { PreviewSlot } from '@shared/types'
+import { useState } from 'react'
+import type { AgentConfig } from '@shared/types'
 import { Clipboard } from './Clipboard'
 
 interface BrowserPreviewProps {
-  slot: PreviewSlot
+  slotId: 'left' | 'right'
+  agent: AgentConfig | null
 }
 
 export function BrowserPreview({
-  slot
+  slotId,
+  agent
 }: BrowserPreviewProps): React.JSX.Element {
-  const subtitle = slot.agentId ? `${slot.agentId} · preview` : 'no agent'
+  const [reloadKey, setReloadKey] = useState(0)
+  const url = agent?.previewUrl ?? null
+  const subtitle = agent ? `${agent.displayName.toLowerCase()} · preview` : 'no agent'
+  const placeholderPort = slotId === 'left' ? '3001' : '3002'
 
   return (
     <Clipboard
@@ -16,15 +22,23 @@ export function BrowserPreview({
       subtitle={subtitle}
       paper="plain"
       rightSlot={
-        <span className="font-mono text-paper-cream/70 text-[0.65rem]">
-          {slot.url ?? 'mock'}
-        </span>
+        url ? (
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="rounded-sm border border-paper-cream/30 px-2 py-0.5 font-sans text-[0.7rem] uppercase tracking-wide text-paper-cream/85 hover:bg-paper-cream/15"
+            title="Reload iframe"
+          >
+            reload
+          </button>
+        ) : (
+          <span className="font-mono text-paper-cream/70 text-[0.65rem]">no url</span>
+        )
       }
       className="min-h-0"
       bodyClassName="bg-[#10171c]"
     >
       <div className="flex h-full min-h-0 flex-col">
-        {/* fake address bar */}
         <div className="flex items-center gap-2 border-b border-black/40 bg-[#1d2730] px-2 py-1">
           <div className="flex gap-1.5">
             <span className="size-2 rounded-full bg-[#ff5f57]" />
@@ -32,26 +46,31 @@ export function BrowserPreview({
             <span className="size-2 rounded-full bg-[#28c840]" />
           </div>
           <div className="ml-1 flex-1 truncate rounded-sm bg-[#0c1418] px-2 py-1 font-mono text-[0.7rem] text-paper-cream/70">
-            {slot.url ?? `http://localhost:300${slot.id === 'left' ? '1' : '2'}`}
+            {url ?? `http://localhost:${placeholderPort}`}
           </div>
         </div>
 
-        {/* iframe / placeholder */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          {slot.url ? (
+          {url ? (
             <iframe
-              title={`preview-${slot.id}`}
-              src={slot.url}
+              key={`${url}#${reloadKey}`}
+              title={`preview-${slotId}`}
+              src={url}
               className="size-full border-0"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             />
           ) : (
             <div className="grid h-full place-items-center px-4">
               <div className="paper-grid w-full rounded-sm border border-ink/15 p-4 font-[var(--font-hand)] text-[0.92rem] leading-snug text-ink-soft shadow-[0_2px_6px_rgba(0,0,0,0.45)]">
-                <p className="font-semibold text-ink">Dev server not wired yet.</p>
-                <pre className="mt-2 whitespace-pre-wrap font-mono text-[0.75rem] text-ink-soft">
-                  {slot.placeholder}
-                </pre>
+                <p className="font-semibold text-ink">
+                  {agent
+                    ? `No preview URL set for ${agent.displayName}.`
+                    : 'No agent assigned to this preview slot.'}
+                </p>
+                <p className="mt-2 text-[0.82rem] text-ink-soft">
+                  Set one in Settings (⌘,) — point it at the agent&apos;s dev
+                  server (e.g. http://localhost:{placeholderPort}).
+                </p>
               </div>
             </div>
           )}

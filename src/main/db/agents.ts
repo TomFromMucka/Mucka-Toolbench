@@ -12,6 +12,8 @@ interface AgentRow {
   updated_at: number
   needs_attention: number
   attention_reason: string | null
+  preview_url: string | null
+  vercel_project_id: string | null
 }
 
 function rowToConfig(row: AgentRow): AgentConfig {
@@ -30,7 +32,9 @@ function rowToConfig(row: AgentRow): AgentConfig {
     command: row.command,
     args: parsedArgs,
     needsAttention: row.needs_attention === 1,
-    attentionReason: row.attention_reason ?? null
+    attentionReason: row.attention_reason ?? null,
+    previewUrl: row.preview_url ?? null,
+    vercelProjectId: row.vercel_project_id ?? null
   }
 }
 
@@ -51,8 +55,8 @@ export function getAgent(id: AgentId): AgentConfig | undefined {
 export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
   getDb()
     .prepare(
-      `INSERT INTO agents (id, display_name, branch, worktree_path, command, args, sort_order, updated_at, needs_attention, attention_reason)
-       VALUES (@id, @displayName, @branch, @worktreePath, @command, @args, @sort_order, @updated_at, @needs_attention, @attention_reason)
+      `INSERT INTO agents (id, display_name, branch, worktree_path, command, args, sort_order, updated_at, needs_attention, attention_reason, preview_url, vercel_project_id)
+       VALUES (@id, @displayName, @branch, @worktreePath, @command, @args, @sort_order, @updated_at, @needs_attention, @attention_reason, @preview_url, @vercel_project_id)
        ON CONFLICT(id) DO UPDATE SET
          display_name = excluded.display_name,
          branch = excluded.branch,
@@ -62,7 +66,9 @@ export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
          sort_order = excluded.sort_order,
          updated_at = excluded.updated_at,
          needs_attention = excluded.needs_attention,
-         attention_reason = excluded.attention_reason`
+         attention_reason = excluded.attention_reason,
+         preview_url = excluded.preview_url,
+         vercel_project_id = excluded.vercel_project_id`
     )
     .run({
       id: agent.id,
@@ -74,7 +80,9 @@ export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
       sort_order: sortOrder,
       updated_at: Date.now(),
       needs_attention: agent.needsAttention ? 1 : 0,
-      attention_reason: agent.attentionReason ?? null
+      attention_reason: agent.attentionReason ?? null,
+      preview_url: agent.previewUrl ?? null,
+      vercel_project_id: agent.vercelProjectId ?? null
     })
 }
 

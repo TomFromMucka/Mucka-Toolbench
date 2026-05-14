@@ -2,13 +2,32 @@ import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import type { AgentId } from '@shared/types'
+import type { AgentId, TerminalId } from '@shared/types'
 
 interface AgentTerminalProps {
+  terminalId: TerminalId
   agentId: AgentId
+  /**
+   * Whether this terminal is the currently-visible tab. Inactive terminals
+   * stay mounted (so their PTYs don't tear down on switch) but skip the
+   * resize observer's `fit.fit()` calls — xterm's measurement is wrong when
+   * the host is `display: none`.
+   */
+  isActive?: boolean
+  /**
+   * Optional sniffer for the PTY data stream. Receives raw chunks before
+   * xterm interprets them — used for URL auto-detection on the
+   * preview-source tab.
+   */
+  onData?: (data: string) => void
+  /**
+   * If set, this string + Enter is typed into the PTY shortly after spawn.
+   * Used by the "preview" button to auto-run a dev-server command. Runs
+   * only once per mount — changing the prop after mount has no effect.
+   */
+  autoCommand?: string
 }
 
-/** Brand-tinted xterm theme — sits inside a cream Clipboard like an embedded screen. */
 const THEME = {
   background: '#1a1612',
   foreground: '#f5f0e6',
@@ -40,8 +59,23 @@ function separator(): string {
   return `\r\n\x1b[38;5;208m${label}\x1b[0m\r\n`
 }
 
-export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Element {
+export function AgentTerminal({
+  terminalId,
+  agentId,
+  isActive = true,
+  onData,
+  autoCommand
+}: AgentTerminalProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const termRef = useRef<Terminal | null>(null)
+  const fitRef = useRef<FitAddon | null>(null)
+  const onDataRef = useRef(onData)
+  // Captured at mount — autoCommand is intentionally one-shot.
+  const autoCommandRef = useRef(autoCommand)
+
+  useEffect(() => {
+    onDataRef.current = onData
+  }, [onData])
 
   useEffect(() => {
     const host = hostRef.current
@@ -63,6 +97,8 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host)
+    termRef.current = term
+    fitRef.current = fit
 
     try {
       fit.fit()
@@ -74,26 +110,29 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
     host.addEventListener('mousedown', focusTerm)
 
     const offData = window.mucka.onPtyData((event) => {
-      if (event.agentId !== agentId) return
+      if (event.terminalId !== terminalId) return
       term.write(event.data)
+      onDataRef.current?.(event.data)
     })
 
     const offExit = window.mucka.onPtyExit((event) => {
-      if (event.agentId !== agentId) return
+      if (event.terminalId !== terminalId) return
       term.write(
         `\r\n\x1b[38;5;208m[mucka] shell exited (code ${event.exitCode})\x1b[0m\r\n`
       )
     })
 
     const onUserInput = term.onData((data) => {
-      window.mucka.writePty({ agentId, data })
+      window.mucka.writePty({ terminalId, data })
     })
 
     const resizeObserver = new ResizeObserver(() => {
+      // Skip fitting when hidden — xterm needs visible dimensions to measure.
+      if (host.offsetParent === null) return
       try {
         fit.fit()
         window.mucka.resizePty({
-          agentId,
+          terminalId,
           cols: term.cols,
           rows: term.rows
         })
@@ -103,20 +142,29 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
     })
     resizeObserver.observe(host)
 
-    // Replay previous-session scrollback, then spawn the live PTY. Sequenced
-    // so the new prompt arrives strictly after the "reconnected" separator.
     ;(async () => {
-      const prior = await window.mucka.getScrollback(agentId)
+      const prior = await window.mucka.getScrollback(terminalId)
       if (cancelled) return
       if (prior.length > 0) {
         term.write(prior)
         term.write(separator())
       }
       await window.mucka.spawnPty({
+        terminalId,
         agentId,
         cols: term.cols,
         rows: term.rows
       })
+      // Give the shell a beat to print its prompt before injecting input.
+      // Without the delay, `npm run dev` lands before zsh's rc files finish
+      // sourcing and you see it land in front of the prompt cosmetically.
+      const cmd = autoCommandRef.current
+      if (cmd) {
+        setTimeout(() => {
+          if (cancelled) return
+          window.mucka.writePty({ terminalId, data: cmd + '\r' })
+        }, 250)
+      }
     })().catch(() => {
       /* spawn errors surface as visible failures in the terminal */
     })
@@ -129,8 +177,30 @@ export function AgentTerminal({ agentId }: AgentTerminalProps): React.JSX.Elemen
       offData()
       offExit()
       term.dispose()
+      termRef.current = null
+      fitRef.current = null
     }
-  }, [agentId])
+  }, [terminalId, agentId])
+
+  // When a hidden tab becomes active again, re-fit so xterm matches the
+  // now-visible host dimensions (ResizeObserver doesn't fire for visibility
+  // changes alone).
+  useEffect(() => {
+    if (!isActive) return
+    const term = termRef.current
+    const fit = fitRef.current
+    if (!term || !fit) return
+    const handle = window.requestAnimationFrame(() => {
+      try {
+        fit.fit()
+        window.mucka.resizePty({ terminalId, cols: term.cols, rows: term.rows })
+        term.focus()
+      } catch {
+        /* mid-teardown */
+      }
+    })
+    return () => window.cancelAnimationFrame(handle)
+  }, [isActive, terminalId])
 
   return <div ref={hostRef} className="size-full bg-[#1a1612]" />
 }

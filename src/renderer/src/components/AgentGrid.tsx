@@ -48,7 +48,9 @@ export function AgentGrid({
           command: 'zsh',
           args: ['-l'],
           needsAttention: false,
-          attentionReason: null
+          attentionReason: null,
+          previewUrl: null,
+          vercelProjectId: null
         }))
 
   return (
@@ -57,6 +59,7 @@ export function AgentGrid({
         <AgentClipboard
           key={`${spawnKey(cfg)}::r${restartVersion[cfg.id] ?? 0}`}
           agent={mergeWithMockState(cfg)}
+          config={cfg}
           gitStatus={gitStatus[cfg.id]}
         />
       ))}

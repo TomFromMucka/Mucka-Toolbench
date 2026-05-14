@@ -7,23 +7,26 @@ import type {
   PtyExitEvent,
   PtyResizeRequest,
   PtySpawnRequest,
-  PtyWriteRequest
+  PtyWriteRequest,
+  TerminalId
 } from '@shared/types'
 import { getAgentConfig } from '../config/agents'
 import { scrollback } from '../scrollback/Scrollback'
 
-interface AgentPty {
+interface TerminalPty {
+  terminalId: TerminalId
   agentId: AgentId
   proc: IPty
 }
 
 /**
- * Owns the live PTY processes (one per agent). Fans output to the renderer
- * via webContents.send. Spawn is idempotent — calling it again after exit
- * starts a fresh process at the agent's current cwd.
+ * Owns the live PTY processes — keyed by terminalId, not agentId, so a
+ * single agent can host multiple sub-terminals. Spawn is idempotent: a
+ * repeat call for the same terminalId tears down the previous proc and
+ * starts a fresh one at the owning agent's current cwd.
  */
 export class PtyManager {
-  private readonly ptys = new Map<AgentId, AgentPty>()
+  private readonly ptys = new Map<TerminalId, TerminalPty>()
   private readonly webContents: WebContents
 
   constructor(webContents: WebContents) {
@@ -31,10 +34,7 @@ export class PtyManager {
   }
 
   spawn(req: PtySpawnRequest): void {
-    // Tear down any previous PTY for this agent. We don't delete from the
-    // map here — the previous proc's onExit closure (below) is responsible
-    // for cleaning up only its own entry, never the new one.
-    const existing = this.ptys.get(req.agentId)
+    const existing = this.ptys.get(req.terminalId)
     if (existing) {
       try {
         existing.proc.kill()
@@ -54,47 +54,51 @@ export class PtyManager {
       env: {
         ...process.env,
         TERM: 'xterm-256color',
-        MUCKA_AGENT: cfg.id
+        MUCKA_AGENT: cfg.id,
+        MUCKA_TERMINAL: req.terminalId
       }
     })
 
-    const entry: AgentPty = { agentId: req.agentId, proc }
+    const entry: TerminalPty = {
+      terminalId: req.terminalId,
+      agentId: req.agentId,
+      proc
+    }
 
     proc.onData((data) => {
-      // Drop output from a stale proc that's been replaced.
-      if (this.ptys.get(req.agentId)?.proc !== proc) return
-      scrollback.append(req.agentId, data)
+      if (this.ptys.get(req.terminalId)?.proc !== proc) return
+      scrollback.append(req.terminalId, data)
       if (this.webContents.isDestroyed()) return
-      const event: PtyDataEvent = { agentId: req.agentId, data }
+      const event: PtyDataEvent = { terminalId: req.terminalId, data }
       this.webContents.send('pty:data', event)
     })
 
     proc.onExit(({ exitCode, signal }) => {
-      const current = this.ptys.get(req.agentId)
+      const current = this.ptys.get(req.terminalId)
       const isCurrent = current?.proc === proc
       if (isCurrent) {
-        this.ptys.delete(req.agentId)
+        this.ptys.delete(req.terminalId)
       }
       if (this.webContents.isDestroyed() || !isCurrent) return
       const event: PtyExitEvent = {
-        agentId: req.agentId,
+        terminalId: req.terminalId,
         exitCode,
         signal: signal ?? null
       }
       this.webContents.send('pty:exit', event)
     })
 
-    this.ptys.set(req.agentId, entry)
+    this.ptys.set(req.terminalId, entry)
   }
 
-  write({ agentId, data }: PtyWriteRequest): void {
-    const entry = this.ptys.get(agentId)
+  write({ terminalId, data }: PtyWriteRequest): void {
+    const entry = this.ptys.get(terminalId)
     if (!entry) return
     entry.proc.write(data)
   }
 
-  resize({ agentId, cols, rows }: PtyResizeRequest): void {
-    const entry = this.ptys.get(agentId)
+  resize({ terminalId, cols, rows }: PtyResizeRequest): void {
+    const entry = this.ptys.get(terminalId)
     if (!entry) return
     try {
       entry.proc.resize(Math.max(20, cols), Math.max(5, rows))
@@ -103,15 +107,15 @@ export class PtyManager {
     }
   }
 
-  kill(agentId: AgentId): void {
-    const entry = this.ptys.get(agentId)
+  kill(terminalId: TerminalId): void {
+    const entry = this.ptys.get(terminalId)
     if (!entry) return
     try {
       entry.proc.kill()
     } catch {
       /* already dead */
     }
-    this.ptys.delete(agentId)
+    this.ptys.delete(terminalId)
   }
 
   killAll(): void {

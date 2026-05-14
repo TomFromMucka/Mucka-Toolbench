@@ -2,8 +2,11 @@ import type { ClientTools } from '@elevenlabs/react'
 import type {
   AgentConfig,
   AgentId,
+  GitHubAgentSummary,
   GitStatus,
-  NoticeColour
+  NoticeColour,
+  VercelAgentSummary,
+  VercelDeployment
 } from '@shared/types'
 import { MUCKA_AGENT_IDS } from '@shared/mucka-tools'
 import type { ConfirmRequest, EditConfirmRequest } from '../MuckaSessionContext'
@@ -78,6 +81,48 @@ function describeGitLine(status: GitStatus): string {
   return parts.join(' · ')
 }
 
+function describeDeployment(d: VercelDeployment): string {
+  const parts: string[] = []
+  parts.push(d.state)
+  if (d.target === 'production') parts.push('prod')
+  if (d.branch) parts.push(`branch ${d.branch}`)
+  if (d.commitMessage) {
+    const trimmed = d.commitMessage.slice(0, 80)
+    parts.push(`"${trimmed}"`)
+  }
+  if (d.url) parts.push(d.url)
+  if (d.state === 'error' && d.errorMessage) parts.push(`err: ${d.errorMessage}`)
+  return parts.join(' · ')
+}
+
+function describeVercelLine(summary: VercelAgentSummary): string {
+  if (summary.source === 'none') return 'no Vercel project linked'
+  if (summary.error) return `error: ${summary.error}`
+  const target =
+    summary.latestForBranch ?? summary.latestProduction ?? summary.latestAny
+  if (!target) return 'no deployments yet'
+  return describeDeployment(target)
+}
+
+function describeGitHubLine(summary: GitHubAgentSummary): string {
+  if (!summary.repo) return 'not a GitHub repo'
+  if (summary.error) return `error: ${summary.error}`
+  const repo = `${summary.repo.owner}/${summary.repo.name}`
+  if (!summary.openPr) {
+    return `${repo} on ${summary.branch} · no open PR`
+  }
+  const pr = summary.openPr
+  const parts: string[] = [`${repo} #${pr.number}`]
+  if (pr.isDraft) parts.push('draft')
+  parts.push(`"${pr.title.slice(0, 80)}"`)
+  parts.push(`ci ${summary.checkSummary}`)
+  if (pr.mergeableState && pr.mergeableState !== 'clean' && pr.mergeableState !== 'unknown') {
+    parts.push(`mergeable=${pr.mergeableState}`)
+  }
+  parts.push(pr.url)
+  return parts.join(' · ')
+}
+
 /* ─── Read-only tools (phase 2) ──────────────────────────────────────── */
 
 async function listAgents(): Promise<string> {
@@ -102,6 +147,54 @@ async function getRecentOutput(params: Record<string, unknown>): Promise<string>
   const tail = lastLines(raw, requestedLines).trim()
   if (!tail) return `${agentId}: terminal is empty.`
   return `${agentId} — last ${requestedLines} lines:\n${tail}`
+}
+
+async function getVercelStatus(params: Record<string, unknown>): Promise<string> {
+  const status = await window.mucka.getVercelStatus()
+  if (status.kind === 'missing-token') {
+    return 'Vercel API token is not set in the cockpit env — Tom needs to add VERCEL_API_TOKEN to .env and restart.'
+  }
+  if (status.kind === 'error') return `Vercel: ${status.message}`
+
+  const rawAgent = params['agent']
+  if (typeof rawAgent === 'string' && rawAgent.length > 0) {
+    const agentId = parseAgentId(params)
+    const summary = await window.mucka.refreshVercel(agentId)
+    return `${agentId}: ${describeVercelLine(summary)}`
+  }
+
+  const all = await window.mucka.listAllVercelDeployments()
+  const agents = await window.mucka.listAgents()
+  const lines = agents.map((a) => {
+    const s = all[a.id]
+    if (!s) return `${a.id}: no data`
+    return `${a.id}: ${describeVercelLine(s)}`
+  })
+  return lines.join('\n')
+}
+
+async function getPrStatus(params: Record<string, unknown>): Promise<string> {
+  const status = await window.mucka.getGitHubStatus()
+  if (status.kind === 'missing-token') {
+    return 'GitHub token is not set in the cockpit env — Tom needs to add GITHUB_TOKEN to .env and restart.'
+  }
+  if (status.kind === 'error') return `GitHub: ${status.message}`
+
+  const rawAgent = params['agent']
+  if (typeof rawAgent === 'string' && rawAgent.length > 0) {
+    const agentId = parseAgentId(params)
+    const summary = await window.mucka.refreshGitHub(agentId)
+    return `${agentId}: ${describeGitHubLine(summary)}`
+  }
+
+  const all = await window.mucka.listAllGitHubSummaries()
+  const agents = await window.mucka.listAgents()
+  const lines = agents.map((a) => {
+    const s = all[a.id]
+    if (!s) return `${a.id}: no data`
+    return `${a.id}: ${describeGitHubLine(s)}`
+  })
+  return lines.join('\n')
 }
 
 async function whatsHappening(): Promise<string> {
@@ -185,6 +278,24 @@ function makeFlagAttention(deps: ToolDeps) {
   }
 }
 
+function makeSetAgentPreview(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const rawUrl = parseString(params, 'url').trim()
+    if (rawUrl === '') {
+      await window.mucka.updateAgent({ id: agentId, previewUrl: null })
+      await deps.reloadAgents()
+      return `Cleared ${agentId}'s preview.`
+    }
+    if (!/^https?:\/\//i.test(rawUrl)) {
+      throw new Error(`url must start with http:// or https:// — got ${JSON.stringify(rawUrl)}`)
+    }
+    await window.mucka.updateAgent({ id: agentId, previewUrl: rawUrl })
+    await deps.reloadAgents()
+    return `Pointed ${agentId}'s preview at ${rawUrl}.`
+  }
+}
+
 function makeClearAttention(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
@@ -251,6 +362,46 @@ function makeRestartAgent(deps: ToolDeps) {
   }
 }
 
+function makeOpenPr(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const draftRaw = params['draft']
+    const draft = draftRaw === true || draftRaw === 'true'
+    const command = draft ? 'gh pr create --fill --draft' : 'gh pr create --fill'
+
+    const ok = await deps.requestConfirm({
+      summary: `Run \`${command}\` in ${agentId}'s terminal`,
+      note:
+        draft
+          ? "Creates a DRAFT pull request from this agent's branch using the gh CLI."
+          : "Creates a pull request from this agent's branch using the gh CLI."
+    })
+    if (!ok) return `Tom said no. No PR opened for ${agentId}.`
+    window.mucka.writePty({ terminalId: agentId, data: command + '\r' })
+    return `Sent \`${command}\` to ${agentId}. The gh CLI's output will land in its terminal.`
+  }
+}
+
+function makeDeployToVercel(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const targetRaw = typeof params['target'] === 'string' ? params['target'] : 'preview'
+    const target = targetRaw === 'production' || targetRaw === 'prod' ? 'production' : 'preview'
+    const command = target === 'production' ? 'vercel --prod' : 'vercel'
+
+    const ok = await deps.requestConfirm({
+      summary: `Run \`${command}\` in ${agentId}'s terminal`,
+      note:
+        target === 'production'
+          ? 'Triggers a PRODUCTION deploy from this agent\'s worktree.'
+          : 'Triggers a preview deploy from this agent\'s worktree.'
+    })
+    if (!ok) return `Tom said no. No deploy triggered for ${agentId}.`
+    window.mucka.writePty({ terminalId: agentId, data: command + '\r' })
+    return `Sent \`${command}\` to ${agentId}. Deploy logs will appear in its terminal.`
+  }
+}
+
 function makeSendToAgent(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
@@ -264,8 +415,9 @@ function makeSendToAgent(deps: ToolDeps) {
     if (approved === null) return `Tom said no. Nothing sent to ${agentId}.`
     const trimmed = approved.trim()
     if (!trimmed) return `Tom blanked the message. Nothing sent to ${agentId}.`
+    // Mucka writes to the agent's primary terminal (terminalId === agentId).
     // \r is what terminals receive when you press Enter.
-    window.mucka.writePty({ agentId, data: trimmed + '\r' })
+    window.mucka.writePty({ terminalId: agentId, data: trimmed + '\r' })
     return `Sent to ${agentId}: ${trimmed.slice(0, 200)}${trimmed.length > 200 ? '…' : ''}`
   }
 }
@@ -278,16 +430,21 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     get_git_status: (params) => getGitStatus(params),
     get_recent_output: (params) => getRecentOutput(params),
     whats_happening: () => whatsHappening(),
+    get_vercel_status: (params) => getVercelStatus(params),
+    get_pr_status: (params) => getPrStatus(params),
 
     set_banner_status: makeSetBannerStatus(deps),
     add_notice: makeAddNotice(deps),
     remove_notice: makeRemoveNotice(deps),
     flag_attention: makeFlagAttention(deps),
     clear_attention: makeClearAttention(deps),
+    set_agent_preview: makeSetAgentPreview(deps),
 
     set_agent_worktree: makeSetAgentWorktree(deps),
     set_agent_command: makeSetAgentCommand(deps),
     restart_agent: makeRestartAgent(deps),
-    send_to_agent: makeSendToAgent(deps)
+    send_to_agent: makeSendToAgent(deps),
+    deploy_to_vercel: makeDeployToVercel(deps),
+    open_pr: makeOpenPr(deps)
   }
 }

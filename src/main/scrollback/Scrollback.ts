@@ -1,50 +1,50 @@
 import { app } from 'electron'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AgentId } from '@shared/types'
+import type { TerminalId } from '@shared/types'
 
-const MAX_BYTES_PER_AGENT = 200_000
+const MAX_BYTES_PER_TERMINAL = 200_000
 
 /**
- * Per-agent terminal scrollback. Kept in memory while the app runs;
- * persisted to disk on quit so the cockpit "remembers" what each agent
- * was doing across restarts.
+ * Per-terminal scrollback. Kept in memory while the app runs; persisted to
+ * disk on quit so the cockpit "remembers" what each terminal was doing
+ * across restarts. Only primary terminals (terminalId === agentId) are
+ * loaded from disk on boot — secondary split terminals are session-only.
  *
  * Persistence is best-effort — a hard crash before before-quit loses the
  * last session. Worth the simplicity tradeoff.
  */
 class Scrollback {
-  private buffers = new Map<AgentId, string>()
+  private buffers = new Map<TerminalId, string>()
 
-  append(agentId: AgentId, chunk: string): void {
-    const prev = this.buffers.get(agentId) ?? ''
+  append(terminalId: TerminalId, chunk: string): void {
+    const prev = this.buffers.get(terminalId) ?? ''
     let next = prev + chunk
-    if (next.length > MAX_BYTES_PER_AGENT) {
-      next = next.slice(next.length - MAX_BYTES_PER_AGENT)
+    if (next.length > MAX_BYTES_PER_TERMINAL) {
+      next = next.slice(next.length - MAX_BYTES_PER_TERMINAL)
     }
-    this.buffers.set(agentId, next)
+    this.buffers.set(terminalId, next)
   }
 
-  get(agentId: AgentId): string {
-    return this.buffers.get(agentId) ?? ''
+  get(terminalId: TerminalId): string {
+    return this.buffers.get(terminalId) ?? ''
   }
 
-  clear(agentId: AgentId): void {
-    this.buffers.delete(agentId)
+  clear(terminalId: TerminalId): void {
+    this.buffers.delete(terminalId)
   }
 
-  /** Read previously persisted buffers for the given agents into memory. */
-  loadFromDisk(agentIds: AgentId[]): void {
+  /** Read previously persisted buffers for the given terminals into memory. */
+  loadFromDisk(terminalIds: TerminalId[]): void {
     const dir = this.dir()
-    for (const id of agentIds) {
+    for (const id of terminalIds) {
       const file = join(dir, `${id}.bin`)
       if (!existsSync(file)) continue
       try {
         const data = readFileSync(file, 'utf8')
-        // In case the on-disk file was somehow over the cap, trim again.
         const trimmed =
-          data.length > MAX_BYTES_PER_AGENT
-            ? data.slice(data.length - MAX_BYTES_PER_AGENT)
+          data.length > MAX_BYTES_PER_TERMINAL
+            ? data.slice(data.length - MAX_BYTES_PER_TERMINAL)
             : data
         this.buffers.set(id, trimmed)
       } catch {
@@ -53,11 +53,17 @@ class Scrollback {
     }
   }
 
-  /** Write all current buffers to disk. Called on before-quit. */
-  flushToDisk(): void {
+  /**
+   * Write the given terminal buffers to disk. Pass the list of terminal ids
+   * worth persisting (typically just the primary terminals — secondary
+   * split terminals are session-only).
+   */
+  flushToDisk(terminalIds: TerminalId[]): void {
     const dir = this.dir()
     mkdirSync(dir, { recursive: true })
+    const keep = new Set(terminalIds)
     for (const [id, buf] of this.buffers) {
+      if (!keep.has(id)) continue
       try {
         writeFileSync(join(dir, `${id}.bin`), buf, 'utf8')
       } catch {

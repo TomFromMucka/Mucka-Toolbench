@@ -18,7 +18,9 @@ const DEFAULTS: AgentConfig[] = [
     command: SHELL,
     args: ['-l'],
     needsAttention: false,
-    attentionReason: null
+    attentionReason: null,
+    previewUrl: 'http://localhost:3001',
+    vercelProjectId: null
   },
   {
     id: 'sammy',
@@ -28,7 +30,9 @@ const DEFAULTS: AgentConfig[] = [
     command: SHELL,
     args: ['-l'],
     needsAttention: false,
-    attentionReason: null
+    attentionReason: null,
+    previewUrl: null,
+    vercelProjectId: null
   },
   {
     id: 'kev',
@@ -38,7 +42,9 @@ const DEFAULTS: AgentConfig[] = [
     command: SHELL,
     args: ['-l'],
     needsAttention: false,
-    attentionReason: null
+    attentionReason: null,
+    previewUrl: null,
+    vercelProjectId: null
   },
   {
     id: 'bren',
@@ -48,7 +54,9 @@ const DEFAULTS: AgentConfig[] = [
     command: SHELL,
     args: ['-l'],
     needsAttention: false,
-    attentionReason: null
+    attentionReason: null,
+    previewUrl: 'http://localhost:3002',
+    vercelProjectId: null
   }
 ]
 

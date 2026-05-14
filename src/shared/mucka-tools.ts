@@ -87,6 +87,38 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       "Returns a one-shot summary across all four agents: each one's branch, git status, and last few terminal lines. Use this when Tom opens a session with a vague 'what's up?' so you don't have to chain three other tools.",
     parameters: { type: 'object', properties: {}, required: [] }
   },
+  {
+    name: 'get_pr_status',
+    description:
+      "Returns GitHub PR + CI state for the agent's branch. With no `agent` arg, summarises across all four. With `agent` set, refreshes that one. Reports PR number, title, draft/open, mergeable state, rolled-up check status, and a link to the PR. Use when Tom asks 'is Sammy's PR green?', 'who's still got an open PR?', etc.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Optional — one of dave, sammy, kev, or bren. Omit for all.',
+          enum: MUCKA_AGENT_IDS
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'get_vercel_status',
+    description:
+      "Returns Vercel deployment state. With no `agent` arg, returns a one-line summary per agent (latest deployment state, branch, commit message, URL). With `agent` set, refreshes and reports that one agent in detail. Use when Tom asks 'is Sammy's PR deployed?' or 'how's the prod build?'. Reads the project id from agent config or auto-detects from the worktree's .vercel/project.json.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Optional — one of dave, sammy, kev, or bren. Omit for all.',
+          enum: MUCKA_AGENT_IDS
+        }
+      },
+      required: []
+    }
+  },
 
   /* ─── Auto-execute write tools ──────────────────────────────────── */
   {
@@ -152,6 +184,27 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         }
       },
       required: ['agent', 'reason']
+    }
+  },
+  {
+    name: 'set_agent_preview',
+    description:
+      "Point one of the two right-column preview iframes at a dev-server URL for the given agent (e.g. http://localhost:3001). The first two agents with a preview URL fill the left and right preview slots in display order — so setting one for a third agent only shows up if you also clear one of the other two. Pass an empty url to clear that agent's preview. Auto-executes — no confirmation needed.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        },
+        url: {
+          type: 'string',
+          description:
+            "Full http:// or https:// URL of the agent's dev server. Empty string to clear."
+        }
+      },
+      required: ['agent', 'url']
     }
   },
   {
@@ -224,6 +277,47 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
           type: 'string',
           description: 'Which agent — dave, sammy, kev, or bren.',
           enum: MUCKA_AGENT_IDS
+        }
+      },
+      required: ['agent']
+    }
+  },
+  {
+    name: 'open_pr',
+    description:
+      "Open a pull request from this agent's branch via the gh CLI. REQUIRES confirmation. Types `gh pr create --fill` (or `--fill --draft`) into the agent's terminal, so Tom sees gh's output land naturally. The agent's worktree needs the gh CLI installed and authed. Use when Tom says 'open a PR for that' / 'let's get this reviewed'.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent\'s branch — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        },
+        draft: {
+          type: 'boolean',
+          description: 'When true, open as draft. Defaults to false.'
+        }
+      },
+      required: ['agent']
+    }
+  },
+  {
+    name: 'deploy_to_vercel',
+    description:
+      "Deploy this agent's worktree to Vercel. REQUIRES confirmation. Types `vercel` (preview) or `vercel --prod` (production) into the agent's terminal, so Tom sees the deploy logs land naturally. Use when Tom says 'deploy that to preview' / 'ship it to prod'. The Vercel CLI must already be authed in that worktree (vercel link has been run).",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent\'s worktree to deploy — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        },
+        target: {
+          type: 'string',
+          description: 'Preview (default) or production deploy.',
+          enum: ['preview', 'production']
         }
       },
       required: ['agent']

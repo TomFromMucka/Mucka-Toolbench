@@ -17,6 +17,8 @@ interface DraftRow {
   worktreePath: string
   command: string
   argsRaw: string
+  previewUrl: string
+  vercelProjectId: string
   dirty: boolean
 }
 
@@ -28,6 +30,8 @@ function toDraft(agent: AgentConfig): DraftRow {
     worktreePath: agent.worktreePath,
     command: agent.command,
     argsRaw: agent.args.join(' '),
+    previewUrl: agent.previewUrl ?? '',
+    vercelProjectId: agent.vercelProjectId ?? '',
     dirty: false
   }
 }
@@ -88,13 +92,17 @@ export function SettingsModal({
     try {
       for (const d of drafts) {
         if (!d.dirty) continue
+        const trimmedPreview = d.previewUrl.trim()
+        const trimmedVercel = d.vercelProjectId.trim()
         await onSave({
           id: d.agentId,
           displayName: d.displayName,
           branch: d.branch,
           worktreePath: d.worktreePath,
           command: d.command,
-          args: parseArgs(d.argsRaw)
+          args: parseArgs(d.argsRaw),
+          previewUrl: trimmedPreview === '' ? null : trimmedPreview,
+          vercelProjectId: trimmedVercel === '' ? null : trimmedVercel
         })
       }
       onClose()
@@ -235,6 +243,38 @@ export function SettingsModal({
                           patchDraft(d.agentId, { argsRaw: e.target.value })
                         }
                         placeholder='e.g. -l or --no-tui'
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className={LABEL}>
+                        Preview URL{' '}
+                        <span className="normal-case tracking-normal text-ink-faint">
+                          (dev server iframed in right column — leave blank to hide)
+                        </span>
+                      </label>
+                      <input
+                        className={FIELD}
+                        value={d.previewUrl}
+                        onChange={(e) =>
+                          patchDraft(d.agentId, { previewUrl: e.target.value })
+                        }
+                        placeholder="e.g. http://localhost:3001"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className={LABEL}>
+                        Vercel project ID{' '}
+                        <span className="normal-case tracking-normal text-ink-faint">
+                          (overrides .vercel/project.json — leave blank to auto-detect)
+                        </span>
+                      </label>
+                      <input
+                        className={FIELD}
+                        value={d.vercelProjectId}
+                        onChange={(e) =>
+                          patchDraft(d.agentId, { vercelProjectId: e.target.value })
+                        }
+                        placeholder="prj_..."
                       />
                     </div>
                   </div>
