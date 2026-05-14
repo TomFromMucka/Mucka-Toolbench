@@ -48,14 +48,19 @@ export function MuckaVoiceButton(): React.JSX.Element {
         style={{
           fontFamily: 'var(--font-soehne)',
           fontWeight: 500,
+          /* On the charcoal banner: active = primary orange (brand
+             "engaged" channel), idle = subtle van-white wash, disabled
+             = even fainter. */
           background: unavailable
-            ? 'rgba(35, 31, 32, 0.25)'
+            ? 'rgba(234, 233, 232, 0.05)'
+            : active
+              ? 'var(--orange)'
+              : 'rgba(234, 233, 232, 0.10)',
+          color: unavailable
+            ? 'rgba(234, 233, 232, 0.35)'
             : active
               ? 'var(--charcoal)'
-              : 'rgba(35, 31, 32, 0.4)',
-          color: unavailable
-            ? 'rgba(35, 31, 32, 0.5)'
-            : 'var(--van-white)'
+              : 'var(--van-white)'
         }}
       >
         {/* mic glyph */}
@@ -85,8 +90,8 @@ export function MuckaVoiceButton(): React.JSX.Element {
           onClick={openMicSettings}
           className="chamfer-sm px-2 py-1 text-[0.68rem] uppercase tracking-wide"
           style={{
-            background: 'var(--charcoal)',
-            color: 'var(--van-white)',
+            background: 'var(--orange)',
+            color: 'var(--charcoal)',
             fontFamily: 'var(--font-soehne)',
             fontWeight: 500
           }}
