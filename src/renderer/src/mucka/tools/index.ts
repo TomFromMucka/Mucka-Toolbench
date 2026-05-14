@@ -4,6 +4,7 @@ import type {
   AgentId,
   GitHubAgentSummary,
   GitStatus,
+  JobEvent,
   VercelAgentSummary,
   VercelDeployment
 } from '@shared/types'
@@ -192,6 +193,32 @@ async function getPrStatus(params: Record<string, unknown>): Promise<string> {
     return `${a.id}: ${describeGitHubLine(s)}`
   })
   return lines.join('\n')
+}
+
+function describeEventLine(event: JobEvent): string {
+  const d = new Date(event.ts)
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const toneTag = event.tone === 'normal' ? '' : ` [${event.tone}]`
+  return `${time} ${event.source}${toneTag}: ${event.message}`
+}
+
+async function getRecentEvents(params: Record<string, unknown>): Promise<string> {
+  const rawAgent = params['agent']
+  const rawLimit = params['limit']
+  const limit =
+    typeof rawLimit === 'number'
+      ? Math.max(1, Math.min(50, Math.floor(rawLimit)))
+      : 15
+
+  const events = await window.mucka.listEvents(limit * 2)
+  let filtered = events
+  if (typeof rawAgent === 'string' && rawAgent.length > 0) {
+    const agentId = parseAgentId(params)
+    filtered = events.filter((e) => e.source === agentId)
+  }
+  const slice = filtered.slice(0, limit)
+  if (slice.length === 0) return 'No recent events in the job sheet.'
+  return slice.map(describeEventLine).join('\n')
 }
 
 async function whatsHappening(): Promise<string> {
@@ -411,6 +438,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     whats_happening: () => whatsHappening(),
     get_vercel_status: (params) => getVercelStatus(params),
     get_pr_status: (params) => getPrStatus(params),
+    get_recent_events: (params) => getRecentEvents(params),
 
     set_banner_status: makeSetBannerStatus(deps),
     append_note: makeAppendNote(),
