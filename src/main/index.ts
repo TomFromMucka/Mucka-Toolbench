@@ -18,12 +18,13 @@ import icon from '../../resources/icon.png?asset'
 import { ensureSeeded, getAgentConfig, getAgentConfigs } from './config/agents'
 import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
+import { appendValue, getValue, setValue } from './db/kv'
 import {
-  addNotice,
-  listNotices,
-  removeNotice,
-  removeNoticeByTitle
-} from './db/notices'
+  bindEventsBroadcaster,
+  listEvents,
+  logEvent,
+  unbindEventsBroadcaster
+} from './events/Events'
 import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
 import { PtyManager } from './pty/PtyManager'
@@ -32,7 +33,7 @@ import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
 import { getStatus as githubStatus } from './github/GitHub'
 import { GitHubPoller } from './github/GitHubPoller'
-import type { MicAccess, NoticeInput } from '@shared/types'
+import type { MicAccess } from '@shared/types'
 import type {
   AgentId,
   AgentUpdate,
@@ -41,6 +42,8 @@ import type {
   PtyWriteRequest,
   TerminalId
 } from '@shared/types'
+
+const NOTES_KEY = 'notes'
 
 let ptyManager: PtyManager | null = null
 let gitService: GitService | null = null
@@ -72,6 +75,7 @@ function createWindow(): void {
 
   mainWindowRef = mainWindow
   ptyManager = new PtyManager(mainWindow.webContents)
+  bindEventsBroadcaster(mainWindow.webContents)
   gitService = new GitService({
     webContents: mainWindow.webContents,
     getAgents: () => getAgentConfigs()
@@ -89,6 +93,7 @@ function createWindow(): void {
     gitService?.start()
     vercelPoller?.start()
     githubPoller?.start()
+    logEvent({ source: 'system', kind: 'boot', message: 'Cockpit started.', tone: 'normal' })
   })
 
   mainWindow.on('closed', () => {
@@ -98,6 +103,7 @@ function createWindow(): void {
     vercelPoller = null
     githubPoller?.stop()
     githubPoller = null
+    unbindEventsBroadcaster()
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
@@ -136,6 +142,52 @@ function registerIpc(): void {
     const ordered = listAgentsFromDb()
     const sortOrder = ordered.findIndex((a) => a.id === updated.id)
     upsertAgent(updated, sortOrder < 0 ? ordered.length : sortOrder)
+
+    // Diff against the prior config to produce useful job-sheet events.
+    if (patch.needsAttention !== undefined && patch.needsAttention !== current.needsAttention) {
+      if (updated.needsAttention) {
+        logEvent({
+          source: updated.id,
+          kind: 'attention.flag',
+          message: `Flagged for Tom — ${updated.attentionReason ?? 'no reason'}`,
+          tone: 'attention'
+        })
+      } else {
+        logEvent({
+          source: updated.id,
+          kind: 'attention.clear',
+          message: 'Attention cleared.',
+          tone: 'normal'
+        })
+      }
+    }
+    if (patch.worktreePath !== undefined && patch.worktreePath !== current.worktreePath) {
+      logEvent({
+        source: updated.id,
+        kind: 'agent.worktree',
+        message: `Worktree → ${updated.worktreePath}`,
+        tone: 'normal'
+      })
+    }
+    if (patch.command !== undefined && patch.command !== current.command) {
+      logEvent({
+        source: updated.id,
+        kind: 'agent.command',
+        message: `Command → ${updated.command} ${updated.args.join(' ')}`.trim(),
+        tone: 'normal'
+      })
+    }
+    if (patch.previewUrl !== undefined && patch.previewUrl !== current.previewUrl) {
+      logEvent({
+        source: updated.id,
+        kind: 'agent.preview',
+        message: updated.previewUrl
+          ? `Preview bound → ${updated.previewUrl}`
+          : 'Preview cleared.',
+        tone: 'normal'
+      })
+    }
+
     // Push a fresh git status + Vercel summary so the new config shows real state.
     void gitService?.refreshOne(updated.id)
     void vercelPoller?.refreshOne(updated.id)
@@ -231,14 +283,24 @@ function registerIpc(): void {
     githubPoller?.refreshOne(agentId) ?? null
   )
 
-  ipcMain.handle('notices:list', () => listNotices())
-  ipcMain.handle('notices:add', (_event, input: NoticeInput) =>
-    addNotice(input.title, input.body, input.colour ?? 'cream', input.pinned ?? false)
-  )
-  ipcMain.handle('notices:remove', (_event, id: string) => removeNotice(id))
-  ipcMain.handle('notices:removeByTitle', (_event, title: string) =>
-    removeNoticeByTitle(title)
-  )
+  ipcMain.handle('notes:get', () => getValue(NOTES_KEY) ?? '')
+
+  ipcMain.handle('notes:set', (_event, value: string) => {
+    setValue(NOTES_KEY, value)
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send('notes:update', value)
+    }
+  })
+
+  ipcMain.handle('notes:append', (_event, chunk: string) => {
+    const next = appendValue(NOTES_KEY, chunk)
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send('notes:update', next)
+    }
+    return next
+  })
+
+  ipcMain.handle('events:list', (_event, limit?: number) => listEvents(limit ?? 100))
 }
 
 function configureMediaPermissions(): void {

@@ -2,6 +2,7 @@ import type { WebContents } from 'electron'
 import type {
   AgentConfig,
   AgentId,
+  CheckSummary,
   GitHubAgentSummary,
   GitHubUpdateEvent
 } from '@shared/types'
@@ -13,6 +14,7 @@ import {
   readGitHubOrigin,
   rollupChecks
 } from './GitHub'
+import { logEvent } from '../events/Events'
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -155,7 +157,9 @@ export class GitHubPoller {
         checkedAt: Date.now(),
         error: null
       }
+      const previous = this.cache.get(agent.id) ?? null
       this.cache.set(agent.id, summary)
+      this.emitTransitionEvents(agent, previous, summary)
       this.broadcast(summary)
       return summary
     } catch (err) {
@@ -175,4 +179,64 @@ export class GitHubPoller {
     const event: GitHubUpdateEvent = { agentId: summary.agentId, summary }
     this.webContents.send('github:update', event)
   }
+
+  /**
+   * Logs job-sheet events when the PR or its CI state has actually moved
+   * since the previous poll. Skipped on first poll (no previous cache).
+   */
+  private emitTransitionEvents(
+    agent: AgentConfig,
+    prior: GitHubAgentSummary | null,
+    next: GitHubAgentSummary
+  ): void {
+    if (!prior) return
+    const priorPr = prior.openPr
+    const nextPr = next.openPr
+    const repoLabel = next.repo ? `${next.repo.owner}/${next.repo.name}` : agent.branch
+
+    if (!priorPr && nextPr) {
+      logEvent({
+        source: agent.id,
+        kind: 'github.pr_open',
+        message: `PR #${nextPr.number} opened — "${nextPr.title.slice(0, 80)}" (${repoLabel})`,
+        tone: 'win'
+      })
+    } else if (priorPr && !nextPr) {
+      logEvent({
+        source: agent.id,
+        kind: 'github.pr_closed',
+        message: `PR #${priorPr.number} closed/merged (${repoLabel})`,
+        tone: 'normal'
+      })
+    }
+
+    if (priorPr && nextPr && prior.checkSummary !== next.checkSummary) {
+      const tone = ciTone(next.checkSummary)
+      logEvent({
+        source: agent.id,
+        kind: `github.ci_${next.checkSummary}`,
+        message: `CI on PR #${nextPr.number} — ${ciLabel(next.checkSummary)}`,
+        tone
+      })
+    }
+  }
+}
+
+function ciLabel(s: CheckSummary): string {
+  switch (s) {
+    case 'success':
+      return 'green ✓'
+    case 'failure':
+      return 'red ✗'
+    case 'pending':
+      return 'running…'
+    default:
+      return 'no checks'
+  }
+}
+
+function ciTone(s: CheckSummary): 'win' | 'bad' | 'normal' {
+  if (s === 'success') return 'win'
+  if (s === 'failure') return 'bad'
+  return 'normal'
 }

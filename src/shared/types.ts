@@ -33,20 +33,36 @@ export interface TerminalLine {
   text: string
 }
 
-export interface JobSheetEntry {
+/* ─── Job sheet events ───────────────────────────────────────────────── */
+
+/**
+ * Source attribution for an event. Either one of the four agents, the
+ * Mucka PM, or the cockpit itself (boot, settings change, etc.).
+ */
+export type JobEventSource = AgentId | 'mucka' | 'system'
+
+export type JobEventTone = 'normal' | 'attention' | 'win' | 'bad'
+
+export interface JobEvent {
+  /** Stable id — sqlite rowid as a string. */
   id: string
-  timestamp: string
-  agent: AgentId | 'mucka' | 'system'
+  /** ms since epoch. */
+  ts: number
+  source: JobEventSource
+  /** Short machine-readable kind (e.g. "vercel.ready", "github.pr_open"). */
+  kind: string
   message: string
-  tone?: 'normal' | 'attention' | 'win'
+  tone: JobEventTone
 }
 
-export interface NoticeBoardItem {
-  id: string
-  title: string
-  body: string
-  pinned?: boolean
-  colour?: 'cream' | 'yellow' | 'pink' | 'blue'
+/** Shape main passes to logEvent — id+ts get filled in. */
+export interface JobEventInput {
+  source: JobEventSource
+  kind: string
+  message: string
+  tone?: JobEventTone
+  /** Override the timestamp (rarely useful). */
+  ts?: number
 }
 
 export interface MuckaChatMessage {
@@ -150,24 +166,6 @@ export type AgentUpdate = Partial<
   >
 > & { id: AgentId }
 
-export type NoticeColour = 'cream' | 'yellow' | 'pink' | 'blue'
-
-export interface Notice {
-  id: string
-  title: string
-  body: string
-  colour: NoticeColour
-  pinned: boolean
-  createdAt: number
-}
-
-export interface NoticeInput {
-  title: string
-  body: string
-  colour?: NoticeColour
-  pinned?: boolean
-}
-
 /** Live git state for an agent's worktree. */
 export interface GitStatus {
   /** True when the configured worktreePath exists and is inside a git repo. */
@@ -241,11 +239,15 @@ export interface MuckaApi {
   /** Open the macOS System Settings → Privacy → Microphone pane. */
   openMicSettings(): Promise<void>
 
-  /* Notices (notice board) */
-  listNotices(): Promise<Notice[]>
-  addNotice(input: NoticeInput): Promise<Notice>
-  removeNotice(id: string): Promise<boolean>
-  removeNoticeByTitle(title: string): Promise<number>
+  /* Free-form notes (replaces the notice board) */
+  getNote(): Promise<string>
+  setNote(value: string): Promise<void>
+  appendNote(chunk: string): Promise<string>
+  onNoteUpdate(handler: (value: string) => void): () => void
+
+  /* Job-sheet events */
+  listEvents(limit?: number): Promise<JobEvent[]>
+  onEventAppend(handler: (event: JobEvent) => void): () => void
 
   /* Vercel */
   getVercelStatus(): Promise<VercelStatus>

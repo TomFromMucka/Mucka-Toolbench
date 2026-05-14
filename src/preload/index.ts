@@ -6,11 +6,10 @@ import type {
   AgentUpdate,
   GitStatus,
   GitStatusEvent,
+  JobEvent,
   MicAccess,
   MuckaApi,
   MuckaStatus,
-  Notice,
-  NoticeInput,
   PtyDataEvent,
   PtyExitEvent,
   PtyResizeRequest,
@@ -74,13 +73,26 @@ const muckaApi: MuckaApi = {
   openMicSettings: () =>
     ipcRenderer.invoke('mucka:openMicSettings') as Promise<void>,
 
-  listNotices: () => ipcRenderer.invoke('notices:list') as Promise<Notice[]>,
-  addNotice: (input: NoticeInput) =>
-    ipcRenderer.invoke('notices:add', input) as Promise<Notice>,
-  removeNotice: (id: string) =>
-    ipcRenderer.invoke('notices:remove', id) as Promise<boolean>,
-  removeNoticeByTitle: (title: string) =>
-    ipcRenderer.invoke('notices:removeByTitle', title) as Promise<number>,
+  getNote: () => ipcRenderer.invoke('notes:get') as Promise<string>,
+  setNote: (value: string) =>
+    ipcRenderer.invoke('notes:set', value) as Promise<void>,
+  appendNote: (chunk: string) =>
+    ipcRenderer.invoke('notes:append', chunk) as Promise<string>,
+  onNoteUpdate: (handler: (value: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: string) =>
+      handler(payload)
+    ipcRenderer.on('notes:update', listener)
+    return () => ipcRenderer.off('notes:update', listener)
+  },
+
+  listEvents: (limit?: number) =>
+    ipcRenderer.invoke('events:list', limit) as Promise<JobEvent[]>,
+  onEventAppend: (handler: (event: JobEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: JobEvent) =>
+      handler(payload)
+    ipcRenderer.on('events:append', listener)
+    return () => ipcRenderer.off('events:append', listener)
+  },
 
   getVercelStatus: () =>
     ipcRenderer.invoke('vercel:status') as Promise<VercelStatus>,

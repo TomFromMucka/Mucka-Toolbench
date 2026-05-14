@@ -137,33 +137,19 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     }
   },
   {
-    name: 'add_notice',
+    name: 'append_note',
     description:
-      "Pin a short note to the cockpit's notice board. Use for things Tom asked you to remember, reminders to himself, or context other agents should see. Colours are 'cream' (default), 'yellow', 'pink', 'blue'.",
+      "Add a line or paragraph to Tom's free-form notes panel (a single scratchpad that replaces the old notice board). Use for things Tom asked you to write down, reminders, or context worth keeping. The text lands at the bottom with a blank line separator. Auto-executes — no confirmation needed.",
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Short title — a few words.' },
-        body: { type: 'string', description: 'The note body, one or two short sentences.' },
-        colour: {
+        text: {
           type: 'string',
-          description: 'Post-it colour.',
-          enum: ['cream', 'yellow', 'pink', 'blue']
+          description:
+            'The note to append. Plain text. Keep it short — one sentence or a short bullet.'
         }
       },
-      required: ['title', 'body']
-    }
-  },
-  {
-    name: 'remove_notice',
-    description:
-      "Remove a notice from the board by its title (exact match, case-sensitive). Use when Tom says he's done with it.",
-    parameters: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'Exact title of the notice to remove.' }
-      },
-      required: ['title']
+      required: ['text']
     }
   },
   {
