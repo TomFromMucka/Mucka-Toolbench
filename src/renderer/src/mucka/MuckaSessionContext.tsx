@@ -174,6 +174,15 @@ function InnerProvider({
           text: message
         }
       ])
+      try {
+        window.mucka?.appendVoiceTranscript({
+          role: source === 'ai' ? 'assistant' : 'user',
+          text: message,
+          ts: Date.now()
+        })
+      } catch {
+        /* fire-and-forget — chat panel still works without persistence */
+      }
     },
     onUnhandledClientToolCall: (call) => {
       console.warn('[mucka] unhandled client tool call from agent:', call)

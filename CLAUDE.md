@@ -126,6 +126,26 @@ The grid is set in `Workstation.tsx` with literal `fr` units to match the
 brief. Vertical proportions inside each column live in `MiddleColumn` and
 `RightColumn`.
 
+## Living spec — `MUCKA.md`
+
+The cockpit has a living spec at `MUCKA.md` (project root). It covers:
+*Mission*, *Capabilities*, *Systems*, *Recent changes* (rolling log),
+and *Roadmap*. Mucka pulls it on demand via her `get_cockpit_doc` tool
+so she can speak to current state and suggest priorities — it's
+**not** baked into her prompt.
+
+**Convention — update it as you ship.** Any session that lands a
+user-facing change to the cockpit (a new tool, a new panel, a
+behaviour change, a refactor with surface impact) appends a one-line
+entry to *Recent changes* with today's date, and edits *Capabilities*
+or *Systems* if the change adds or changes a feature there. Move
+shipped roadmap items out of *Roadmap → Next up* into *Recent
+changes* in the same edit. Keep entries terse — one bullet, one
+sentence.
+
+This keeps the doc honest without ceremony, and Mucka's answers stay
+in sync with reality without anyone having to remember to "tell" her.
+
 ## Conventions
 
 - **TypeScript strict** is on, with `noImplicitAny: true`. Don't loosen

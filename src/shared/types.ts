@@ -197,6 +197,12 @@ export interface GitStatusEvent {
   status: GitStatus
 }
 
+/** Main → renderer: agent status detected from PTY heuristics. */
+export interface AgentStatusEvent {
+  agentId: AgentId
+  status: AgentStatus
+}
+
 /* ─── Mucka PM agent ─────────────────────────────────────────────────── */
 
 export type MuckaStatus =
@@ -231,6 +237,32 @@ export interface MuckaTextSegment {
   text: string
   /** When kind === 'tool_call', the tool name. */
   toolName?: string
+  /**
+   * Where this segment came from. Undefined / 'text' for typed Claude
+   * chat. 'voice' for utterances captured from the ElevenLabs session;
+   * the UI shows a small mic glyph beside them.
+   */
+  source?: 'text' | 'voice'
+}
+
+/** Renderer → main: persist a voice utterance into the shared chat log. */
+export interface VoiceTranscriptInput {
+  role: 'user' | 'assistant'
+  text: string
+  /** ms since epoch — defaults to now() in main if omitted. */
+  ts?: number
+}
+
+/**
+ * Shape returned by getCockpitDoc(section?). When the doc file is
+ * missing, `found` is false and `text` is empty. When a section is
+ * requested but not matched, `found` is false but `sections` still
+ * lists what's available so Mucka can guide Tom (or pick again).
+ */
+export interface CockpitDocPayload {
+  text: string
+  sections: string[]
+  found: boolean
 }
 
 export interface MuckaTextMessage {
@@ -278,7 +310,11 @@ export interface MuckaApi {
   onPtyExit(handler: (event: PtyExitEvent) => void): () => void
   refreshGit(agentId: AgentId): Promise<GitStatus>
   onGitStatus(handler: (event: GitStatusEvent) => void): () => void
+  onAgentStatus(handler: (event: AgentStatusEvent) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>
+
+  /** Renderer → main: tell the OS shell (dock) about pending attention. */
+  notifyAttention(count: number): void
 
   /** Whether Mucka credentials are configured in main's env. */
   getMuckaStatus(): Promise<MuckaStatus>
@@ -298,6 +334,15 @@ export interface MuckaApi {
   onChatStream(handler: (event: MuckaTextStreamEvent) => void): () => void
   onChatToolCall(handler: (call: MuckaTextToolCall) => void): () => void
   onChatMessage(handler: (message: MuckaTextMessage) => void): () => void
+  /** Persist a single voice utterance into the unified chat log. */
+  appendVoiceTranscript(input: VoiceTranscriptInput): void
+
+  /**
+   * Read the cockpit's living spec (`MUCKA.md`). Pass a section name
+   * (matching a `## Heading`) to get just that slice; omit for the
+   * whole doc. `sections` always lists available headings.
+   */
+  getCockpitDoc(section?: string): Promise<CockpitDocPayload>
 
   /* Free-form notes (replaces the notice board) */
   getNote(): Promise<string>

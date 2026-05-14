@@ -1,9 +1,10 @@
-import type { AgentConfig, Agent, AgentId, JobEvent } from '@shared/types'
+import type { AgentConfig, Agent, AgentId, AgentStatus, JobEvent } from '@shared/types'
 import { mockAgents } from '../data/mockAgents'
 import { AgentClipboard } from './AgentClipboard'
 import { spawnKey } from '../hooks/useAgents'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useEventsState } from '../state/EventsContext'
+import { useAgentStatuses } from '../state/AgentStatusContext'
 
 interface AgentGridProps {
   agents: AgentConfig[]
@@ -34,17 +35,17 @@ function findLatestForAgent(
 }
 
 /**
- * Combines DB-backed AgentConfig with the live event feed. Status is still
- * mocked (no PTY-driven detection yet); headline shows the agent's latest
- * event with a "Ns ago" tail, falling back to a default line.
+ * Combines DB-backed AgentConfig with the live event feed and PTY-derived
+ * status. Headline shows the agent's latest event with a "Ns ago" tail,
+ * falling back to a default line.
  *
  * Priority: attentionReason (Mucka has flagged Tom) > latest event > default.
  */
-function mergeWithMockState(
+function buildAgent(
   cfg: AgentConfig,
-  latestEvent: JobEvent | null
+  latestEvent: JobEvent | null,
+  liveStatus: AgentStatus
 ): Agent {
-  const mock = mockAgents.find((m) => m.id === cfg.id)
   const eventHeadline = latestEvent
     ? `${latestEvent.message} · ${relativeShort(latestEvent.ts)}`
     : null
@@ -53,7 +54,7 @@ function mergeWithMockState(
     displayName: cfg.displayName,
     branch: cfg.branch,
     worktreePath: cfg.worktreePath,
-    status: mock?.status ?? 'idle',
+    status: liveStatus,
     needsAttention: cfg.needsAttention,
     headline:
       cfg.attentionReason ??
@@ -69,6 +70,7 @@ export function AgentGrid({
   restartVersion
 }: AgentGridProps): React.JSX.Element {
   const { events } = useEventsState()
+  const { statusFor } = useAgentStatuses()
   const list: AgentConfig[] =
     agents.length > 0
       ? agents
@@ -87,14 +89,17 @@ export function AgentGrid({
 
   return (
     <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-3">
-      {list.map((cfg) => (
-        <AgentClipboard
-          key={`${spawnKey(cfg)}::r${restartVersion[cfg.id] ?? 0}`}
-          agent={mergeWithMockState(cfg, findLatestForAgent(events, cfg.id))}
-          config={cfg}
-          gitStatus={gitStatus[cfg.id]}
-        />
-      ))}
+      {list.map((cfg) => {
+        const liveStatus = cfg.needsAttention ? 'awaiting-input' : statusFor(cfg.id)
+        return (
+          <AgentClipboard
+            key={`${spawnKey(cfg)}::r${restartVersion[cfg.id] ?? 0}`}
+            agent={buildAgent(cfg, findLatestForAgent(events, cfg.id), liveStatus)}
+            config={cfg}
+            gitStatus={gitStatus[cfg.id]}
+          />
+        )
+      })}
     </div>
   )
 }

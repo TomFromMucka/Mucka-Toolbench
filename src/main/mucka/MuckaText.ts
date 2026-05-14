@@ -105,6 +105,44 @@ export function clearHistory(): void {
 }
 
 /**
+ * Capture a voice utterance (from ElevenLabs) into the shared chat log.
+ *
+ * Voice and text run as parallel surfaces but persist to the same table,
+ * so a typed turn after the voice session ends still sees what was said.
+ *
+ * Recent-duplicate skip: ElevenLabs occasionally re-emits the same
+ * finalized transcript on reconnect; if the immediately previous entry
+ * matches role+text within 4s we drop the new one.
+ */
+const VOICE_DEDUPE_MS = 4_000
+let lastVoiceKey: { role: string; text: string; ts: number } | null = null
+
+export function appendVoiceMessage(
+  role: 'user' | 'assistant',
+  text: string,
+  ts?: number
+): void {
+  const trimmed = text.trim()
+  if (!trimmed) return
+  const now = ts ?? Date.now()
+  if (
+    lastVoiceKey &&
+    lastVoiceKey.role === role &&
+    lastVoiceKey.text === trimmed &&
+    now - lastVoiceKey.ts < VOICE_DEDUPE_MS
+  ) {
+    return
+  }
+  lastVoiceKey = { role, text: trimmed, ts: now }
+  const msg = appendChat(
+    role,
+    [{ kind: 'text', text: trimmed, source: 'voice' }],
+    now
+  )
+  emitMessage(msg)
+}
+
+/**
  * Renderer posts a tool result here after executing it.
  */
 export function acceptToolResult(result: MuckaTextToolResult): void {
