@@ -215,6 +215,56 @@ export type MuckaSessionState =
 /** What `getMicAccess` reports about the OS-level mic permission (macOS TCC). */
 export type MicAccess = 'granted' | 'denied' | 'not-determined' | 'unknown'
 
+/* ─── Mucka text-chat (Claude API mirror of the voice session) ───────── */
+
+export type MuckaTextStatus =
+  | { kind: 'ok' }
+  | { kind: 'missing-key' }
+  | { kind: 'error'; message: string }
+
+/**
+ * A rendered chat message. Assistant messages can interleave text and
+ * tool-call summaries so the UI can show "called open_pr" inline.
+ */
+export interface MuckaTextSegment {
+  kind: 'text' | 'tool_call'
+  text: string
+  /** When kind === 'tool_call', the tool name. */
+  toolName?: string
+}
+
+export interface MuckaTextMessage {
+  id: string
+  ts: number
+  role: 'user' | 'assistant'
+  segments: MuckaTextSegment[]
+}
+
+/** Streamed deltas from main → renderer while an assistant turn is in flight. */
+export interface MuckaTextStreamEvent {
+  messageId: string
+  /** Text to append to the message's last text segment (creates one if none). */
+  appendText?: string
+  /** A tool call landed — append a tool_call segment. */
+  toolCall?: { toolName: string; summary: string }
+  /** True on the final event of this turn. */
+  done?: boolean
+}
+
+/** Renderer must execute the tool and post the result back. */
+export interface MuckaTextToolCall {
+  callId: string
+  name: string
+  params: Record<string, unknown>
+}
+
+export interface MuckaTextToolResult {
+  callId: string
+  ok: boolean
+  /** Stringified tool output (success) or error message (failure). */
+  result: string
+}
+
 /** Shape exposed on window.mucka (see preload). */
 export interface MuckaApi {
   listAgents(): Promise<AgentConfig[]>
@@ -238,6 +288,16 @@ export interface MuckaApi {
   requestMicAccess(): Promise<MicAccess>
   /** Open the macOS System Settings → Privacy → Microphone pane. */
   openMicSettings(): Promise<void>
+
+  /* Text-mode Mucka chat (parallel to the voice session) */
+  getMuckaTextStatus(): Promise<MuckaTextStatus>
+  listChatHistory(): Promise<MuckaTextMessage[]>
+  sendChatMessage(text: string): Promise<void>
+  clearChatHistory(): Promise<void>
+  sendChatToolResult(result: MuckaTextToolResult): void
+  onChatStream(handler: (event: MuckaTextStreamEvent) => void): () => void
+  onChatToolCall(handler: (call: MuckaTextToolCall) => void): () => void
+  onChatMessage(handler: (message: MuckaTextMessage) => void): () => void
 
   /* Free-form notes (replaces the notice board) */
   getNote(): Promise<string>

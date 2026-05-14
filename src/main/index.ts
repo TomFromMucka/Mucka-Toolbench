@@ -27,13 +27,22 @@ import {
 } from './events/Events'
 import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
+import {
+  acceptToolResult as muckaTextAcceptToolResult,
+  bindMuckaTextBroadcaster,
+  clearHistory as muckaTextClearHistory,
+  getStatus as muckaTextStatus,
+  listHistory as muckaTextListHistory,
+  sendMessage as muckaTextSendMessage,
+  unbindMuckaTextBroadcaster
+} from './mucka/MuckaText'
 import { PtyManager } from './pty/PtyManager'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
 import { getStatus as githubStatus } from './github/GitHub'
 import { GitHubPoller } from './github/GitHubPoller'
-import type { MicAccess } from '@shared/types'
+import type { MicAccess, MuckaTextToolResult } from '@shared/types'
 import type {
   AgentId,
   AgentUpdate,
@@ -76,6 +85,7 @@ function createWindow(): void {
   mainWindowRef = mainWindow
   ptyManager = new PtyManager(mainWindow.webContents)
   bindEventsBroadcaster(mainWindow.webContents)
+  bindMuckaTextBroadcaster(mainWindow.webContents)
   gitService = new GitService({
     webContents: mainWindow.webContents,
     getAgents: () => getAgentConfigs()
@@ -104,6 +114,7 @@ function createWindow(): void {
     githubPoller?.stop()
     githubPoller = null
     unbindEventsBroadcaster()
+    unbindMuckaTextBroadcaster()
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
@@ -301,6 +312,16 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('events:list', (_event, limit?: number) => listEvents(limit ?? 100))
+
+  ipcMain.handle('mucka:text-status', () => muckaTextStatus())
+  ipcMain.handle('mucka:text-history', () => muckaTextListHistory())
+  ipcMain.handle('mucka:text-clear', () => muckaTextClearHistory())
+  ipcMain.handle('mucka:text-send', async (_event, text: string) => {
+    await muckaTextSendMessage(text)
+  })
+  ipcMain.on('mucka:text-tool-result', (_event, result: MuckaTextToolResult) => {
+    muckaTextAcceptToolResult(result)
+  })
 }
 
 function configureMediaPermissions(): void {

@@ -1,47 +1,108 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
+import type { MuckaTextMessage, MuckaTextSegment } from '@shared/types'
 import { Clipboard } from './Clipboard'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
+import { useMuckaText } from '../mucka/MuckaTextContext'
 
 const PLACEHOLDER =
-  "When you're ready, hit ⌘M to talk or just type below."
+  "Type to chat with Mucka via Claude, or hit ⌘M to talk by voice."
+
+function formatTime(ms: number): string {
+  if (!ms) return ''
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+interface SegmentBubbleProps {
+  segment: MuckaTextSegment
+  role: 'user' | 'assistant'
+}
+
+function SegmentBubble({ segment, role }: SegmentBubbleProps): React.JSX.Element {
+  if (segment.kind === 'tool_call') {
+    return (
+      <div
+        className={clsx(
+          'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-sans text-[0.7rem] uppercase tracking-wide',
+          'bg-mucka/15 text-mucka-deep'
+        )}
+      >
+        <span className="font-mono text-[0.7rem]">⚙</span>
+        <span>{segment.toolName ?? 'tool'}</span>
+      </div>
+    )
+  }
+  return (
+    <div
+      className={clsx(
+        'max-w-[88%] rounded-md px-2.5 py-1.5 font-[var(--font-hand)] text-[0.92rem] leading-snug shadow-[0_1px_2px_rgba(0,0,0,0.12)] whitespace-pre-wrap',
+        role === 'assistant'
+          ? 'bg-mucka/95 text-paper-cream'
+          : 'bg-ink/10 text-ink'
+      )}
+    >
+      {segment.text}
+    </div>
+  )
+}
+
+function ChatMessage({ message }: { message: MuckaTextMessage }): React.JSX.Element {
+  const side = message.role === 'user' ? 'items-end' : 'items-start'
+  const label = message.role === 'user' ? 'Tom' : 'Mucka'
+  return (
+    <div className={clsx('flex flex-col gap-1', side)}>
+      {message.segments.map((seg, idx) => (
+        <SegmentBubble key={idx} segment={seg} role={message.role} />
+      ))}
+      <span className="text-[0.65rem] text-ink-faint">
+        {label} · {formatTime(message.ts)}
+      </span>
+    </div>
+  )
+}
 
 export function MuckaChat(): React.JSX.Element {
-  const { transcript, state, isSpeaking, sendUserMessage, credentialStatus } =
-    useMuckaSession()
+  const { state, isSpeaking, credentialStatus } = useMuckaSession()
+  const { status, messages, streaming, error, send } = useMuckaText()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
 
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [transcript.length, isSpeaking])
+  }, [messages.length, streaming])
+
+  const voiceLabel =
+    state === 'listening'
+      ? 'voice live'
+      : state === 'speaking'
+        ? 'voice · Mucka'
+        : state === 'connecting'
+          ? 'voice connecting'
+          : null
+
+  const textOk = status?.kind === 'ok'
+  const textMissing = status?.kind === 'missing-key'
+  const voiceOk = credentialStatus.kind === 'ok'
 
   const indicator =
-    state === 'listening'
-      ? 'live · listening'
-      : state === 'speaking'
-        ? 'live · Mucka'
-        : state === 'connecting'
-          ? 'connecting'
-          : state === 'error'
-            ? 'voice issue'
-            : 'idle'
-
-  const credsOk = credentialStatus.kind === 'ok'
+    voiceLabel ??
+    (streaming
+      ? 'Mucka typing…'
+      : textOk
+        ? voiceOk
+          ? 'text + voice'
+          : 'text mode'
+        : textMissing
+          ? 'text key missing'
+          : 'idle')
 
   async function handleSend(): Promise<void> {
     const text = draft.trim()
-    if (!text || sending || !credsOk) return
-    setSending(true)
+    if (!text || streaming || !textOk) return
     setDraft('')
-    try {
-      await sendUserMessage(text)
-    } finally {
-      setSending(false)
-    }
+    await send(text)
   }
 
   function handleKey(e: React.KeyboardEvent<HTMLInputElement>): void {
@@ -54,7 +115,7 @@ export function MuckaChat(): React.JSX.Element {
   return (
     <Clipboard
       title="Mucka — chat"
-      subtitle="PM banter"
+      subtitle="text via Claude · voice via ElevenLabs"
       paper="plain"
       rightSlot={<span className="text-paper-cream/65">{indicator}</span>}
       className="min-h-0"
@@ -64,45 +125,50 @@ export function MuckaChat(): React.JSX.Element {
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2"
         >
-          {transcript.length === 0 ? (
+          {textMissing ? (
+            <div className="rounded-md bg-status-warn/15 px-3 py-2 font-[var(--font-hand)] text-[0.88rem] leading-snug text-ink-soft">
+              <strong className="text-ink">ANTHROPIC_API_KEY missing.</strong>{' '}
+              Add it to <span className="font-mono text-[0.78rem]">.env</span> and
+              restart to enable text chat. Voice still works.
+            </div>
+          ) : null}
+
+          {messages.length === 0 && !textMissing ? (
             <div className="grid h-full place-items-center">
               <p className="max-w-[80%] text-center font-[var(--font-hand)] text-[0.92rem] leading-snug text-ink-faint">
                 {PLACEHOLDER}
               </p>
             </div>
           ) : (
-            transcript.map((m) => (
-              <div
-                key={m.id}
-                className={clsx(
-                  'flex flex-col',
-                  m.from === 'tom' ? 'items-end' : 'items-start'
-                )}
-              >
-                <div
-                  className={clsx(
-                    'max-w-[88%] rounded-md px-2.5 py-1.5 font-[var(--font-hand)] text-[0.92rem] leading-snug shadow-[0_1px_2px_rgba(0,0,0,0.12)]',
-                    m.from === 'mucka'
-                      ? 'bg-mucka/95 text-paper-cream'
-                      : 'bg-ink/10 text-ink'
-                  )}
-                >
-                  {m.text}
-                </div>
-                <span className="mt-0.5 text-[0.65rem] text-ink-faint">
-                  {m.from === 'mucka' ? 'Mucka' : 'Tom'} · {m.timestamp}
-                </span>
-              </div>
-            ))
+            messages.map((m) => <ChatMessage key={m.id} message={m} />)
           )}
 
-          {isSpeaking ? (
+          {streaming ? (
             <div className="flex items-start">
               <div className="inline-flex items-center gap-1 rounded-md bg-mucka/95 px-2.5 py-1.5 text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
                 <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:0ms]" />
                 <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:120ms]" />
                 <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:240ms]" />
               </div>
+            </div>
+          ) : null}
+
+          {!streaming && isSpeaking ? (
+            <div className="flex items-start">
+              <div className="inline-flex items-center gap-2 rounded-md bg-mucka/95 px-2.5 py-1.5 text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
+                <span className="text-[0.72rem] uppercase tracking-wide opacity-80">voice</span>
+                <span className="flex items-center gap-1">
+                  <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:0ms]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:120ms]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:240ms]" />
+                </span>
+              </div>
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="rounded-md bg-status-bad/15 px-3 py-2 font-[var(--font-hand)] text-[0.85rem] text-status-bad">
+              {error}
             </div>
           ) : null}
         </div>
@@ -113,31 +179,31 @@ export function MuckaChat(): React.JSX.Element {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKey}
-            disabled={!credsOk || sending}
+            disabled={!textOk || streaming}
             placeholder={
-              credsOk
-                ? state === 'listening' || state === 'speaking'
-                  ? 'Type to Mucka…'
-                  : 'Type — starts a session and sends'
-                : 'Voice unavailable — check env vars'
+              textOk
+                ? streaming
+                  ? 'Mucka is replying…'
+                  : 'Type to Mucka (Claude)…'
+                : 'Set ANTHROPIC_API_KEY to enable text chat.'
             }
             className={clsx(
               'flex-1 rounded-sm bg-paper-cream px-2 py-1 font-[var(--font-hand)] text-[0.92rem] text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-mucka/50',
-              !credsOk && 'cursor-not-allowed text-ink-faint'
+              !textOk && 'cursor-not-allowed text-ink-faint'
             )}
           />
           <button
             type="button"
             onClick={() => void handleSend()}
-            disabled={!credsOk || sending || draft.trim().length === 0}
+            disabled={!textOk || streaming || draft.trim().length === 0}
             className={clsx(
               'rounded-sm px-2 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.2)]',
-              draft.trim().length > 0 && credsOk && !sending
+              draft.trim().length > 0 && textOk && !streaming
                 ? 'bg-mucka hover:bg-mucka-deep'
                 : 'cursor-not-allowed bg-mucka/40 text-paper-cream/70'
             )}
           >
-            {sending ? '…' : 'send'}
+            send
           </button>
         </div>
       </div>

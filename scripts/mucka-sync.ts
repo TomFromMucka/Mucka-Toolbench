@@ -188,7 +188,9 @@ async function main(): Promise<void> {
       conversation_config: {
         agent: {
           prompt: { prompt: localPrompt, tool_ids: toolIds },
-          first_message: 'Mucka, ready.',
+          // Empty string suppresses the agent's opening line — the cockpit
+          // plays a connection chime instead.
+          first_message: '',
           language: 'en'
         },
         tts: {
@@ -242,7 +244,8 @@ async function main(): Promise<void> {
         prompt: {
           prompt: localPrompt,
           tool_ids: toolIds
-        }
+        },
+        first_message: ''
       },
       ...(env.voiceId ? { tts: { voice_id: env.voiceId } } : {})
     }
