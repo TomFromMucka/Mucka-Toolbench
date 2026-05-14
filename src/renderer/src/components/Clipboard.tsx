@@ -41,8 +41,15 @@ export function Clipboard({
       )}
     >
       <header
-        className="flex items-center gap-2 px-3 py-2"
-        style={{ background: 'var(--charcoal)', color: 'var(--van-white)' }}
+        className="flex items-center gap-2 py-2"
+        style={{
+          background: 'var(--charcoal)',
+          color: 'var(--van-white)',
+          /* Inset past the 14px corner chamfers so the title's first
+             glyph + the right-slot tail clear the diagonal cuts. */
+          paddingLeft: 'calc(var(--notch-card) + 8px)',
+          paddingRight: 'calc(var(--notch-card) + 8px)'
+        }}
       >
         <h2
           className="min-w-0 flex-shrink truncate"
