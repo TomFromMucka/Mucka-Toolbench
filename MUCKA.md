@@ -152,11 +152,17 @@ and everything else stays out until Mucka pulls it.
 
 (newest first — append here when shipping)
 
+- **2026-05-14** — Settings sheet gets a *Memory* tab. List of
+  everything Mucka has stored, grouped by type filter, expandable
+  rows with body + tags. Inline edit / forget. Closes the loop on
+  the memory store — Tom can audit what she knows.
 - **2026-05-14** — Long-term memory. New `memories` table + four
   Mucka tools (`list_memories`, `get_memory`, `remember`, `forget`).
   Small "Tom — at a glance" slice in `pm.md` keeps the always-on
   context tight; everything else lives on disk and is pulled on
-  demand.
+  demand. Memory workflow guidance in `pm.md` (notice → check →
+  amend/replace/new) so she updates existing memories rather than
+  fragmenting the store.
 - **2026-05-14** — Living `MUCKA.md` + `get_cockpit_doc` tool. Mucka
   can read the cockpit's own spec on demand.
 - **2026-05-14** — Voice + text shared transcript. ElevenLabs
