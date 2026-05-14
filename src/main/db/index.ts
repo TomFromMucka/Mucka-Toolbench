@@ -58,4 +58,10 @@ function migrate(d: DatabaseType): void {
   if (!colNames.has('attention_reason')) {
     d.exec(`ALTER TABLE agents ADD COLUMN attention_reason TEXT`)
   }
+  if (!colNames.has('preview_url')) {
+    d.exec(`ALTER TABLE agents ADD COLUMN preview_url TEXT`)
+  }
+  if (!colNames.has('vercel_project_id')) {
+    d.exec(`ALTER TABLE agents ADD COLUMN vercel_project_id TEXT`)
+  }
 }

@@ -28,17 +28,24 @@ import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
 import { PtyManager } from './pty/PtyManager'
 import { scrollback } from './scrollback/Scrollback'
+import { getStatus as vercelStatus } from './vercel/Vercel'
+import { VercelPoller } from './vercel/VercelPoller'
+import { getStatus as githubStatus } from './github/GitHub'
+import { GitHubPoller } from './github/GitHubPoller'
 import type { MicAccess, NoticeInput } from '@shared/types'
 import type {
   AgentId,
   AgentUpdate,
   PtyResizeRequest,
   PtySpawnRequest,
-  PtyWriteRequest
+  PtyWriteRequest,
+  TerminalId
 } from '@shared/types'
 
 let ptyManager: PtyManager | null = null
 let gitService: GitService | null = null
+let vercelPoller: VercelPoller | null = null
+let githubPoller: GitHubPoller | null = null
 let mainWindowRef: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -69,14 +76,28 @@ function createWindow(): void {
     webContents: mainWindow.webContents,
     getAgents: () => getAgentConfigs()
   })
+  vercelPoller = new VercelPoller({
+    webContents: mainWindow.webContents,
+    getAgents: () => getAgentConfigs()
+  })
+  githubPoller = new GitHubPoller({
+    webContents: mainWindow.webContents,
+    getAgents: () => getAgentConfigs()
+  })
 
   mainWindow.webContents.on('did-finish-load', () => {
     gitService?.start()
+    vercelPoller?.start()
+    githubPoller?.start()
   })
 
   mainWindow.on('closed', () => {
     gitService?.stop()
     gitService = null
+    vercelPoller?.stop()
+    vercelPoller = null
+    githubPoller?.stop()
+    githubPoller = null
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
@@ -115,8 +136,10 @@ function registerIpc(): void {
     const ordered = listAgentsFromDb()
     const sortOrder = ordered.findIndex((a) => a.id === updated.id)
     upsertAgent(updated, sortOrder < 0 ? ordered.length : sortOrder)
-    // Push a fresh git status immediately so the new path shows real state.
+    // Push a fresh git status + Vercel summary so the new config shows real state.
     void gitService?.refreshOne(updated.id)
+    void vercelPoller?.refreshOne(updated.id)
+    void githubPoller?.refreshOne(updated.id)
     return updated
   })
 
@@ -155,12 +178,12 @@ function registerIpc(): void {
     ptyManager?.resize(req)
   })
 
-  ipcMain.handle('pty:kill', (_event, agentId: AgentId) => {
-    ptyManager?.kill(agentId)
+  ipcMain.handle('pty:kill', (_event, terminalId: TerminalId) => {
+    ptyManager?.kill(terminalId)
   })
 
-  ipcMain.handle('pty:scrollback', (_event, agentId: AgentId) =>
-    scrollback.get(agentId)
+  ipcMain.handle('pty:scrollback', (_event, terminalId: TerminalId) =>
+    scrollback.get(terminalId)
   )
 
   ipcMain.handle('mucka:status', () => muckaStatus())
@@ -183,6 +206,30 @@ function registerIpc(): void {
       'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
     )
   })
+
+  ipcMain.handle('vercel:status', () => vercelStatus())
+
+  ipcMain.handle('vercel:get', (_event, agentId: AgentId) =>
+    vercelPoller?.get(agentId) ?? null
+  )
+
+  ipcMain.handle('vercel:getAll', () => vercelPoller?.getAll() ?? {})
+
+  ipcMain.handle('vercel:refresh', (_event, agentId: AgentId) =>
+    vercelPoller?.refreshOne(agentId) ?? null
+  )
+
+  ipcMain.handle('github:status', () => githubStatus())
+
+  ipcMain.handle('github:get', (_event, agentId: AgentId) =>
+    githubPoller?.get(agentId) ?? null
+  )
+
+  ipcMain.handle('github:getAll', () => githubPoller?.getAll() ?? {})
+
+  ipcMain.handle('github:refresh', (_event, agentId: AgentId) =>
+    githubPoller?.refreshOne(agentId) ?? null
+  )
 
   ipcMain.handle('notices:list', () => listNotices())
   ipcMain.handle('notices:add', (_event, input: NoticeInput) =>
@@ -220,6 +267,7 @@ app.whenReady().then(() => {
   })
 
   ensureSeeded()
+  // Primary terminalId === agentId, so we restore the same buffers we wrote.
   scrollback.loadFromDisk(getAgentConfigs().map((a) => a.id))
   configureMediaPermissions()
   registerIpc()
@@ -228,7 +276,8 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   ptyManager?.killAll()
-  scrollback.flushToDisk()
+  // Only persist the primary terminal per agent; split terminals are session-only.
+  scrollback.flushToDisk(getAgentConfigs().map((a) => a.id))
   closeDb()
 })
 

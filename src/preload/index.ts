@@ -15,7 +15,14 @@ import type {
   PtyExitEvent,
   PtyResizeRequest,
   PtySpawnRequest,
-  PtyWriteRequest
+  PtyWriteRequest,
+  TerminalId,
+  VercelAgentSummary,
+  VercelStatus,
+  VercelUpdateEvent,
+  GitHubAgentSummary,
+  GitHubStatus,
+  GitHubUpdateEvent
 } from '@shared/types'
 
 const muckaApi: MuckaApi = {
@@ -28,8 +35,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('pty:spawn', req) as Promise<void>,
   writePty: (req: PtyWriteRequest) => ipcRenderer.send('pty:write', req),
   resizePty: (req: PtyResizeRequest) => ipcRenderer.send('pty:resize', req),
-  killPty: (agentId: AgentId) =>
-    ipcRenderer.invoke('pty:kill', agentId) as Promise<void>,
+  killPty: (terminalId: TerminalId) =>
+    ipcRenderer.invoke('pty:kill', terminalId) as Promise<void>,
 
   onPtyData: (handler: (event: PtyDataEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: PtyDataEvent) =>
@@ -55,8 +62,8 @@ const muckaApi: MuckaApi = {
     return () => ipcRenderer.off('git:status', listener)
   },
 
-  getScrollback: (agentId: AgentId) =>
-    ipcRenderer.invoke('pty:scrollback', agentId) as Promise<string>,
+  getScrollback: (terminalId: TerminalId) =>
+    ipcRenderer.invoke('pty:scrollback', terminalId) as Promise<string>,
 
   getMuckaStatus: () =>
     ipcRenderer.invoke('mucka:status') as Promise<MuckaStatus>,
@@ -73,7 +80,41 @@ const muckaApi: MuckaApi = {
   removeNotice: (id: string) =>
     ipcRenderer.invoke('notices:remove', id) as Promise<boolean>,
   removeNoticeByTitle: (title: string) =>
-    ipcRenderer.invoke('notices:removeByTitle', title) as Promise<number>
+    ipcRenderer.invoke('notices:removeByTitle', title) as Promise<number>,
+
+  getVercelStatus: () =>
+    ipcRenderer.invoke('vercel:status') as Promise<VercelStatus>,
+  listVercelDeployments: (agentId: AgentId) =>
+    ipcRenderer.invoke('vercel:get', agentId) as Promise<VercelAgentSummary>,
+  listAllVercelDeployments: () =>
+    ipcRenderer.invoke('vercel:getAll') as Promise<
+      Record<AgentId, VercelAgentSummary>
+    >,
+  refreshVercel: (agentId: AgentId) =>
+    ipcRenderer.invoke('vercel:refresh', agentId) as Promise<VercelAgentSummary>,
+  onVercelUpdate: (handler: (event: VercelUpdateEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: VercelUpdateEvent) =>
+      handler(payload)
+    ipcRenderer.on('vercel:update', listener)
+    return () => ipcRenderer.off('vercel:update', listener)
+  },
+
+  getGitHubStatus: () =>
+    ipcRenderer.invoke('github:status') as Promise<GitHubStatus>,
+  listGitHubSummary: (agentId: AgentId) =>
+    ipcRenderer.invoke('github:get', agentId) as Promise<GitHubAgentSummary>,
+  listAllGitHubSummaries: () =>
+    ipcRenderer.invoke('github:getAll') as Promise<
+      Record<AgentId, GitHubAgentSummary>
+    >,
+  refreshGitHub: (agentId: AgentId) =>
+    ipcRenderer.invoke('github:refresh', agentId) as Promise<GitHubAgentSummary>,
+  onGitHubUpdate: (handler: (event: GitHubUpdateEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: GitHubUpdateEvent) =>
+      handler(payload)
+    ipcRenderer.on('github:update', listener)
+    return () => ipcRenderer.off('github:update', listener)
+  }
 }
 
 if (process.contextIsolated) {
