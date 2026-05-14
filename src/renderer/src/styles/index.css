@@ -102,6 +102,12 @@
   --surface2: #f5f4f3;
   --border: rgba(35, 31, 32, 0.09);
   --border-mid: rgba(35, 31, 32, 0.14);
+  --red: #c42b2b;
+  --red-bg: rgba(196, 43, 43, 0.09);
+
+  /* Font-name aliases — pasted Mucka Pro CSS expects these names. */
+  --font-soehne: 'Sohne', system-ui, sans-serif;
+  --font-soehne-breit: 'Sohne Breit', 'Sohne', system-ui, sans-serif;
 
   /* StatusPill tokens */
   --pill-onsite-bg: rgba(255, 78, 0, 0.10);
@@ -443,3 +449,261 @@ textarea,
     0% var(--notch-sm)
   );
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Mucka Pro design system v2 — StatusPill + Button primitives.
+   Verbatim port from Mucka-Pro/src/app/globals.css so behaviour matches.
+   ────────────────────────────────────────────────────────────────────── */
+.mucka-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: var(--font-soehne), system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mucka-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: none;
+  font-family: var(--font-soehne), system-ui, sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, transform 0.05s ease, color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+.mucka-btn:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.mucka-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.mucka-btn-lg { height: 50px; padding: 0 22px; font-size: 16px; --notch: 7px; --vnotch-pos: 36px; --vnotch-w: 8px; --vnotch-d: 5px; }
+.mucka-btn-md { height: 42px; padding: 0 18px; font-size: 15px; --notch: 6px; --vnotch-pos: 30px; --vnotch-w: 7px; --vnotch-d: 4px; }
+.mucka-btn-sm { height: 34px; padding: 0 14px; font-size: 13px; --notch: 5px; --vnotch-pos: 24px; --vnotch-w: 6px; --vnotch-d: 3px; }
+
+.mucka-btn-with-trail-notch.mucka-btn-lg { padding-right: 9px; }
+.mucka-btn-with-trail-notch.mucka-btn-md { padding-right: 7px; }
+.mucka-btn-with-trail-notch.mucka-btn-sm { padding-right: 5px; }
+
+.mucka-btn-fullwidth { width: 100%; }
+
+.mucka-btn-primary,
+.mucka-btn-secondary {
+  clip-path: polygon(
+    var(--notch) 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% calc(100% - var(--notch)),
+    calc(100% - var(--notch)) 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch)),
+    0 var(--notch)
+  );
+}
+.mucka-btn-with-trail-notch {
+  clip-path: polygon(
+    var(--notch) 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% calc(100% - var(--notch)),
+    calc(100% - var(--notch)) 100%,
+    calc(100% - var(--vnotch-pos) + (var(--vnotch-w) / 2)) 100%,
+    calc(100% - var(--vnotch-pos)) calc(100% - var(--vnotch-d)),
+    calc(100% - var(--vnotch-pos) - (var(--vnotch-w) / 2)) 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch)),
+    0 var(--notch)
+  );
+}
+.mucka-btn-with-lead-notch {
+  clip-path: polygon(
+    var(--notch) 0,
+    calc(var(--vnotch-pos) - (var(--vnotch-w) / 2)) 0,
+    var(--vnotch-pos) var(--vnotch-d),
+    calc(var(--vnotch-pos) + (var(--vnotch-w) / 2)) 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% calc(100% - var(--notch)),
+    calc(100% - var(--notch)) 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch)),
+    0 var(--notch)
+  );
+}
+.mucka-btn-primary {
+  background: var(--orange);
+  color: var(--charcoal);
+}
+.mucka-btn-primary:hover { background: #e64500; }
+.mucka-btn-primary:active { transform: translateY(1px); }
+
+.mucka-btn-primary.mucka-btn-tone-grey {
+  background: var(--ui-grey);
+  color: #fff;
+}
+.mucka-btn-primary.mucka-btn-tone-grey:hover { background: #4f4e4d; }
+.mucka-btn-primary.mucka-btn-tone-grey .mucka-btn-trail { color: #fff; }
+
+.mucka-btn-secondary {
+  background: var(--van-white);
+  color: var(--charcoal);
+}
+.mucka-btn-secondary:hover { background: #ddd9d2; }
+.mucka-btn-secondary:active { transform: translateY(1px); }
+
+.mucka-btn-dark {
+  background: var(--charcoal);
+  color: #fff;
+  clip-path: polygon(
+    var(--notch) 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% calc(100% - var(--notch)),
+    calc(100% - var(--notch)) 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch)),
+    0 var(--notch)
+  );
+}
+.mucka-btn-dark:hover { background: #3a3536; }
+.mucka-btn-dark:active { transform: translateY(1px); }
+.mucka-btn-dark .mucka-btn-label { flex: 1; text-align: left; }
+
+.mucka-btn-with-chip { padding-left: 6px; }
+.mucka-btn-with-chip .mucka-btn-label { flex: 1; text-align: left; padding-left: 4px; }
+
+.mucka-btn-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  clip-path: polygon(
+    var(--chip-notch) 0,
+    calc(100% - var(--chip-notch)) 0,
+    100% var(--chip-notch),
+    100% calc(100% - var(--chip-notch)),
+    calc(100% - var(--chip-notch)) 100%,
+    var(--chip-notch) 100%,
+    0 calc(100% - var(--chip-notch)),
+    0 var(--chip-notch)
+  );
+}
+.mucka-btn-primary .mucka-btn-chip { background: var(--charcoal); color: #fff; }
+.mucka-btn-lg .mucka-btn-chip { width: 36px; height: 36px; --chip-notch: 5px; }
+.mucka-btn-md .mucka-btn-chip { width: 30px; height: 30px; --chip-notch: 4px; }
+.mucka-btn-sm .mucka-btn-chip { width: 24px; height: 24px; --chip-notch: 3px; }
+
+.mucka-btn-chip-text {
+  font-family: var(--font-soehne-breit), system-ui, sans-serif;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.mucka-btn-lg .mucka-btn-chip-text { font-size: 18px; }
+.mucka-btn-md .mucka-btn-chip-text { font-size: 15px; }
+.mucka-btn-sm .mucka-btn-chip-text { font-size: 13px; }
+
+.mucka-btn-chip-image {
+  display: block;
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.mucka-btn-lg > .mucka-btn-chip-image { width: 16px; height: 16px; }
+.mucka-btn-md > .mucka-btn-chip-image { width: 14px; height: 14px; }
+.mucka-btn-sm > .mucka-btn-chip-image { width: 12px; height: 12px; }
+
+.mucka-btn-label { flex: 0 1 auto; }
+.mucka-btn-trail { flex-shrink: 0; opacity: 0.95; }
+
+.mucka-btn-tertiary {
+  position: relative;
+  background: transparent;
+  color: var(--charcoal);
+  border: none;
+  isolation: isolate;
+  --tertiary-bg: var(--surface2);
+  --tertiary-bg-hover: color-mix(in srgb, var(--tertiary-bg), var(--charcoal) 5%);
+}
+.mucka-btn-tertiary::before,
+.mucka-btn-tertiary::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+.mucka-btn-tertiary::before {
+  inset: 0;
+  background: currentColor;
+  z-index: -2;
+  clip-path: polygon(
+    var(--notch) 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% calc(100% - var(--notch)),
+    calc(100% - var(--notch)) 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch)),
+    0 var(--notch)
+  );
+}
+.mucka-btn-tertiary::after {
+  inset: 1.5px;
+  background: var(--tertiary-bg);
+  z-index: -1;
+  transition: background 0.15s ease;
+  clip-path: polygon(
+    calc(var(--notch) - 0.88px) 0,
+    calc(100% - (var(--notch) - 0.88px)) 0,
+    100% calc(var(--notch) - 0.88px),
+    100% calc(100% - (var(--notch) - 0.88px)),
+    calc(100% - (var(--notch) - 0.88px)) 100%,
+    calc(var(--notch) - 0.88px) 100%,
+    0 calc(100% - (var(--notch) - 0.88px)),
+    0 calc(var(--notch) - 0.88px)
+  );
+}
+.mucka-btn-tertiary:hover::after { background: var(--tertiary-bg-hover); }
+.mucka-btn-tertiary:active { transform: translateY(1px); }
+
+.mucka-btn-tertiary.mucka-btn-lg { padding: 0 16px; font-size: 14px; }
+.mucka-btn-tertiary.mucka-btn-md { padding: 0 14px; font-size: 13px; }
+.mucka-btn-tertiary.mucka-btn-sm { padding: 0 12px; font-size: 12px; }
+
+.mucka-btn-tertiary.mucka-btn-tone-orange {
+  color: var(--orange);
+  --tertiary-bg-hover: color-mix(in srgb, var(--tertiary-bg), var(--orange) 8%);
+}
+.mucka-btn-tertiary.mucka-btn-tone-danger {
+  color: var(--red);
+  --tertiary-bg-hover: color-mix(in srgb, var(--tertiary-bg), var(--red) 8%);
+}
+
+.mucka-btn-ghost {
+  background: transparent;
+  color: var(--charcoal);
+  border-radius: 8px;
+}
+.mucka-btn-ghost:hover { background: rgba(35, 31, 32, 0.06); }
+
+.mucka-btn-icononly {
+  padding: 0;
+  width: 50px;
+}
+.mucka-btn-md.mucka-btn-icononly { width: 42px; }
+.mucka-btn-sm.mucka-btn-icononly { width: 34px; }
