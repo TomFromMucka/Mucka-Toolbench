@@ -20,6 +20,7 @@
     "mucka:sync": "tsx scripts/mucka-sync.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@elevenlabs/react": "^1.6.0",

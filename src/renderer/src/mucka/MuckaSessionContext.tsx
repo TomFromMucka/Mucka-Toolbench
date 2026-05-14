@@ -18,8 +18,10 @@ import type {
   MuckaSessionState,
   MuckaStatus
 } from '@shared/types'
+import type { ClientTools } from '@elevenlabs/react'
 import { useAgentsState } from '../state/AgentsContext'
 import { buildClientTools } from './tools/index'
+import { playConnectionChime } from './chime'
 
 export interface ConfirmRequest {
   summary: string
@@ -73,6 +75,11 @@ interface MuckaSessionValue {
   requestEditConfirm: (req: EditConfirmRequest) => Promise<string | null>
   /** Send a typed message into the live session; auto-starts a session if needed. */
   sendUserMessage: (text: string) => Promise<void>
+  /**
+   * Stable tool registry used by both the voice session (passed to
+   * ElevenLabs as clientTools) and the text-chat dispatcher.
+   */
+  clientTools: ClientTools
 }
 
 const MuckaSessionCtx = createContext<MuckaSessionValue | null>(null)
@@ -131,6 +138,7 @@ function InnerProvider({
   const conversation = useConversation({
     onConnect: () => {
       setConnecting(false)
+      playConnectionChime()
       if (cancelOnConnect.current) {
         cancelOnConnect.current = false
         conversation.endSession()
@@ -272,6 +280,19 @@ function InnerProvider({
     []
   )
 
+  // ── Shared tool registry used by voice + text ──────────────────────
+  const clientTools = useMemo<ClientTools>(
+    () =>
+      buildClientTools({
+        setAmbientStatus,
+        bumpRestart,
+        requestConfirm,
+        requestEditConfirm,
+        reloadAgents
+      }),
+    [setAmbientStatus, bumpRestart, requestConfirm, requestEditConfirm, reloadAgents]
+  )
+
   // ── Session lifecycle ──────────────────────────────────────────────
   const start = useCallback(async () => {
     if (inFlight.current) return
@@ -311,13 +332,7 @@ function InnerProvider({
       const signedUrl = await window.mucka.mintMuckaSignedUrl()
       await conversation.startSession({
         signedUrl,
-        clientTools: buildClientTools({
-          setAmbientStatus,
-          bumpRestart,
-          requestConfirm,
-          requestEditConfirm,
-          reloadAgents
-        })
+        clientTools
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -325,15 +340,7 @@ function InnerProvider({
       inFlight.current = false
       setConnecting(false)
     }
-  }, [
-    conversation,
-    micAccess,
-    setAmbientStatus,
-    bumpRestart,
-    requestConfirm,
-    requestEditConfirm,
-    reloadAgents
-  ])
+  }, [conversation, micAccess, clientTools])
 
   const stop = useCallback(async () => {
     if (inFlight.current && conversation.status !== 'connected') {
@@ -420,7 +427,8 @@ function InnerProvider({
       bumpRestart,
       requestConfirm,
       requestEditConfirm,
-      sendUserMessage
+      sendUserMessage,
+      clientTools
     }),
     [
       state,
@@ -442,7 +450,8 @@ function InnerProvider({
       bumpRestart,
       requestConfirm,
       requestEditConfirm,
-      sendUserMessage
+      sendUserMessage,
+      clientTools
     ]
   )
 

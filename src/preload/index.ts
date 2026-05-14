@@ -10,6 +10,11 @@ import type {
   MicAccess,
   MuckaApi,
   MuckaStatus,
+  MuckaTextMessage,
+  MuckaTextStatus,
+  MuckaTextStreamEvent,
+  MuckaTextToolCall,
+  MuckaTextToolResult,
   PtyDataEvent,
   PtyExitEvent,
   PtyResizeRequest,
@@ -72,6 +77,35 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('mucka:requestMic') as Promise<MicAccess>,
   openMicSettings: () =>
     ipcRenderer.invoke('mucka:openMicSettings') as Promise<void>,
+
+  getMuckaTextStatus: () =>
+    ipcRenderer.invoke('mucka:text-status') as Promise<MuckaTextStatus>,
+  listChatHistory: () =>
+    ipcRenderer.invoke('mucka:text-history') as Promise<MuckaTextMessage[]>,
+  sendChatMessage: (text: string) =>
+    ipcRenderer.invoke('mucka:text-send', text) as Promise<void>,
+  clearChatHistory: () =>
+    ipcRenderer.invoke('mucka:text-clear') as Promise<void>,
+  sendChatToolResult: (result: MuckaTextToolResult) =>
+    ipcRenderer.send('mucka:text-tool-result', result),
+  onChatStream: (handler: (event: MuckaTextStreamEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextStreamEvent) =>
+      handler(payload)
+    ipcRenderer.on('mucka:text-stream', listener)
+    return () => ipcRenderer.off('mucka:text-stream', listener)
+  },
+  onChatToolCall: (handler: (call: MuckaTextToolCall) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextToolCall) =>
+      handler(payload)
+    ipcRenderer.on('mucka:text-tool-call', listener)
+    return () => ipcRenderer.off('mucka:text-tool-call', listener)
+  },
+  onChatMessage: (handler: (message: MuckaTextMessage) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextMessage) =>
+      handler(payload)
+    ipcRenderer.on('mucka:text-message', listener)
+    return () => ipcRenderer.off('mucka:text-message', listener)
+  },
 
   getNote: () => ipcRenderer.invoke('notes:get') as Promise<string>,
   setNote: (value: string) =>

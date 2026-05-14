@@ -1,5 +1,6 @@
 import { Workstation } from './layout/Workstation'
 import { MuckaSessionProvider } from './mucka/MuckaSessionContext'
+import { MuckaTextProvider } from './mucka/MuckaTextContext'
 import { AgentsProvider } from './state/AgentsContext'
 import { EventsProvider } from './state/EventsContext'
 import { NotesProvider } from './state/NotesContext'
@@ -14,7 +15,9 @@ function App(): React.JSX.Element {
           <VercelProvider>
             <GitHubProvider>
               <MuckaSessionProvider>
-                <Workstation />
+                <MuckaTextProvider>
+                  <Workstation />
+                </MuckaTextProvider>
               </MuckaSessionProvider>
             </GitHubProvider>
           </VercelProvider>

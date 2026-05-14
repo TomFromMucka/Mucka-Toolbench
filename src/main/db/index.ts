@@ -61,6 +61,13 @@ function migrate(d: DatabaseType): void {
       tone TEXT NOT NULL DEFAULT 'normal'
     );
     CREATE INDEX IF NOT EXISTS events_ts_idx ON events(ts DESC);
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      segments_json TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS chat_ts_idx ON chat_messages(ts ASC);
   `)
 
   // Idempotent column additions for older databases.
