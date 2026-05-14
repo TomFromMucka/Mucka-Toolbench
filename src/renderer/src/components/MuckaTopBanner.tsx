@@ -25,31 +25,50 @@ export function MuckaTopBanner({
   return (
     <header
       className={clsx(
-        'relative flex items-center gap-4 px-5 py-2 text-paper-cream shadow-[0_3px_10px_rgba(0,0,0,0.45)] transition-colors',
-        isLive ? 'bg-mucka-glow' : 'bg-mucka'
+        'relative flex items-center gap-4 px-5 py-2 transition-colors',
+        isLive ? 'bg-orange-glow' : 'bg-orange'
       )}
+      style={{ color: 'var(--charcoal)' }}
     >
       <div className="flex shrink-0 items-center gap-2">
         <span
-          className="grid size-7 place-items-center rounded-full bg-paper-cream font-[var(--font-display)] text-[1.05rem] font-bold leading-none text-mucka shadow-inner"
+          className="chamfer-sm grid size-7 place-items-center font-semibold leading-none"
+          style={{
+            background: 'var(--charcoal)',
+            color: 'var(--van-white)',
+            fontFamily: 'var(--font-soehne-breit)',
+            fontSize: '17px'
+          }}
           aria-hidden
         >
           M
         </span>
-        <span className="font-[var(--font-display)] text-[1.4rem] font-bold leading-none tracking-wide">
+        <span
+          className="leading-none tracking-tight"
+          style={{
+            fontFamily: 'var(--font-soehne-breit)',
+            fontWeight: 600,
+            fontSize: '22px',
+            letterSpacing: '-0.005em'
+          }}
+        >
           Mucka
         </span>
-        <span className="text-paper-cream/75 text-[0.7rem] uppercase tracking-[0.18em]">
+        <span
+          className="text-[0.7rem] uppercase tracking-[0.18em]"
+          style={{ color: 'rgba(35, 31, 32, 0.65)' }}
+        >
           Workstation
         </span>
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate font-[var(--font-hand)] text-[1rem] leading-tight">
-          <span className="opacity-75">PM:</span>{' '}
-          <span className={clsx('font-semibold', state === 'error' && 'text-paper-cream/90')}>
-            {line}
-          </span>
+        <p
+          className="t-body-md truncate leading-tight"
+          style={{ color: 'var(--charcoal)' }}
+        >
+          <span className="opacity-65">PM:</span>{' '}
+          <span style={{ fontWeight: 500 }}>{line}</span>
         </p>
       </div>
 
@@ -60,7 +79,11 @@ export function MuckaTopBanner({
         onClick={onOpenSettings}
         title="Settings (⌘,)"
         aria-label="Open settings"
-        className="ml-1 grid size-8 shrink-0 place-items-center rounded-full border border-paper-cream/30 bg-mucka-deep/40 text-paper-cream hover:bg-mucka-deep/70"
+        className="chamfer-sm ml-1 grid size-8 shrink-0 place-items-center"
+        style={{
+          background: 'rgba(35, 31, 32, 0.18)',
+          color: 'var(--charcoal)'
+        }}
       >
         <svg
           width="16"

@@ -9,6 +9,7 @@ import type {
 import { useAgentsState } from '../state/AgentsContext'
 import { useVercelState } from '../state/VercelContext'
 import { Clipboard } from './Clipboard'
+import { StatusPill, type StatusVariant } from './ui/StatusPill'
 
 const STATE_LABEL: Record<VercelDeploymentState, string> = {
   queued: 'queued',
@@ -19,13 +20,14 @@ const STATE_LABEL: Record<VercelDeploymentState, string> = {
   unknown: '—'
 }
 
-const STATE_PILL: Record<VercelDeploymentState, string> = {
-  queued: 'bg-ink-faint text-paper-cream',
-  building: 'bg-status-warn text-ink animate-pulse',
-  ready: 'bg-status-ok text-ink',
-  error: 'bg-status-bad text-paper-cream',
-  canceled: 'bg-ink-faint/60 text-paper-cream',
-  unknown: 'bg-ink-faint/60 text-paper-cream'
+/** Map Vercel state → brand StatusPill variant. `error` stays ad-hoc red. */
+const STATE_PILL: Record<VercelDeploymentState, StatusVariant | null> = {
+  queued: 'scheduled',
+  building: 'pending',
+  ready: 'completed',
+  error: null,
+  canceled: 'cancelled',
+  unknown: 'cancelled'
 }
 
 function relativeTime(ms: number): string {
@@ -176,11 +178,14 @@ interface RowProps {
 function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'unlinked') {
     return (
-      <li className="flex items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug last:border-b-0">
-        <span className="w-12 shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+      <li
+        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
           {row.agent.displayName.toLowerCase()}
         </span>
-        <span className="flex-1 text-ink-faint">
+        <span className="flex-1 text-dirty-grey">
           No Vercel project linked — run{' '}
           <span className="font-mono text-[0.78rem]">vercel link</span> in the
           worktree or set a project id in Settings.
@@ -191,15 +196,20 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
 
   if (row.kind === 'error') {
     return (
-      <li className="flex items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug last:border-b-0">
-        <span className="w-12 shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+      <li
+        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
           {row.agent.displayName.toLowerCase()}
         </span>
-        <span className="flex-1 text-status-bad">{row.summary.error}</span>
+        <span className="flex-1" style={{ color: 'var(--red)' }}>
+          {row.summary.error}
+        </span>
         <button
           type="button"
           onClick={() => onRefreshAgent(row.agent.id)}
-          className="shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-soft hover:text-ink"
+          className="t-label-sm shrink-0 text-dirty-grey hover:text-van-white"
         >
           retry
         </button>
@@ -209,11 +219,14 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
 
   if (row.kind === 'empty') {
     return (
-      <li className="flex items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug last:border-b-0">
-        <span className="shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+      <li
+        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <span className="t-label-sm shrink-0 text-dirty-grey">
           {agentsLabel(row.agents)}
         </span>
-        <span className="ml-2 flex-1 text-ink-faint">
+        <span className="ml-2 flex-1 text-dirty-grey">
           {projectLabel(null, row.summary.projectId)} · {row.branchLabel} — {row.message}
         </span>
       </li>
@@ -221,19 +234,30 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   }
 
   const { deployment } = row
+  const pillVariant = STATE_PILL[deployment.state]
   return (
-    <li className="grid grid-cols-[auto_64px_1fr_auto] items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.92rem] leading-snug last:border-b-0">
-      <span className="shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+    <li
+      className="t-body-md grid grid-cols-[auto_auto_1fr_auto] items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <span className="t-label-sm shrink-0 text-dirty-grey">
         {agentsLabel(row.agents)}
       </span>
-      <span
-        className={clsx(
-          'inline-flex justify-center rounded-sm px-1.5 py-px text-[0.6rem] uppercase tracking-wider font-sans',
-          STATE_PILL[deployment.state]
-        )}
-      >
-        {STATE_LABEL[deployment.state]}
-      </span>
+      {pillVariant ? (
+        <StatusPill
+          variant={pillVariant}
+          className={clsx(deployment.state === 'building' && 'animate-pulse')}
+        >
+          {STATE_LABEL[deployment.state]}
+        </StatusPill>
+      ) : (
+        <span
+          className="t-label-sm chamfer-sm px-1.5 py-0.5"
+          style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
+        >
+          {STATE_LABEL[deployment.state]}
+        </span>
+      )}
       <button
         type="button"
         onClick={() => openUrl(deployment.inspectorUrl ?? deployment.url)}
@@ -245,16 +269,22 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
         }
       >
         <div className="flex items-baseline gap-1.5">
-          <span className="truncate text-ink">
+          <span className="truncate text-van-white">
             {deployment.commitMessage ?? '(no commit message)'}
           </span>
           {deployment.isProduction ? (
-            <span className="rounded-sm bg-ink/15 px-1 py-px text-[0.55rem] uppercase tracking-wide text-ink-soft font-sans">
+            <span
+              className="t-label-sm chamfer-sm px-1 py-px"
+              style={{
+                background: 'rgba(234, 233, 232, 0.10)',
+                color: 'var(--van-white)'
+              }}
+            >
               prod
             </span>
           ) : null}
         </div>
-        <div className="truncate text-[0.74rem] text-ink-faint font-sans">
+        <div className="t-body-sm truncate text-dirty-grey">
           {projectLabel(deployment, row.summary.projectId)} · {row.branchLabel} ·{' '}
           {relativeTime(deployment.createdAt)}
         </div>
@@ -263,7 +293,7 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
         <button
           type="button"
           onClick={() => openUrl(deployment.url)}
-          className="shrink-0 text-[0.7rem] uppercase tracking-wide text-mucka-deep hover:underline font-sans"
+          className="t-label-sm shrink-0 text-orange hover:underline"
           title={deployment.url}
         >
           open
@@ -298,11 +328,13 @@ export function VercelPanel(): React.JSX.Element {
             ? 'error'
             : 'latest deployments'
       }
-      paper="lined"
       rightSlot={
         <span className="flex items-center gap-2">
           {errorCount > 0 ? (
-            <span className="rounded-sm bg-status-bad px-1.5 py-px text-[0.62rem] uppercase tracking-wide text-paper-cream">
+            <span
+              className="t-label-sm chamfer-sm px-1.5 py-0.5"
+              style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
+            >
               {errorCount} err
             </span>
           ) : null}
@@ -311,7 +343,11 @@ export function VercelPanel(): React.JSX.Element {
             onClick={() => {
               for (const a of agents) void refresh(a.id)
             }}
-            className="rounded-sm border border-paper-cream/30 px-1.5 py-0.5 text-[0.65rem] uppercase tracking-wide text-paper-cream/85 hover:bg-paper-cream/15"
+            className="t-label-sm chamfer-sm px-1.5 py-0.5"
+            style={{
+              background: 'rgba(234, 233, 232, 0.12)',
+              color: 'var(--van-white)'
+            }}
             title="Refresh all"
           >
             refresh
@@ -320,10 +356,10 @@ export function VercelPanel(): React.JSX.Element {
       }
       className="min-h-0"
     >
-      <div className="h-full min-h-0 overflow-y-auto">
+      <div className="h-full min-h-0 overflow-y-auto" style={{ background: 'var(--surface)' }}>
         {tokenMissing ? (
-          <div className="px-3 py-3 font-[var(--font-hand)] text-[0.88rem] leading-snug text-ink-soft">
-            <p className="font-semibold text-ink">No Vercel API token.</p>
+          <div className="t-body-md px-3 py-3 leading-snug text-dirty-grey">
+            <p className="font-semibold text-van-white">No Vercel API token.</p>
             <p className="mt-1">
               Add <span className="font-mono text-[0.78rem]">VERCEL_API_TOKEN</span> to{' '}
               <span className="font-mono text-[0.78rem]">.env</span> and restart the
@@ -333,13 +369,13 @@ export function VercelPanel(): React.JSX.Element {
         ) : null}
 
         {tokenError ? (
-          <div className="px-3 py-2 font-[var(--font-hand)] text-[0.88rem] text-status-bad">
+          <div className="t-body-md px-3 py-2" style={{ color: 'var(--red)' }}>
             Vercel: {tokenError}
           </div>
         ) : null}
 
         {rows.length === 0 && !tokenMissing && !tokenError ? (
-          <div className="px-3 py-2 font-[var(--font-hand)] text-[0.88rem] text-ink-faint">
+          <div className="t-body-md px-3 py-2 text-dirty-grey">
             Waiting for first poll…
           </div>
         ) : null}

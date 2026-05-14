@@ -9,6 +9,7 @@ import type {
 import { useAgentsState } from '../state/AgentsContext'
 import { useGitHubState } from '../state/GitHubContext'
 import { Clipboard } from './Clipboard'
+import { StatusPill, type StatusVariant } from './ui/StatusPill'
 
 const CHECK_LABEL: Record<CheckSummary, string> = {
   success: 'ci ✓',
@@ -17,11 +18,12 @@ const CHECK_LABEL: Record<CheckSummary, string> = {
   none: 'no ci'
 }
 
-const CHECK_PILL: Record<CheckSummary, string> = {
-  success: 'bg-status-ok text-ink',
-  failure: 'bg-status-bad text-paper-cream',
-  pending: 'bg-status-warn text-ink animate-pulse',
-  none: 'bg-ink-faint/60 text-paper-cream'
+/** Map CI summary → StatusPill variant. `failure` stays ad-hoc red. */
+const CHECK_PILL: Record<CheckSummary, StatusVariant | null> = {
+  success: 'completed',
+  failure: null,
+  pending: 'pending',
+  none: 'cancelled'
 }
 
 function relativeTime(ms: number): string {
@@ -136,11 +138,14 @@ interface RowProps {
 function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'no-repo') {
     return (
-      <li className="flex items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug last:border-b-0">
-        <span className="w-12 shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+      <li
+        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
           {row.agent.displayName.toLowerCase()}
         </span>
-        <span className="flex-1 text-ink-faint">
+        <span className="flex-1 text-dirty-grey">
           Worktree origin isn&apos;t a GitHub repo.
         </span>
       </li>
@@ -149,15 +154,20 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
 
   if (row.kind === 'error') {
     return (
-      <li className="flex items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug last:border-b-0">
-        <span className="w-12 shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+      <li
+        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
           {row.agent.displayName.toLowerCase()}
         </span>
-        <span className="flex-1 text-status-bad">{row.summary.error}</span>
+        <span className="flex-1" style={{ color: 'var(--red)' }}>
+          {row.summary.error}
+        </span>
         <button
           type="button"
           onClick={() => onRefreshAgent(row.agent.id)}
-          className="shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-soft hover:text-ink"
+          className="t-label-sm shrink-0 text-dirty-grey hover:text-van-white"
         >
           retry
         </button>
@@ -167,11 +177,14 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
 
   if (row.kind === 'no-pr') {
     return (
-      <li className="flex items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug last:border-b-0">
-        <span className="shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+      <li
+        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <span className="t-label-sm shrink-0 text-dirty-grey">
           {agentsLabel(row.agents)}
         </span>
-        <span className="ml-2 flex-1 text-ink-faint">
+        <span className="ml-2 flex-1 text-dirty-grey">
           {repoLabel(row.summary)} · {row.summary.branch} — no open PR
         </span>
       </li>
@@ -180,19 +193,30 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
 
   const { pr, summary } = row
   const mergeable = mergeableLabel(pr)
+  const checkVariant = CHECK_PILL[summary.checkSummary]
   return (
-    <li className="grid grid-cols-[auto_auto_1fr_auto] items-baseline gap-2 border-b border-ink/10 px-3 py-1.5 font-[var(--font-hand)] text-[0.92rem] leading-snug last:border-b-0">
-      <span className="shrink-0 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+    <li
+      className="t-body-md grid grid-cols-[auto_auto_1fr_auto] items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <span className="t-label-sm shrink-0 text-dirty-grey">
         {agentsLabel(row.agents)}
       </span>
-      <span
-        className={clsx(
-          'inline-flex justify-center rounded-sm px-1.5 py-px text-[0.6rem] uppercase tracking-wider font-sans',
-          CHECK_PILL[summary.checkSummary]
-        )}
-      >
-        {CHECK_LABEL[summary.checkSummary]}
-      </span>
+      {checkVariant ? (
+        <StatusPill
+          variant={checkVariant}
+          className={clsx(summary.checkSummary === 'pending' && 'animate-pulse')}
+        >
+          {CHECK_LABEL[summary.checkSummary]}
+        </StatusPill>
+      ) : (
+        <span
+          className="t-label-sm chamfer-sm px-1.5 py-0.5"
+          style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
+        >
+          {CHECK_LABEL[summary.checkSummary]}
+        </span>
+      )}
       <button
         type="button"
         onClick={() => openUrl(pr.url)}
@@ -200,22 +224,34 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
         title={`#${pr.number} · ${pr.headBranch} → ${pr.baseBranch}`}
       >
         <div className="flex items-baseline gap-1.5">
-          <span className="shrink-0 text-ink-faint font-sans text-[0.78rem]">
+          <span className="t-body-sm shrink-0 text-dirty-grey">
             #{pr.number}
           </span>
-          <span className="truncate text-ink">{pr.title}</span>
+          <span className="truncate text-van-white">{pr.title}</span>
           {pr.isDraft ? (
-            <span className="rounded-sm bg-ink/15 px-1 py-px text-[0.55rem] uppercase tracking-wide text-ink-soft font-sans">
+            <span
+              className="t-label-sm chamfer-sm px-1 py-px"
+              style={{
+                background: 'rgba(234, 233, 232, 0.10)',
+                color: 'var(--van-white)'
+              }}
+            >
               draft
             </span>
           ) : null}
           {mergeable ? (
-            <span className="rounded-sm bg-status-warn/40 px-1 py-px text-[0.55rem] uppercase tracking-wide text-ink-soft font-sans">
+            <span
+              className="t-label-sm chamfer-sm px-1 py-px"
+              style={{
+                background: 'rgba(255, 154, 74, 0.18)',
+                color: 'var(--pill-pending-fg)'
+              }}
+            >
               {mergeable}
             </span>
           ) : null}
         </div>
-        <div className="truncate text-[0.74rem] text-ink-faint font-sans">
+        <div className="t-body-sm truncate text-dirty-grey">
           {repoLabel(summary)} · {summary.branch} → {pr.baseBranch} ·{' '}
           {relativeTime(pr.updatedAt || pr.createdAt)}
         </div>
@@ -223,7 +259,7 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
       <button
         type="button"
         onClick={() => openUrl(pr.url)}
-        className="shrink-0 text-[0.7rem] uppercase tracking-wide text-mucka-deep hover:underline font-sans"
+        className="t-label-sm shrink-0 text-orange hover:underline"
         title={pr.url}
       >
         open
@@ -254,11 +290,13 @@ export function GitPanel(): React.JSX.Element {
             ? 'error'
             : 'open PRs · CI'
       }
-      paper="lined"
       rightSlot={
         <span className="flex items-center gap-2">
           {failCount > 0 ? (
-            <span className="rounded-sm bg-status-bad px-1.5 py-px text-[0.62rem] uppercase tracking-wide text-paper-cream">
+            <span
+              className="t-label-sm chamfer-sm px-1.5 py-0.5"
+              style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
+            >
               {failCount} fail
             </span>
           ) : null}
@@ -267,7 +305,11 @@ export function GitPanel(): React.JSX.Element {
             onClick={() => {
               for (const a of agents) void refresh(a.id)
             }}
-            className="rounded-sm border border-paper-cream/30 px-1.5 py-0.5 text-[0.65rem] uppercase tracking-wide text-paper-cream/85 hover:bg-paper-cream/15"
+            className="t-label-sm chamfer-sm px-1.5 py-0.5"
+            style={{
+              background: 'rgba(234, 233, 232, 0.12)',
+              color: 'var(--van-white)'
+            }}
             title="Refresh all"
           >
             refresh
@@ -276,10 +318,10 @@ export function GitPanel(): React.JSX.Element {
       }
       className="min-h-0"
     >
-      <div className="h-full min-h-0 overflow-y-auto">
+      <div className="h-full min-h-0 overflow-y-auto" style={{ background: 'var(--surface)' }}>
         {tokenMissing ? (
-          <div className="px-3 py-3 font-[var(--font-hand)] text-[0.88rem] leading-snug text-ink-soft">
-            <p className="font-semibold text-ink">No GitHub token.</p>
+          <div className="t-body-md px-3 py-3 leading-snug text-dirty-grey">
+            <p className="font-semibold text-van-white">No GitHub token.</p>
             <p className="mt-1">
               Add <span className="font-mono text-[0.78rem]">GITHUB_TOKEN</span> to{' '}
               <span className="font-mono text-[0.78rem]">.env</span> and restart.
@@ -289,13 +331,13 @@ export function GitPanel(): React.JSX.Element {
         ) : null}
 
         {tokenError ? (
-          <div className="px-3 py-2 font-[var(--font-hand)] text-[0.88rem] text-status-bad">
+          <div className="t-body-md px-3 py-2" style={{ color: 'var(--red)' }}>
             GitHub: {tokenError}
           </div>
         ) : null}
 
         {rows.length === 0 && !tokenMissing && !tokenError ? (
-          <div className="px-3 py-2 font-[var(--font-hand)] text-[0.88rem] text-ink-faint">
+          <div className="t-body-md px-3 py-2 text-dirty-grey">
             Waiting for first poll…
           </div>
         ) : null}

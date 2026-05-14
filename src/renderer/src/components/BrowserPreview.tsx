@@ -20,32 +20,41 @@ export function BrowserPreview({
     <Clipboard
       title="Preview"
       subtitle={subtitle}
-      paper="plain"
       rightSlot={
         url ? (
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="rounded-sm border border-paper-cream/30 px-2 py-0.5 font-sans text-[0.7rem] uppercase tracking-wide text-paper-cream/85 hover:bg-paper-cream/15"
+            className="t-label-sm chamfer-sm px-2 py-0.5"
+            style={{
+              background: 'rgba(234, 233, 232, 0.12)',
+              color: 'var(--van-white)'
+            }}
             title="Reload iframe"
           >
             reload
           </button>
         ) : (
-          <span className="font-mono text-paper-cream/70 text-[0.65rem]">no url</span>
+          <span className="font-mono text-[0.65rem] text-dirty-grey">no url</span>
         )
       }
       className="min-h-0"
-      bodyClassName="bg-[#10171c]"
+      bodyClassName="bg-surface-2"
     >
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-2 border-b border-black/40 bg-[#1d2730] px-2 py-1">
+        <div
+          className="flex items-center gap-2 border-b px-2 py-1"
+          style={{ background: 'var(--charcoal)', borderColor: 'var(--border)' }}
+        >
           <div className="flex gap-1.5">
-            <span className="size-2 rounded-full bg-[#ff5f57]" />
-            <span className="size-2 rounded-full bg-[#febc2e]" />
-            <span className="size-2 rounded-full bg-[#28c840]" />
+            <span className="size-2 rounded-full" style={{ background: '#ff5f57' }} />
+            <span className="size-2 rounded-full" style={{ background: '#febc2e' }} />
+            <span className="size-2 rounded-full" style={{ background: '#28c840' }} />
           </div>
-          <div className="ml-1 flex-1 truncate rounded-sm bg-[#0c1418] px-2 py-1 font-mono text-[0.7rem] text-paper-cream/70">
+          <div
+            className="ml-1 flex-1 truncate chamfer-sm px-2 py-1 font-mono text-[0.7rem]"
+            style={{ background: 'var(--surface2)', color: 'var(--dirty-grey)' }}
+          >
             {url ?? `http://localhost:${placeholderPort}`}
           </div>
         </div>
@@ -61,13 +70,19 @@ export function BrowserPreview({
             />
           ) : (
             <div className="grid h-full place-items-center px-4">
-              <div className="paper-grid w-full rounded-sm border border-ink/15 p-4 font-[var(--font-hand)] text-[0.92rem] leading-snug text-ink-soft shadow-[0_2px_6px_rgba(0,0,0,0.45)]">
-                <p className="font-semibold text-ink">
+              <div
+                className="chamfer-card w-full p-4 t-body-md leading-snug"
+                style={{
+                  background: 'var(--surface)',
+                  color: 'var(--dirty-grey)'
+                }}
+              >
+                <p className="t-heading-md text-van-white">
                   {agent
                     ? `No preview URL set for ${agent.displayName}.`
                     : 'No agent assigned to this preview slot.'}
                 </p>
-                <p className="mt-2 text-[0.82rem] text-ink-soft">
+                <p className="mt-2 t-body-sm text-dirty-grey">
                   Set one in Settings (⌘,) — point it at the agent&apos;s dev
                   server (e.g. http://localhost:{placeholderPort}).
                 </p>

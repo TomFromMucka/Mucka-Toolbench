@@ -57,16 +57,25 @@ export function ConfirmStrip(): React.JSX.Element | null {
   const editable = pendingConfirm.editable
 
   return (
-    <div className="paper-plain attention-glow mx-auto mt-2 flex w-[min(960px,92vw)] flex-col gap-2 rounded-md border border-mucka/60 px-4 py-2 shadow-[0_4px_14px_rgba(0,0,0,0.35)]">
+    <div
+      className="chamfer-card attention-glow mx-auto mt-2 flex w-[min(960px,92vw)] flex-col gap-2 px-4 py-2.5"
+      style={{ background: 'var(--surface)' }}
+    >
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[0.7rem] uppercase tracking-[0.16em] text-mucka-deep">
-          Mucka wants to —
-        </span>
-        <span className="truncate font-[var(--font-hand)] text-[1.05rem] text-ink">
+        <span className="t-label-sm text-orange">Mucka wants to —</span>
+        <span
+          className="truncate"
+          style={{
+            fontFamily: 'var(--font-soehne-breit)',
+            fontWeight: 500,
+            fontSize: '17px',
+            color: 'var(--van-white)'
+          }}
+        >
           {pendingConfirm.summary}
         </span>
         {pendingConfirm.note ? (
-          <span className="truncate text-[0.78rem] text-ink-faint">
+          <span className="t-body-sm truncate text-dirty-grey">
             {pendingConfirm.note}
           </span>
         ) : null}
@@ -79,7 +88,12 @@ export function ConfirmStrip(): React.JSX.Element | null {
             onChange={(e) => setDraft(e.target.value)}
             rows={Math.min(8, Math.max(2, draft.split('\n').length))}
             autoFocus
-            className="w-full resize-y rounded-sm border border-ink/25 bg-paper-cream px-2 py-1.5 font-mono text-[0.85rem] text-ink focus:border-mucka focus:outline-none focus:ring-1 focus:ring-mucka"
+            className="w-full resize-y rounded-sm px-2 py-1.5 font-mono text-[0.85rem] focus:outline-none"
+            style={{
+              background: 'var(--surface2)',
+              color: 'var(--van-white)',
+              border: '1px solid var(--border-mid)'
+            }}
           />
         ) : (
           <input
@@ -87,14 +101,19 @@ export function ConfirmStrip(): React.JSX.Element | null {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             autoFocus
-            className="w-full rounded-sm border border-ink/25 bg-paper-cream px-2 py-1.5 font-mono text-[0.9rem] text-ink focus:border-mucka focus:outline-none focus:ring-1 focus:ring-mucka"
+            className="w-full rounded-sm px-2 py-1.5 font-mono text-[0.9rem] focus:outline-none"
+            style={{
+              background: 'var(--surface2)',
+              color: 'var(--van-white)',
+              border: '1px solid var(--border-mid)'
+            }}
           />
         )
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
         {editable ? (
-          <span className="mr-auto text-[0.7rem] text-ink-faint">
+          <span className="t-body-sm mr-auto text-dirty-grey">
             edit if you want, ⌘Enter to send · Esc to cancel
           </span>
         ) : null}
@@ -105,9 +124,11 @@ export function ConfirmStrip(): React.JSX.Element | null {
               ? pendingConfirm.resolveEdit?.(null)
               : pendingConfirm.resolveSimple?.(false)
           }
-          className="rounded-sm border border-ink/30 px-3 py-1 font-sans text-[0.78rem] text-ink hover:bg-paper-shadow"
+          className="mucka-btn mucka-btn-tertiary mucka-btn-sm"
         >
-          Cancel <span className="text-ink-faint">(Esc)</span>
+          <span className="mucka-btn-label">
+            Cancel <span style={{ opacity: 0.6 }}>(Esc)</span>
+          </span>
         </button>
         <button
           type="button"
@@ -118,19 +139,21 @@ export function ConfirmStrip(): React.JSX.Element | null {
               : pendingConfirm.resolveSimple?.(true)
           }
           className={clsx(
-            'rounded-sm bg-mucka px-3 py-1 font-sans text-[0.78rem] font-semibold uppercase tracking-wide text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.25)] hover:bg-mucka-deep',
+            'mucka-btn mucka-btn-primary mucka-btn-sm',
             editable !== null && draft.trim().length === 0 && 'cursor-not-allowed opacity-50'
           )}
         >
-          {editable ? (
-            <>
-              Send <span className="text-paper-cream/75">(⌘↵)</span>
-            </>
-          ) : (
-            <>
-              Yes, do it <span className="text-paper-cream/75">(⌘Y)</span>
-            </>
-          )}
+          <span className="mucka-btn-label">
+            {editable ? (
+              <>
+                Send <span style={{ opacity: 0.7 }}>(⌘↵)</span>
+              </>
+            ) : (
+              <>
+                Yes, do it <span style={{ opacity: 0.7 }}>(⌘Y)</span>
+              </>
+            )}
+          </span>
         </button>
       </div>
     </div>

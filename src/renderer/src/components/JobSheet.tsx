@@ -5,15 +5,15 @@ import { useEventsState } from '../state/EventsContext'
 import { Clipboard } from './Clipboard'
 
 const TONE_TEXT: Record<JobEventTone, string> = {
-  normal: 'text-ink',
-  attention: 'text-mucka-deep font-semibold',
+  normal: 'text-van-white',
+  attention: 'text-orange font-semibold',
   win: 'text-status-ok',
   bad: 'text-status-bad'
 }
 
 const TONE_DOT: Record<JobEventTone, string> = {
-  normal: 'bg-ink-faint',
-  attention: 'bg-mucka',
+  normal: 'bg-dirty-grey',
+  attention: 'bg-orange',
   win: 'bg-status-ok',
   bad: 'bg-status-bad'
 }
@@ -51,21 +51,17 @@ export function JobSheet(): React.JSX.Element {
     <Clipboard
       title="Job Sheet"
       subtitle="recent activity"
-      paper="lined"
       className="min-h-0"
-      rightSlot={
-        <span className="text-[0.65rem] uppercase tracking-wide text-paper-cream/70">
-          {events.length}
-        </span>
-      }
+      rightSlot={<span>{events.length}</span>}
     >
-      <div className="h-full min-h-0 overflow-y-auto px-3 py-2">
+      <div
+        className="h-full min-h-0 overflow-y-auto px-3 py-2"
+        style={{ background: 'var(--surface)' }}
+      >
         {loading ? (
-          <p className="font-[var(--font-hand)] text-[0.88rem] text-ink-faint">
-            Loading…
-          </p>
+          <p className="t-body-md text-dirty-grey">Loading…</p>
         ) : events.length === 0 ? (
-          <p className="font-[var(--font-hand)] text-[0.88rem] text-ink-faint">
+          <p className="t-body-md text-dirty-grey">
             No activity yet — events appear as Vercel deploys move, PRs open,
             and Mucka makes changes.
           </p>
@@ -75,17 +71,17 @@ export function JobSheet(): React.JSX.Element {
               const prevTs = idx > 0 ? events[idx - 1]?.ts ?? null : null
               const day = fmtDayBreak(prevTs, event.ts)
               return (
-                <li key={event.id} className="font-[var(--font-hand)]">
+                <li key={event.id}>
                   {day ? (
-                    <div className="mt-3 mb-1 text-[0.62rem] uppercase tracking-[0.16em] text-ink-faint font-sans">
+                    <div className="t-label-sm mt-3 mb-1 text-dirty-grey">
                       {day}
                     </div>
                   ) : null}
-                  <div className="grid grid-cols-[44px_64px_1fr] items-baseline gap-2 text-[0.92rem] leading-[26px]">
-                    <span className="text-ink-faint font-sans text-[0.7rem] tabular-nums">
+                  <div className="grid grid-cols-[44px_64px_1fr] items-baseline gap-2 t-body-md leading-[26px]">
+                    <span className="t-label-sm text-dirty-grey tabular-nums">
                       {fmtTime(event.ts)}
                     </span>
-                    <span className="flex items-center gap-1.5 text-[0.7rem] uppercase tracking-wide text-ink-faint font-sans">
+                    <span className="t-label-sm flex items-center gap-1.5 text-dirty-grey">
                       <span
                         className={clsx(
                           'inline-block size-2 rounded-full',

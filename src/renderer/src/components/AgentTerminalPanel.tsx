@@ -138,7 +138,14 @@ export function AgentTerminalPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-stretch gap-px overflow-x-auto border-b border-black/60 bg-[#241f1a] px-1 py-1 text-paper-cream/85">
+      <div
+        className="flex items-stretch gap-px overflow-x-auto border-b px-1 py-1"
+        style={{
+          background: 'var(--charcoal)',
+          borderColor: 'var(--border)',
+          color: 'rgba(234, 233, 232, 0.85)'
+        }}
+      >
         {tabs.map((tab) => {
           const isActive = tab.terminalId === activeId
           const isPrimary = tab.terminalId === agent.id
@@ -146,12 +153,19 @@ export function AgentTerminalPanel({
             <div
               key={tab.terminalId}
               className={clsx(
-                'group flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-sans text-[0.72rem] uppercase tracking-wide',
+                'group t-label-sm flex items-center gap-1 chamfer-sm px-1.5 py-0.5',
                 isActive
-                  ? 'bg-[#1a1612] text-paper-cream shadow-[inset_0_-2px_0_#ff4e00]'
-                  : 'text-paper-cream/55 hover:bg-paper-cream/10 hover:text-paper-cream/85',
-                tab.isPreviewSource && !isActive && 'text-mucka/80'
+                  ? 'shadow-[inset_0_-2px_0_var(--orange)]'
+                  : 'opacity-60 hover:opacity-100',
+                tab.isPreviewSource && !isActive && 'text-orange'
               )}
+              style={{
+                background: isActive ? 'var(--surface2)' : 'transparent',
+                color:
+                  tab.isPreviewSource && !isActive
+                    ? 'var(--orange)'
+                    : 'var(--van-white)'
+              }}
             >
               <button
                 type="button"
@@ -182,7 +196,7 @@ export function AgentTerminalPanel({
                       ? 'Stop the preview — kills this terminal and clears the iframe'
                       : 'Close this sub-terminal'
                   }
-                  className="grid size-4 place-items-center rounded-sm text-[0.8rem] leading-none text-paper-cream/45 hover:bg-paper-cream/15 hover:text-paper-cream/90"
+                  className="grid size-4 place-items-center text-[0.8rem] leading-none hover:bg-van-white/15"
                 >
                   ×
                 </button>
@@ -195,7 +209,8 @@ export function AgentTerminalPanel({
           type="button"
           onClick={addTab}
           title="New shell — split this agent's worktree into another tab"
-          className="ml-1 grid size-6 place-items-center rounded-sm text-[1rem] leading-none text-paper-cream/55 hover:bg-paper-cream/15 hover:text-paper-cream"
+          className="chamfer-sm ml-1 grid size-6 place-items-center text-[1rem] leading-none hover:bg-van-white/15"
+          style={{ color: 'var(--van-white)' }}
         >
           +
         </button>
@@ -203,7 +218,11 @@ export function AgentTerminalPanel({
           type="button"
           onClick={startPreview}
           title={`Fresh preview — runs \`${PREVIEW_COMMAND}\` in a new tab and binds its localhost URL to the iframe`}
-          className="ml-1 flex items-center gap-1 rounded-sm border border-mucka/40 bg-mucka/15 px-1.5 py-0.5 font-sans text-[0.72rem] uppercase tracking-wide text-mucka hover:bg-mucka/25"
+          className="chamfer-sm ml-1 t-label-sm flex items-center gap-1 px-1.5 py-0.5"
+          style={{
+            background: 'rgba(255, 78, 0, 0.18)',
+            color: 'var(--orange)'
+          }}
         >
           <span className="font-mono text-[0.7rem]">▶</span>
           <span>preview</span>

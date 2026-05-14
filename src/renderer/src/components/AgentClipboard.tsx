@@ -15,11 +15,11 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
 }
 
 const STATUS_DOT: Record<AgentStatus, string> = {
-  idle: 'bg-ink-faint',
+  idle: 'bg-dirty-grey',
   thinking: 'bg-status-warn',
   editing: 'bg-status-ok',
   running: 'bg-status-ok animate-pulse',
-  'awaiting-input': 'bg-mucka',
+  'awaiting-input': 'bg-orange',
   blocked: 'bg-status-bad',
   done: 'bg-status-ok'
 }
@@ -42,26 +42,28 @@ export function AgentClipboard({
         <GitStatusBadges status={gitStatus} fallbackLabel={agent.branch} />
       }
       attention={agent.needsAttention}
-      paper="plain"
-      bodyClassName="bg-[#1a1612]"
+      bodyClassName="bg-surface-2"
       rightSlot={
-        <span className="flex items-center gap-1.5 text-paper-cream/80">
+        <span className="flex items-center gap-1.5">
           <span
             className={clsx(
               'inline-block size-2 rounded-full',
               STATUS_DOT[agent.status]
             )}
           />
-          {STATUS_LABEL[agent.status]}
+          <span style={{ color: 'rgba(234, 233, 232, 0.85)' }}>
+            {STATUS_LABEL[agent.status]}
+          </span>
         </span>
       }
     >
       <div className="flex h-full min-h-0 flex-col">
         <div
           className={clsx(
-            'border-b border-black/60 bg-paper-cream px-3 py-1.5 font-[var(--font-hand)] text-[0.9rem] leading-snug',
-            agent.needsAttention ? 'text-mucka-deep' : 'text-ink-soft'
+            't-body-sm border-b px-3 py-1.5 leading-snug',
+            agent.needsAttention ? 'text-orange' : 'text-dirty-grey'
           )}
+          style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
         >
           {agent.headline}
         </div>

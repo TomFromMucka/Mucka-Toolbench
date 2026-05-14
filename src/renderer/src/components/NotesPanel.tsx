@@ -36,7 +36,6 @@ export function NotesPanel(): React.JSX.Element {
     <Clipboard
       title="Notes"
       subtitle="scratchpad · autosaves"
-      paper="lined"
       className="min-h-0"
     >
       <textarea
@@ -46,7 +45,11 @@ export function NotesPanel(): React.JSX.Element {
         onKeyDown={onKeyDown}
         spellCheck
         placeholder={PLACEHOLDER}
-        className="h-full w-full resize-none border-0 bg-transparent px-4 py-3 font-[var(--font-hand)] text-[0.95rem] leading-[1.55] text-ink placeholder:text-ink-faint focus:outline-none"
+        className="h-full w-full resize-none border-0 px-4 py-3 t-body-lg leading-[1.55] focus:outline-none"
+        style={{
+          background: 'var(--surface)',
+          color: 'var(--van-white)'
+        }}
       />
     </Clipboard>
   )

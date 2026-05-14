@@ -21,12 +21,7 @@ interface SegmentBubbleProps {
 function SegmentBubble({ segment, role }: SegmentBubbleProps): React.JSX.Element {
   if (segment.kind === 'tool_call') {
     return (
-      <div
-        className={clsx(
-          'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-sans text-[0.7rem] uppercase tracking-wide',
-          'bg-mucka/15 text-mucka-deep'
-        )}
-      >
+      <div className="chamfer-sm inline-flex items-center gap-1.5 px-2 py-0.5 t-label-sm bg-orange/15 text-orange">
         <span className="font-mono text-[0.7rem]">⚙</span>
         <span>{segment.toolName ?? 'tool'}</span>
       </div>
@@ -36,12 +31,18 @@ function SegmentBubble({ segment, role }: SegmentBubbleProps): React.JSX.Element
   return (
     <div
       className={clsx(
-        'max-w-[88%] rounded-md px-2.5 py-1.5 font-[var(--font-hand)] text-[0.92rem] leading-snug shadow-[0_1px_2px_rgba(0,0,0,0.12)] whitespace-pre-wrap',
-        role === 'assistant'
-          ? 'bg-mucka/95 text-paper-cream'
-          : 'bg-ink/10 text-ink',
-        isVoice && 'border-l-2 border-mucka/70 italic'
+        'chamfer-sm max-w-[88%] px-2.5 py-1.5 t-body-md leading-snug whitespace-pre-wrap',
+        isVoice && 'italic'
       )}
+      style={{
+        background:
+          role === 'assistant' ? 'var(--orange)' : 'rgba(234, 233, 232, 0.08)',
+        color:
+          role === 'assistant' ? 'var(--charcoal)' : 'var(--van-white)',
+        ...(isVoice && {
+          boxShadow: 'inset 3px 0 0 var(--orange)'
+        })
+      }}
     >
       {segment.text}
     </div>
@@ -61,7 +62,7 @@ function ChatMessage({ message }: { message: MuckaTextMessage }): React.JSX.Elem
       {message.segments.map((seg, idx) => (
         <SegmentBubble key={idx} segment={seg} role={message.role} />
       ))}
-      <span className="text-[0.65rem] text-ink-faint">
+      <span className="t-label-sm text-dirty-grey">
         {label} · {viaVoice ? 'voice · ' : ''}
         {formatTime(message.ts)}
       </span>
@@ -124,18 +125,20 @@ export function MuckaChat(): React.JSX.Element {
     <Clipboard
       title="Mucka — chat"
       subtitle="text via Claude · voice via ElevenLabs"
-      paper="plain"
-      rightSlot={<span className="text-paper-cream/65">{indicator}</span>}
+      rightSlot={<span>{indicator}</span>}
       className="min-h-0"
     >
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 flex-col" style={{ background: 'var(--surface)' }}>
         <div
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2"
         >
           {textMissing ? (
-            <div className="rounded-md bg-status-warn/15 px-3 py-2 font-[var(--font-hand)] text-[0.88rem] leading-snug text-ink-soft">
-              <strong className="text-ink">ANTHROPIC_API_KEY missing.</strong>{' '}
+            <div
+              className="chamfer-sm t-body-md px-3 py-2 leading-snug"
+              style={{ background: 'rgba(255, 154, 74, 0.12)', color: 'var(--van-white)' }}
+            >
+              <strong>ANTHROPIC_API_KEY missing.</strong>{' '}
               Add it to <span className="font-mono text-[0.78rem]">.env</span> and
               restart to enable text chat. Voice still works.
             </div>
@@ -143,7 +146,7 @@ export function MuckaChat(): React.JSX.Element {
 
           {messages.length === 0 && !textMissing ? (
             <div className="grid h-full place-items-center">
-              <p className="max-w-[80%] text-center font-[var(--font-hand)] text-[0.92rem] leading-snug text-ink-faint">
+              <p className="t-body-md max-w-[80%] text-center leading-snug text-dirty-grey">
                 {PLACEHOLDER}
               </p>
             </div>
@@ -153,35 +156,47 @@ export function MuckaChat(): React.JSX.Element {
 
           {streaming ? (
             <div className="flex items-start">
-              <div className="inline-flex items-center gap-1 rounded-md bg-mucka/95 px-2.5 py-1.5 text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
-                <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:0ms]" />
-                <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:120ms]" />
-                <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:240ms]" />
+              <div
+                className="chamfer-sm inline-flex items-center gap-1 px-2.5 py-1.5"
+                style={{ background: 'var(--orange)', color: 'var(--charcoal)' }}
+              >
+                <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:0ms]" />
+                <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:120ms]" />
+                <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:240ms]" />
               </div>
             </div>
           ) : null}
 
           {!streaming && isSpeaking ? (
             <div className="flex items-start">
-              <div className="inline-flex items-center gap-2 rounded-md bg-mucka/95 px-2.5 py-1.5 text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
-                <span className="text-[0.72rem] uppercase tracking-wide opacity-80">voice</span>
+              <div
+                className="chamfer-sm inline-flex items-center gap-2 px-2.5 py-1.5"
+                style={{ background: 'var(--orange)', color: 'var(--charcoal)' }}
+              >
+                <span className="t-label-sm opacity-75">voice</span>
                 <span className="flex items-center gap-1">
-                  <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:0ms]" />
-                  <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:120ms]" />
-                  <span className="size-1.5 animate-bounce rounded-full bg-paper-cream/85 [animation-delay:240ms]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:0ms]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:120ms]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:240ms]" />
                 </span>
               </div>
             </div>
           ) : null}
 
           {error ? (
-            <div className="rounded-md bg-status-bad/15 px-3 py-2 font-[var(--font-hand)] text-[0.85rem] text-status-bad">
+            <div
+              className="chamfer-sm t-body-md px-3 py-2"
+              style={{ background: 'rgba(255, 90, 74, 0.15)', color: 'var(--van-white)' }}
+            >
               {error}
             </div>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-ink/15 bg-paper-shadow/60 px-2 py-1.5">
+        <div
+          className="flex items-center gap-2 border-t px-2 py-1.5"
+          style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}
+        >
           <input
             type="text"
             value={draft}
@@ -196,22 +211,26 @@ export function MuckaChat(): React.JSX.Element {
                 : 'Set ANTHROPIC_API_KEY to enable text chat.'
             }
             className={clsx(
-              'flex-1 rounded-sm bg-paper-cream px-2 py-1 font-[var(--font-hand)] text-[0.92rem] text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-mucka/50',
-              !textOk && 'cursor-not-allowed text-ink-faint'
+              'chamfer-sm t-body-md flex-1 px-2 py-1 focus:outline-none',
+              !textOk && 'cursor-not-allowed'
             )}
+            style={{
+              background: 'var(--surface)',
+              color: 'var(--van-white)',
+              fontFamily: 'var(--font-soehne)'
+            }}
           />
           <button
             type="button"
             onClick={() => void handleSend()}
             disabled={!textOk || streaming || draft.trim().length === 0}
             className={clsx(
-              'rounded-sm px-2 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-paper-cream shadow-[0_1px_2px_rgba(0,0,0,0.2)]',
-              draft.trim().length > 0 && textOk && !streaming
-                ? 'bg-mucka hover:bg-mucka-deep'
-                : 'cursor-not-allowed bg-mucka/40 text-paper-cream/70'
+              'mucka-btn mucka-btn-primary mucka-btn-sm',
+              (draft.trim().length === 0 || !textOk || streaming) &&
+                'cursor-not-allowed opacity-50'
             )}
           >
-            send
+            <span className="mucka-btn-label">send</span>
           </button>
         </div>
       </div>
