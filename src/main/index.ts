@@ -54,24 +54,16 @@ import {
 } from './db/roadmap'
 import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
-import * as MuckaTextApi from './mucka/MuckaText'
-import * as MuckaTextAgentApi from './mucka/MuckaTextAgent'
-
-// MUCKA_TEXT_BACKEND=agent uses the Claude Agent SDK (subscription auth).
-// Anything else falls back to the direct Anthropic SDK path (API key).
-const USE_AGENT_BACKEND =
-  (process.env.MUCKA_TEXT_BACKEND?.trim().toLowerCase() ?? '') === 'agent'
-
-const MT = USE_AGENT_BACKEND ? MuckaTextAgentApi : MuckaTextApi
-
-const muckaTextAcceptToolResult = MT.acceptToolResult
-const muckaTextAppendVoice = MT.appendVoiceMessage
-const bindMuckaTextBroadcaster = MT.bindMuckaTextBroadcaster
-const muckaTextClearHistory = MT.clearHistory
-const muckaTextStatus = MT.getStatus
-const muckaTextListHistory = MT.listHistory
-const muckaTextSendMessage = MT.sendMessage
-const unbindMuckaTextBroadcaster = MT.unbindMuckaTextBroadcaster
+import {
+  acceptToolResult as muckaTextAcceptToolResult,
+  appendVoiceMessage as muckaTextAppendVoice,
+  bindMuckaTextBroadcaster,
+  clearHistory as muckaTextClearHistory,
+  getStatus as muckaTextStatus,
+  listHistory as muckaTextListHistory,
+  sendMessage as muckaTextSendMessage,
+  unbindMuckaTextBroadcaster
+} from './mucka/MuckaTextAgent'
 import { PtyManager } from './pty/PtyManager'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'

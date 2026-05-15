@@ -114,7 +114,6 @@ export function MuckaChat(): React.JSX.Element {
           : null
 
   const textOk = status?.kind === 'ok'
-  const textMissing = status?.kind === 'missing-key'
   const voiceOk = credentialStatus.kind === 'ok'
 
   const indicator =
@@ -123,11 +122,9 @@ export function MuckaChat(): React.JSX.Element {
       ? 'Mucka typing…'
       : textOk
         ? voiceOk
-          ? 'text + voice'
-          : 'text mode'
-        : textMissing
-          ? 'text key missing'
-          : 'idle')
+          ? 'voice · text via Claude Code'
+          : 'text via Claude Code'
+        : 'idle')
 
   async function handleSend(): Promise<void> {
     const text = draft.trim()
@@ -184,18 +181,7 @@ export function MuckaChat(): React.JSX.Element {
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2"
         >
-          {textMissing ? (
-            <div
-              className="chamfer-sm t-body-md px-3 py-2 leading-snug"
-              style={{ background: 'rgba(255, 154, 74, 0.12)', color: 'var(--van-white)' }}
-            >
-              <strong>ANTHROPIC_API_KEY missing.</strong>{' '}
-              Add it to <span className="font-mono text-[0.78rem]">.env</span> and
-              restart to enable text chat. Voice still works.
-            </div>
-          ) : null}
-
-          {messages.length === 0 && !textMissing ? (
+          {messages.length === 0 ? (
             <div className="grid h-full place-items-center">
               <p className="t-body-md max-w-[80%] text-center leading-snug text-dirty-grey">
                 {PLACEHOLDER}
@@ -274,7 +260,7 @@ export function MuckaChat(): React.JSX.Element {
                   : runningCount > 0
                     ? `Type to Mucka · ⌘⏎ broadcast to ${runningCount} agent${runningCount === 1 ? '' : 's'}`
                     : 'Type to Mucka (Claude)…'
-                : 'Set ANTHROPIC_API_KEY to enable text chat.'
+                : 'Run `claude login` to enable text chat.'
             }
             className={clsx(
               'chamfer-sm t-body-md flex-1 px-3 focus:outline-none',
