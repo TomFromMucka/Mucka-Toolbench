@@ -95,4 +95,10 @@ function migrate(d: DatabaseType): void {
   if (!colNames.has('vercel_project_id')) {
     d.exec(`ALTER TABLE agents ADD COLUMN vercel_project_id TEXT`)
   }
+  if (!colNames.has('running')) {
+    // Default to 0 (idle): existing agents start stopped after this migration
+    // and Tom presses Start when he wants them. Avoids four zsh sessions
+    // chewing on the worktrees before he's ready.
+    d.exec(`ALTER TABLE agents ADD COLUMN running INTEGER NOT NULL DEFAULT 0`)
+  }
 }

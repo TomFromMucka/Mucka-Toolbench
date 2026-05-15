@@ -249,6 +249,47 @@ function registerIpc(): void {
     return updated
   })
 
+  ipcMain.handle('agents:start', async (_event, agentId: AgentId) => {
+    const current = getAgentConfig(agentId)
+    if (!current) throw new Error(`Unknown agent: ${agentId}`)
+    if (!current.running) {
+      const ordered = listAgentsFromDb()
+      const sortOrder = ordered.findIndex((a) => a.id === agentId)
+      upsertAgent(
+        { ...current, running: true },
+        sortOrder < 0 ? ordered.length : sortOrder
+      )
+      logEvent({
+        source: agentId,
+        kind: 'agent.start',
+        message: 'Started.',
+        tone: 'normal'
+      })
+    }
+    return getAgentConfig(agentId)
+  })
+
+  ipcMain.handle('agents:stop', async (_event, agentId: AgentId) => {
+    const current = getAgentConfig(agentId)
+    if (!current) throw new Error(`Unknown agent: ${agentId}`)
+    ptyManager?.killByAgent(agentId)
+    if (current.running) {
+      const ordered = listAgentsFromDb()
+      const sortOrder = ordered.findIndex((a) => a.id === agentId)
+      upsertAgent(
+        { ...current, running: false },
+        sortOrder < 0 ? ordered.length : sortOrder
+      )
+      logEvent({
+        source: agentId,
+        kind: 'agent.stop',
+        message: 'Stopped.',
+        tone: 'normal'
+      })
+    }
+    return getAgentConfig(agentId)
+  })
+
   ipcMain.handle('git:refresh', async (_event, agentId: AgentId) => {
     if (!gitService) throw new Error('git service not ready')
     return gitService.refreshOne(agentId)

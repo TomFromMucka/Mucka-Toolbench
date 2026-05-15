@@ -110,6 +110,13 @@ export interface AgentConfig {
    * in the worktree on demand. Explicit value here overrides auto-detect.
    */
   vercelProjectId: string | null
+  /**
+   * Whether the agent's primary PTY is currently running. When false the
+   * clipboard shows a "Start" screen and no shells are spawned. Persists
+   * across cockpit restarts so an intentionally-stopped agent stays
+   * stopped next session.
+   */
+  running: boolean
 }
 
 /**
@@ -163,6 +170,7 @@ export type AgentUpdate = Partial<
     | 'attentionReason'
     | 'previewUrl'
     | 'vercelProjectId'
+    | 'running'
   >
 > & { id: AgentId }
 
@@ -344,6 +352,10 @@ export interface MuckaTextToolResult {
 export interface MuckaApi {
   listAgents(): Promise<AgentConfig[]>
   updateAgent(patch: AgentUpdate): Promise<AgentConfig>
+  /** Spawn the agent's primary shell + flip `running` to true. */
+  startAgent(agentId: AgentId): Promise<AgentConfig>
+  /** Kill the agent's primary + all sub-terminals, set `running` false. */
+  stopAgent(agentId: AgentId): Promise<AgentConfig>
   pickDirectory(opts?: { defaultPath?: string }): Promise<string | null>
   spawnPty(req: PtySpawnRequest): Promise<void>
   writePty(req: PtyWriteRequest): void

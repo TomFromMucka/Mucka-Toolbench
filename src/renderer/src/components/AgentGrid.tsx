@@ -84,7 +84,8 @@ export function AgentGrid({
           needsAttention: false,
           attentionReason: null,
           previewUrl: null,
-          vercelProjectId: null
+          vercelProjectId: null,
+          running: false
         }))
 
   return (

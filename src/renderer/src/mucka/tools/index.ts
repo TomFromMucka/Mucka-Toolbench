@@ -499,6 +499,29 @@ function makeSetAgentCommand(deps: ToolDeps) {
   }
 }
 
+function makeStartAgent(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    await window.mucka.startAgent(agentId)
+    await deps.reloadAgents()
+    return `Started ${agentId}.`
+  }
+}
+
+function makeStopAgent(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const ok = await deps.requestConfirm({
+      summary: `Stop ${agentId}`,
+      note: `Kills the primary shell and every sub-terminal for ${agentId}. Any unsaved work is lost.`
+    })
+    if (!ok) return `Tom said no. ${agentId} kept running.`
+    await window.mucka.stopAgent(agentId)
+    await deps.reloadAgents()
+    return `Stopped ${agentId}.`
+  }
+}
+
 function makeRestartAgent(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
@@ -595,6 +618,8 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     clear_attention: makeClearAttention(deps),
     set_agent_preview: makeSetAgentPreview(deps),
 
+    start_agent: makeStartAgent(deps),
+    stop_agent: makeStopAgent(deps),
     set_agent_worktree: makeSetAgentWorktree(deps),
     set_agent_command: makeSetAgentCommand(deps),
     restart_agent: makeRestartAgent(deps),

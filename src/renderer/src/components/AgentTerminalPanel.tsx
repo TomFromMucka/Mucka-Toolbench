@@ -1,8 +1,11 @@
 import { useCallback, useRef, useState } from 'react'
 import clsx from 'clsx'
+import { Play, Power } from 'lucide-react'
 import type { AgentConfig, TerminalId } from '@shared/types'
 import { useAgentsState } from '../state/AgentsContext'
 import { AgentTerminal } from './AgentTerminal'
+import { Button } from './ui/Button'
+import { Icon } from './ui/Icon'
 
 interface AgentTerminalPanelProps {
   agent: AgentConfig
@@ -37,6 +40,78 @@ export function AgentTerminalPanel({
   agent
 }: AgentTerminalPanelProps): React.JSX.Element {
   const { reload } = useAgentsState()
+  if (!agent.running) {
+    return <AgentIdleScreen agent={agent} />
+  }
+  return <RunningAgentPanel agent={agent} reload={reload} />
+}
+
+function AgentIdleScreen({
+  agent
+}: {
+  agent: AgentConfig
+}): React.JSX.Element {
+  const { reload } = useAgentsState()
+  const [starting, setStarting] = useState(false)
+  const handleStart = useCallback(async () => {
+    if (starting) return
+    setStarting(true)
+    try {
+      await window.mucka.startAgent(agent.id)
+      await reload()
+    } finally {
+      setStarting(false)
+    }
+  }, [agent.id, reload, starting])
+
+  const cmdLabel =
+    `${primaryLabel(agent)}${agent.args.length > 0 ? ' ' + agent.args.join(' ') : ''}`
+
+  return (
+    <div
+      className="grid h-full place-items-center px-6"
+      style={{ background: 'var(--surface2)' }}
+    >
+      <div className="flex max-w-[26rem] flex-col items-center gap-3 text-center">
+        <p className="t-label-sm text-dirty-grey">Agent is stopped</p>
+        <p className="t-body-sm text-dirty-grey">
+          will run{' '}
+          <span
+            className="font-mono"
+            style={{ color: 'var(--van-white)' }}
+          >
+            {cmdLabel}
+          </span>{' '}
+          in{' '}
+          <span
+            className="font-mono"
+            style={{ color: 'var(--van-white)' }}
+          >
+            {agent.worktreePath}
+          </span>
+        </p>
+        <Button
+          variant="primary"
+          size="md"
+          leadingIcon={Play}
+          trailingIcon={null}
+          onClick={() => void handleStart()}
+          disabled={starting}
+        >
+          {starting ? 'Starting…' : 'Start agent'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function RunningAgentPanel({
+  agent,
+  reload
+}: {
+  agent: AgentConfig
+  reload: () => Promise<void>
+}): React.JSX.Element {
   const [tabs, setTabs] = useState<TerminalTab[]>(() => [
     { terminalId: agent.id, label: primaryLabel(agent), isPreviewSource: false }
   ])
@@ -44,6 +119,18 @@ export function AgentTerminalPanel({
   const counterRef = useRef(1)
   const detectionBufferRef = useRef('')
   const lastPushedUrlRef = useRef<string | null>(null)
+  const [stopping, setStopping] = useState(false)
+
+  const handleStop = useCallback(async (): Promise<void> => {
+    if (stopping) return
+    setStopping(true)
+    try {
+      await window.mucka.stopAgent(agent.id)
+      await reload()
+    } finally {
+      setStopping(false)
+    }
+  }, [agent.id, reload, stopping])
 
   const clearPreviewUrl = useCallback((): void => {
     void window.mucka
@@ -226,6 +313,23 @@ export function AgentTerminalPanel({
         >
           <span className="font-mono text-[0.7rem]">▶</span>
           <span>preview</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleStop()}
+          disabled={stopping}
+          title="Stop this agent — kills the primary shell and all sub-terminals"
+          className={clsx(
+            'chamfer-sm ml-auto t-label-sm flex items-center gap-1 px-1.5 py-0.5',
+            stopping && 'opacity-50'
+          )}
+          style={{
+            background: 'rgba(234, 233, 232, 0.08)',
+            color: 'var(--van-white)'
+          }}
+        >
+          <Icon icon={Power} size={12} />
+          <span>{stopping ? 'stopping…' : 'stop'}</span>
         </button>
       </div>
 

@@ -108,6 +108,10 @@ These run as soon as you call them. No confirmation needed.
   dev-server URL (e.g. `http://localhost:3001`). Pass an empty url to
   clear. The first two agents with a preview fill the left/right slots
   in display order.
+- `start_agent` — spin up an idle agent (spawn its primary shell at
+  its configured worktree). Agents default to idle on cockpit boot;
+  Tom presses Start when he's ready, or you call this when he says
+  "wake up Sammy" / "get Kev going". Non-destructive.
 - `remember` — save or update a memory. Follow the *Memory* workflow
   above (notice → check → amend/replace/new). Upserts by `topic`, so
   re-saving with the same slug overwrites. Auto-executes — no
@@ -123,6 +127,10 @@ before reporting back.
   Restarts the shell.
 - `restart_agent` — kill + respawn the current shell with no config
   change.
+- `stop_agent` — park an idle agent. Kills the primary shell + every
+  sub-terminal; config preserved so `start_agent` brings it back.
+  Confirms because unsaved state in the shell is lost. Use when Tom
+  says "shut Dave down" / "park that one".
 - `send_to_agent` — type a message straight into an agent's terminal
   and press Enter. This is the "I noticed X, get Y to fix it" tool.
   The strip is editable, so Tom can tweak your wording before it
