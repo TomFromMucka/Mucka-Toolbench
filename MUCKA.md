@@ -40,7 +40,8 @@ or "Tom, eyes here".
 **Mucka middle column.**
 - Voice mode (ElevenLabs Conv AI) — `⌘M` or banner mic button.
   Connection acknowledged by a two-tone chime; no spoken welcome.
-- Text mode (Claude `claude-sonnet-4-6`, streaming, prompt-cached)
+- Text mode via the Claude Agent SDK — uses Tom's Claude Code
+  subscription auth (`claude login`), no API key required. Streams
   with full tool parity to voice. Type in the chat input; voice
   session is not disturbed.
 - **Shared chat history** — voice utterances and typed turns persist
@@ -133,11 +134,19 @@ with `startSession` via the shared `clientTools` map. Prompt is
 source-of-truth in `src/main/mucka/prompts/pm.md`; sync to the agent
 with `npm run mucka:sync`.
 
-**Mucka text (`src/main/mucka/MuckaText.ts`).** Anthropic SDK,
-streaming with tool-use loop. Tools dispatch back to the renderer
-over IPC; results return via a pending-call Map with a 60s timeout.
-System prompt is the same `pm.md` content, with prompt caching set
-to `ephemeral`.
+**Mucka text (`src/main/mucka/MuckaTextAgent.ts` +
+`src/main/mucka/agentTools.ts`).** `@anthropic-ai/claude-agent-sdk`
+(`query()`) under the hood — spawns the `claude` CLI so the user's
+Pro/Max subscription auth applies (no ANTHROPIC_API_KEY needed).
+Streams via `includePartialMessages: true`, parses
+`content_block_delta` text deltas for live typing, persists final
+assistant turns to the same `chat_messages` table as voice. Tools
+are converted from the shared `TOOL_DEFINITIONS` schema into
+Zod-backed `tool()` defs and bundled in an in-process MCP server
+(`buildMuckaMcpServer`) passed via `options.mcpServers`. Each tool
+handler dispatches back to the renderer over IPC; results return
+via a pending-call Map with a 60s timeout. Session continuity
+across turns this boot uses `options.continue: true`.
 
 **Cockpit doc (`src/main/doc/CockpitDoc.ts`).** Reads `MUCKA.md`
 from the project root, caches by mtime, optionally returns a single
@@ -175,6 +184,12 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-15** — Text-mode Mucka migrated to the Claude Agent SDK.
+  Auth now flows through the `claude` CLI (Pro/Max subscription) so
+  ANTHROPIC_API_KEY is no longer required for text. Same prompt, same
+  31 tools, same renderer flow (confirm strips, edit strips) — just a
+  different engine. Old `MuckaText.ts` + `@anthropic-ai/sdk` direct
+  dep retired. Chat header shows "text via Claude Code".
 - **2026-05-15** — Cross-agent broadcast. `⌘⏎` in the Mucka chat input
   types the current draft into every running agent's primary terminal
   in parallel (plain Enter still goes to Mucka). New `broadcast:send`
