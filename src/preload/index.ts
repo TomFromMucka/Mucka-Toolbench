@@ -10,6 +10,7 @@ import type {
   MemoryListItem,
   MemoryListQuery,
   MemoryWriteInput,
+  FsListing,
   GitStatus,
   GitStatusEvent,
   JobEvent,
@@ -122,6 +123,13 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('memory:remember', input) as Promise<Memory>,
   forgetMemory: (topic: string) =>
     ipcRenderer.invoke('memory:forget', topic) as Promise<boolean>,
+
+  listDir: (path: string) =>
+    ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,
+  revealInOs: (path: string) =>
+    ipcRenderer.invoke('fs:reveal', path) as Promise<void>,
+  openPathInOs: (path: string) =>
+    ipcRenderer.invoke('fs:openPath', path) as Promise<void>,
   onChatStream: (handler: (event: MuckaTextStreamEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextStreamEvent) =>
       handler(payload)

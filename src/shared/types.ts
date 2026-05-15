@@ -273,6 +273,26 @@ export interface CockpitDocPayload {
   found: boolean
 }
 
+/* ─── Filesystem (Explorer panel) ────────────────────────────────────── */
+
+export type FsEntryKind = 'dir' | 'file' | 'symlink' | 'other'
+
+export interface FsEntry {
+  name: string
+  kind: FsEntryKind
+  /** True when the name begins with a dot — UI can dim/hide. */
+  isHidden: boolean
+}
+
+/** Result of listing a directory. `exists` is false when the path is missing. */
+export interface FsListing {
+  path: string
+  exists: boolean
+  entries: FsEntry[]
+  /** Populated when the listing failed (permission, non-dir, etc.). */
+  error: string | null
+}
+
 /* ─── Long-term memory ───────────────────────────────────────────────── */
 
 /**
@@ -404,6 +424,13 @@ export interface MuckaApi {
   getMemory(topic: string): Promise<Memory | null>
   rememberMemory(input: MemoryWriteInput): Promise<Memory>
   forgetMemory(topic: string): Promise<boolean>
+
+  /* Filesystem — used by the Explorer sidebar */
+  listDir(path: string): Promise<FsListing>
+  /** Reveal a file or folder in the OS file manager (Finder on macOS). */
+  revealInOs(path: string): Promise<void>
+  /** Open a file or folder with the OS default handler. */
+  openPathInOs(path: string): Promise<void>
 
   /* Free-form notes (replaces the notice board) */
   getNote(): Promise<string>

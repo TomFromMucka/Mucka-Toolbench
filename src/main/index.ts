@@ -25,6 +25,7 @@ import {
   listMemories,
   rememberMemory
 } from './db/memories'
+import { listDir as fsListDir, openPathInOs, revealInOs } from './fs/index'
 import {
   bindEventsBroadcaster,
   listEvents,
@@ -428,6 +429,12 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('memory:forget', (_event, topic: string) => forgetMemory(topic))
+
+  ipcMain.handle('fs:listDir', (_event, path: string) => fsListDir(path))
+
+  ipcMain.handle('fs:reveal', (_event, path: string) => revealInOs(path))
+
+  ipcMain.handle('fs:openPath', (_event, path: string) => openPathInOs(path))
 
   ipcMain.handle(
     'mucka:cockpit-doc',
