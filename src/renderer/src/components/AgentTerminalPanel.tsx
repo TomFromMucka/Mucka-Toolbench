@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Play, Power } from 'lucide-react'
+import { FolderOpen, Power } from 'lucide-react'
 import type { AgentConfig, TerminalId } from '@shared/types'
 import { useAgentsState } from '../state/AgentsContext'
 import { AgentTerminal } from './AgentTerminal'
@@ -53,19 +53,44 @@ function AgentIdleScreen({
 }): React.JSX.Element {
   const { reload } = useAgentsState()
   const [starting, setStarting] = useState(false)
-  const handleStart = useCallback(async () => {
+
+  // VSCode-style: pick the folder first, then launch the terminal there.
+  // If the user already used this agent in a real folder we still let them
+  // resume at it without re-picking via a small secondary link.
+  const startAt = useCallback(
+    async (path: string): Promise<void> => {
+      setStarting(true)
+      try {
+        if (path !== agent.worktreePath) {
+          await window.mucka.updateAgent({ id: agent.id, worktreePath: path })
+        }
+        await window.mucka.startAgent(agent.id)
+        await reload()
+      } finally {
+        setStarting(false)
+      }
+    },
+    [agent.id, agent.worktreePath, reload]
+  )
+
+  const handleOpenFolder = useCallback(async () => {
     if (starting) return
-    setStarting(true)
-    try {
-      await window.mucka.startAgent(agent.id)
-      await reload()
-    } finally {
-      setStarting(false)
-    }
-  }, [agent.id, reload, starting])
+    const picked = await window.mucka.pickDirectory({
+      defaultPath: agent.worktreePath
+    })
+    if (!picked) return
+    await startAt(picked)
+  }, [agent.worktreePath, startAt, starting])
+
+  const handleResume = useCallback(async () => {
+    if (starting) return
+    await startAt(agent.worktreePath)
+  }, [agent.worktreePath, startAt, starting])
 
   const cmdLabel =
     `${primaryLabel(agent)}${agent.args.length > 0 ? ' ' + agent.args.join(' ') : ''}`
+
+  const hasRememberedFolder = agent.worktreePath.trim().length > 0
 
   return (
     <div
@@ -76,33 +101,42 @@ function AgentIdleScreen({
         <p className="t-label-sm text-dirty-grey">Agent is stopped</p>
         <p className="t-body-sm text-dirty-grey">
           will run{' '}
-          <span
-            className="font-mono"
-            style={{ color: 'var(--van-white)' }}
-          >
+          <span className="font-mono" style={{ color: 'var(--van-white)' }}>
             {cmdLabel}
           </span>{' '}
-          in{' '}
-          <span
-            className="font-mono"
-            style={{ color: 'var(--van-white)' }}
-          >
-            {agent.worktreePath}
-          </span>
+          in the folder you choose
         </p>
         <Button
           variant="primary"
           size="md"
-          leadingIcon={Play}
+          leadingIcon={FolderOpen}
           trailingIcon={null}
-          onClick={() => void handleStart()}
+          onClick={() => void handleOpenFolder()}
           disabled={starting}
         >
-          {starting ? 'Starting…' : 'Start agent'}
+          {starting ? 'Starting…' : 'Open folder…'}
         </Button>
+        {hasRememberedFolder ? (
+          <button
+            type="button"
+            onClick={() => void handleResume()}
+            disabled={starting}
+            className="t-label-sm underline-offset-2 hover:underline disabled:opacity-50"
+            style={{ color: 'var(--dirty-grey)' }}
+            title={agent.worktreePath}
+          >
+            or resume at {lastSegment(agent.worktreePath)}
+          </button>
+        ) : null}
       </div>
     </div>
   )
+}
+
+function lastSegment(path: string): string {
+  const trimmed = path.replace(/\/+$/, '')
+  const i = trimmed.lastIndexOf('/')
+  return i >= 0 ? trimmed.slice(i + 1) : trimmed
 }
 
 function RunningAgentPanel({
