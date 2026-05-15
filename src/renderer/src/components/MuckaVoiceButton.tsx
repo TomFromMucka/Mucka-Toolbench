@@ -48,7 +48,7 @@ export function MuckaVoiceButton(): React.JSX.Element {
         title={title}
         aria-label={LABEL[state]}
         className={clsx(
-          'grid shrink-0 place-items-center overflow-hidden transition-opacity',
+          'block shrink-0 align-middle transition-opacity',
           unavailable && 'cursor-not-allowed opacity-40',
           !unavailable && !live && 'opacity-80 hover:opacity-100',
           connecting && 'animate-pulse'
@@ -56,25 +56,20 @@ export function MuckaVoiceButton(): React.JSX.Element {
         style={{
           height: '34px',
           width: '34px',
-          background: 'transparent'
+          /* The source asset has ~40% transparent padding around the
+             hex-bolt mark. Paint it as a background-image scaled to
+             ~170% so the mark itself fills the visible 34×34 area —
+             keeps the button a pure 34×34 box (no inner <img> baseline
+             shifting the row's alignment). */
+          backgroundImage: `url(${live ? BOLT_ANIMATED : BOLT_STATIC})`,
+          backgroundSize: '170% 170%',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundColor: 'transparent',
+          border: 'none',
+          padding: 0
         }}
-      >
-        {/* The source asset has ~40% transparent padding around the
-            hex-bolt mark. Render it larger than the button and clip the
-            padding so the mark fills the visible 34×34 area. */}
-        <img
-          src={live ? BOLT_ANIMATED : BOLT_STATIC}
-          alt=""
-          aria-hidden
-          draggable={false}
-          style={{
-            display: 'block',
-            height: '56px',
-            width: '56px',
-            objectFit: 'contain'
-          }}
-        />
-      </button>
+      />
 
       {state === 'error' &&
       error?.toLowerCase().includes('microphone access') ? (
