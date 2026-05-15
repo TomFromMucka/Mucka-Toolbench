@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Create-or-update the Mucka Workstation PM agent on ElevenLabs.
+ * Create-or-update the Mucka Toolbench PM agent on ElevenLabs.
  *
  *   npm run mucka:sync                 # create-or-update; pushes prompt + tools
  *   npm run mucka:sync -- --dry-run    # diff vs live agent, write nothing
@@ -25,7 +25,7 @@ import { TOOL_DEFINITIONS } from '../src/shared/mucka-tools.js'
 
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io'
 const PROMPT_PATH = resolve('src/main/mucka/prompts/pm.md')
-const AGENT_NAME = 'Mucka — Workstation PM'
+const AGENT_NAME = 'Mucka — Toolbench PM'
 
 interface CliFlags {
   dryRun: boolean

@@ -1,4 +1,4 @@
-# Mucka Workstation
+# Mucka Toolbench
 
 A personal dev cockpit. One Electron window that supervises four parallel
 Claude Code agents working on the same project (in separate git worktrees),

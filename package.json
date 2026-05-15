@@ -1,5 +1,5 @@
 {
-  "name": "mucka-workstation",
+  "name": "mucka-toolbench",
   "version": "0.1.0",
   "description": "Personal dev cockpit for running parallel Claude Code agents on the same project",
   "main": "./out/main/index.js",
