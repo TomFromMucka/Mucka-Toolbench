@@ -9,6 +9,14 @@ const LABEL = {
   error: 'Voice issue'
 } as const
 
+const BOLT_STATIC = '/brand/mucka-bolt-static.png'
+const BOLT_ANIMATED = '/brand/mucka-bolt.gif'
+
+/**
+ * Voice-toggle button rendered as the Mucka bolt mark. Idle/disconnected
+ * shows the static PNG; an active voice session (listening or speaking)
+ * swaps to the animated GIF. Bitmap assets — never CSS-filter them.
+ */
 export function MuckaVoiceButton(): React.JSX.Element {
   const { state, credentialStatus, error, toggle, openMicSettings } =
     useMuckaSession()
@@ -28,13 +36,11 @@ export function MuckaVoiceButton(): React.JSX.Element {
         ? 'Start a conversation with Mucka (⌘M)'
         : 'End conversation (⌘M)'
 
-  const active =
-    state === 'connecting' ||
-    state === 'listening' ||
-    state === 'speaking'
+  const live = state === 'listening' || state === 'speaking'
+  const connecting = state === 'connecting'
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1">
       <button
         type="button"
         onClick={toggle}
@@ -42,45 +48,20 @@ export function MuckaVoiceButton(): React.JSX.Element {
         title={title}
         aria-label={LABEL[state]}
         className={clsx(
-          'group chamfer-sm inline-flex items-center gap-2 px-3 py-1.5 text-[0.72rem] uppercase tracking-[0.14em] transition-colors',
-          unavailable && 'cursor-not-allowed'
+          'grid h-[34px] w-[34px] place-items-center transition-opacity',
+          unavailable && 'cursor-not-allowed opacity-40',
+          !unavailable && !live && 'opacity-80 hover:opacity-100',
+          connecting && 'animate-pulse'
         )}
-        style={{
-          fontFamily: 'var(--font-soehne)',
-          fontWeight: 500,
-          /* On the charcoal banner: active = primary orange (brand
-             "engaged" channel), idle = subtle van-white wash, disabled
-             = even fainter. */
-          background: unavailable
-            ? 'rgba(234, 233, 232, 0.05)'
-            : active
-              ? 'var(--orange)'
-              : 'rgba(234, 233, 232, 0.10)',
-          color: unavailable
-            ? 'rgba(234, 233, 232, 0.35)'
-            : active
-              ? 'var(--charcoal)'
-              : 'var(--van-white)'
-        }}
+        style={{ background: 'transparent' }}
       >
-        {/* mic glyph */}
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <img
+          src={live ? BOLT_ANIMATED : BOLT_STATIC}
+          alt=""
           aria-hidden
-        >
-          <rect x="9" y="2" width="6" height="12" rx="3" />
-          <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
-          <path d="M12 19v3" />
-        </svg>
-        <span>{LABEL[state]}</span>
-        {active ? <span className="mucka-live-pip" aria-hidden /> : null}
+          className="block h-7 w-auto"
+          draggable={false}
+        />
       </button>
 
       {state === 'error' &&
