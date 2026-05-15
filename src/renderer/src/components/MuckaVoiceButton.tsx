@@ -48,19 +48,28 @@ export function MuckaVoiceButton(): React.JSX.Element {
         title={title}
         aria-label={LABEL[state]}
         className={clsx(
-          'grid h-[34px] place-items-center transition-opacity',
+          'grid shrink-0 place-items-center transition-opacity',
           unavailable && 'cursor-not-allowed opacity-40',
           !unavailable && !live && 'opacity-80 hover:opacity-100',
           connecting && 'animate-pulse'
         )}
-        style={{ background: 'transparent' }}
+        style={{
+          height: '34px',
+          width: '34px',
+          background: 'transparent'
+        }}
       >
         <img
           src={live ? BOLT_ANIMATED : BOLT_STATIC}
           alt=""
           aria-hidden
-          className="block h-full w-auto"
           draggable={false}
+          style={{
+            display: 'block',
+            height: '34px',
+            width: '34px',
+            objectFit: 'contain'
+          }}
         />
       </button>
 
