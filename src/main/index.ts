@@ -44,6 +44,11 @@ import {
   listDocSections,
   readCockpitDoc
 } from './doc/CockpitDoc'
+import {
+  extractProductSection,
+  listProductSections,
+  readProductDoc
+} from './doc/ProductDoc'
 import { mirrorToMarkdown, readRoadmapSection } from './doc/RoadmapMirror'
 import {
   createCard as roadmapCreate,
@@ -69,13 +74,21 @@ import { PtyManager } from './pty/PtyManager'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
-import { getStatus as githubStatus } from './github/GitHub'
+import {
+  fetchPrDiff,
+  getStatus as githubStatus,
+  submitPrReview,
+  type ReviewEvent
+} from './github/GitHub'
 import { GitHubPoller } from './github/GitHubPoller'
 import type {
   MemoryListQuery,
   MemoryWriteInput,
   MicAccess,
   MuckaTextToolResult,
+  PrReviewContext,
+  PrReviewSubmission,
+  PrReviewSubmitted,
   RoadmapCreateInput,
   RoadmapMoveInput,
   RoadmapUpdateInput,
@@ -409,6 +422,94 @@ function registerIpc(): void {
     githubPoller?.refreshOne(agentId) ?? null
   )
 
+  ipcMain.handle(
+    'github:review-context',
+    async (_event, agentId: AgentId): Promise<PrReviewContext> => {
+      const summary = await (githubPoller?.refreshOne(agentId) ?? Promise.resolve(null))
+      if (!summary || !summary.repo) {
+        return {
+          agentId,
+          found: false,
+          pr: null,
+          repo: null,
+          diff: '',
+          diffTruncated: false,
+          error: 'agent has no GitHub repo linked'
+        }
+      }
+      if (!summary.openPr) {
+        return {
+          agentId,
+          found: false,
+          pr: null,
+          repo: summary.repo,
+          diff: '',
+          diffTruncated: false,
+          error: `no open PR on ${summary.repo.owner}/${summary.repo.name} for branch ${summary.branch}`
+        }
+      }
+      try {
+        const fullDiff = await fetchPrDiff(summary.repo, summary.openPr.number)
+        const DIFF_CAP = 40_000
+        const truncated = fullDiff.length > DIFF_CAP
+        const diff = truncated
+          ? fullDiff.slice(0, DIFF_CAP) +
+            `\n\n[diff truncated at ${DIFF_CAP} chars — full diff is ${fullDiff.length} chars]`
+          : fullDiff
+        return {
+          agentId,
+          found: true,
+          pr: summary.openPr,
+          repo: summary.repo,
+          diff,
+          diffTruncated: truncated,
+          error: null
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return {
+          agentId,
+          found: false,
+          pr: summary.openPr,
+          repo: summary.repo,
+          diff: '',
+          diffTruncated: false,
+          error: message
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'github:review-submit',
+    async (_event, input: PrReviewSubmission): Promise<PrReviewSubmitted> => {
+      const summary = await (githubPoller?.refreshOne(input.agentId) ??
+        Promise.resolve(null))
+      if (!summary || !summary.repo || !summary.openPr) {
+        throw new Error('agent has no open PR to review')
+      }
+      const event: ReviewEvent =
+        input.verdict === 'approve'
+          ? 'APPROVE'
+          : input.verdict === 'request-changes'
+            ? 'REQUEST_CHANGES'
+            : 'COMMENT'
+      const result = await submitPrReview(
+        summary.repo,
+        summary.openPr.number,
+        input.body,
+        event
+      )
+      logEvent({
+        source: input.agentId,
+        kind: 'github.review',
+        message: `Mucka ${input.verdict.replace('-', ' ')}d PR #${summary.openPr.number}`,
+        tone: input.verdict === 'request-changes' ? 'attention' : 'win'
+      })
+      return { url: result.url, state: result.state }
+    }
+  )
+
   ipcMain.handle('notes:get', () => getValue(NOTES_KEY) ?? '')
 
   ipcMain.handle('notes:set', (_event, value: string) => {
@@ -558,6 +659,26 @@ function registerIpc(): void {
         return { text: doc.text, sections, found: true }
       }
       const slice = extractDocSection(doc.text, wantSection)
+      return { text: slice, sections, found: slice.length > 0 }
+    }
+  )
+
+  ipcMain.handle(
+    'mucka:product-doc',
+    (_event, section?: string): { text: string; sections: string[]; found: boolean } => {
+      const doc = readProductDoc()
+      const sections = doc.found ? listProductSections(doc.text) : []
+      if (!doc.found) {
+        return { text: '', sections, found: false }
+      }
+      const wantSection =
+        typeof section === 'string' && section.trim().length > 0
+          ? section.trim()
+          : null
+      if (!wantSection) {
+        return { text: doc.text, sections, found: true }
+      }
+      const slice = extractProductSection(doc.text, wantSection)
       return { text: slice, sections, found: slice.length > 0 }
     }
   )

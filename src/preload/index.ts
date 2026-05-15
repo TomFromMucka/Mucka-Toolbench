@@ -40,7 +40,10 @@ import type {
   VercelUpdateEvent,
   GitHubAgentSummary,
   GitHubStatus,
-  GitHubUpdateEvent
+  GitHubUpdateEvent,
+  PrReviewContext,
+  PrReviewSubmission,
+  PrReviewSubmitted
 } from '@shared/types'
 
 const muckaApi: MuckaApi = {
@@ -120,6 +123,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.send('mucka:voice-transcript', input),
   getCockpitDoc: (section?: string) =>
     ipcRenderer.invoke('mucka:cockpit-doc', section) as Promise<CockpitDocPayload>,
+  getProductDoc: (section?: string) =>
+    ipcRenderer.invoke('mucka:product-doc', section) as Promise<CockpitDocPayload>,
 
   listMemories: (query?: MemoryListQuery) =>
     ipcRenderer.invoke('memory:list', query) as Promise<MemoryListItem[]>,
@@ -229,7 +234,12 @@ const muckaApi: MuckaApi = {
       handler(payload)
     ipcRenderer.on('github:update', listener)
     return () => ipcRenderer.off('github:update', listener)
-  }
+  },
+
+  fetchPrReviewContext: (agentId: AgentId) =>
+    ipcRenderer.invoke('github:review-context', agentId) as Promise<PrReviewContext>,
+  submitPrReview: (input: PrReviewSubmission) =>
+    ipcRenderer.invoke('github:review-submit', input) as Promise<PrReviewSubmitted>
 }
 
 if (process.contextIsolated) {

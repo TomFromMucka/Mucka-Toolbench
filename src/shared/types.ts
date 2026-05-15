@@ -490,6 +490,12 @@ export interface MuckaApi {
    */
   getCockpitDoc(section?: string): Promise<CockpitDocPayload>
 
+  /**
+   * Read Tom's PRODUCT.md — mission, brand, current focus, quality
+   * bar. Same shape as getCockpitDoc.
+   */
+  getProductDoc(section?: string): Promise<CockpitDocPayload>
+
   /* Long-term memory (Mucka's persistent notes about Tom + projects) */
   listMemories(query?: MemoryListQuery): Promise<MemoryListItem[]>
   getMemory(topic: string): Promise<Memory | null>
@@ -553,6 +559,10 @@ export interface MuckaApi {
   onGitHubUpdate(
     handler: (event: GitHubUpdateEvent) => void
   ): () => void
+
+  /* PR review — Mucka's review_pr tool */
+  fetchPrReviewContext(agentId: AgentId): Promise<PrReviewContext>
+  submitPrReview(input: PrReviewSubmission): Promise<PrReviewSubmitted>
 }
 
 /* ─── Vercel integration ─────────────────────────────────────────────── */
@@ -691,4 +701,35 @@ export interface GitHubAgentSummary {
 export interface GitHubUpdateEvent {
   agentId: AgentId
   summary: GitHubAgentSummary
+}
+
+/* ─── PR review (Mucka's review_pr tool) ─────────────────────────────── */
+
+export type PrReviewVerdict = 'approve' | 'request-changes' | 'comment'
+
+/** Payload fed back to Mucka so she can draft a review with full context. */
+export interface PrReviewContext {
+  agentId: AgentId
+  found: boolean
+  pr: PullRequest | null
+  repo: { owner: string; name: string } | null
+  /** Unified diff text (capped — see diffTruncated). */
+  diff: string
+  /** True when we capped the diff to keep Mucka's context manageable. */
+  diffTruncated: boolean
+  /** Set when the lookup or fetch failed. */
+  error: string | null
+}
+
+export interface PrReviewSubmission {
+  agentId: AgentId
+  verdict: PrReviewVerdict
+  body: string
+}
+
+export interface PrReviewSubmitted {
+  /** Browser URL of the submitted review. */
+  url: string
+  /** GitHub's review state — usually APPROVED / CHANGES_REQUESTED / COMMENTED. */
+  state: string
 }

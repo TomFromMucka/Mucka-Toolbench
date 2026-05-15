@@ -194,6 +194,22 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     }
   },
   {
+    name: 'get_product_doc',
+    description:
+      "Reads Tom's PRODUCT.md — Mucka Pro's mission, audience, brand & voice, current focus, stack snapshot, quality bar, repo/worktree map, glossary. Call this BEFORE answering substantive questions about what Mucka is, who it's for, how it should look or sound, or what's worth building next — and ALWAYS before reviewing a PR (so your critique is grounded in the actual quality bar). Pass `section` (e.g. \"Mission\", \"Brand & voice\", \"Quality bar\") for a slice; omit for the whole file.",
+    parameters: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          description:
+            'Optional `## Heading` to fetch just that block. Common: Mission, Audience, Brand & voice, Current focus, Stack snapshot, Quality bar, Repos & worktrees, Glossary.'
+        }
+      },
+      required: []
+    }
+  },
+  {
     name: 'get_cockpit_doc',
     description:
       "Reads the cockpit's living spec at MUCKA.md (mission, current capabilities, systems, recent changes, roadmap). Call this BEFORE answering questions about what the toolbench can do, what's coming next, what shipped recently, or when Tom asks for priority suggestions — the doc is the source of truth and isn't in your prompt by default. Pass `section` to fetch just one block (e.g. \"Roadmap\", \"Capabilities\", \"Recent changes\"); omit for the whole file.",
@@ -482,6 +498,49 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         }
       },
       required: ['agent', 'text']
+    }
+  },
+  {
+    name: 'read_pr_diff',
+    description:
+      "Fetches the open PR's unified diff for one agent's branch, plus PR metadata (number, title, author, mergeable state, CI summary). Use BEFORE drafting a review with post_pr_review — you need the actual diff in context to make specific comments. Auto-executes. Output is capped at 40k chars; pass nothing extra, this is one shot. If the agent has no open PR you'll get a clear error you can relay to Tom.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        }
+      },
+      required: ['agent']
+    }
+  },
+  {
+    name: 'post_pr_review',
+    description:
+      "Submit a PR review on the agent's open PR. REQUIRES Tom's confirmation via an editable strip — he sees your full review body and verdict before it lands on GitHub. Always call read_pr_diff first; never review a PR you haven't read. The body should be a structured summary: 1-2 line headline, then bullet observations grouped by file or theme (cite line numbers as `path/to/file.ts:42`), then a verdict line. Be specific and grounded in PRODUCT.md's quality bar — that's what makes the review useful vs. generic.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        },
+        verdict: {
+          type: 'string',
+          description:
+            "approve — the PR can merge as-is. request-changes — needs work before merge. comment — leave thoughts without gating merge. Lean towards 'comment' for first-pass review and only escalate to request-changes when something concrete blocks merge.",
+          enum: ['approve', 'request-changes', 'comment']
+        },
+        body: {
+          type: 'string',
+          description:
+            'The full review markdown. Multi-line is fine. Tom will see this in the confirm strip and may edit before submission.'
+        }
+      },
+      required: ['agent', 'verdict', 'body']
     }
   },
   {

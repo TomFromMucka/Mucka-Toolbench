@@ -367,6 +367,26 @@ async function getCockpitDoc(params: Record<string, unknown>): Promise<string> {
   return doc.text
 }
 
+async function getProductDoc(params: Record<string, unknown>): Promise<string> {
+  const rawSection = params['section']
+  const section =
+    typeof rawSection === 'string' && rawSection.trim().length > 0
+      ? rawSection.trim()
+      : undefined
+  const doc = await window.mucka.getProductDoc(section)
+  if (!doc.found && section) {
+    const available =
+      doc.sections.length > 0
+        ? doc.sections.join(', ')
+        : '(none — PRODUCT.md may be missing or empty)'
+    return `No section "${section}" in PRODUCT.md. Available sections: ${available}.`
+  }
+  if (!doc.found) {
+    return "PRODUCT.md not found at the cockpit root. Tom may not have filled it in yet — ask him to populate it, or work from what's already in MUCKA.md."
+  }
+  return doc.text
+}
+
 async function whatsHappening(): Promise<string> {
   const agents = await window.mucka.listAgents()
   if (agents.length === 0) return 'No agents configured.'
@@ -705,6 +725,79 @@ function makeDeleteRoadmapCard(deps: ToolDeps) {
   }
 }
 
+async function readPrDiffHandler(params: Record<string, unknown>): Promise<string> {
+  const agentId = parseAgentId(params)
+  const ctx = await window.mucka.fetchPrReviewContext(agentId)
+  if (!ctx.found) {
+    return ctx.error ?? `No open PR for ${agentId}.`
+  }
+  const pr = ctx.pr!
+  const repo = ctx.repo!
+  const header = [
+    `PR: ${repo.owner}/${repo.name} #${pr.number} — ${pr.title}`,
+    `Branch: ${pr.headBranch} → ${pr.baseBranch}`,
+    `Author: ${pr.authorLogin ?? '(unknown)'}`,
+    `State: ${pr.state}${pr.isDraft ? ' (draft)' : ''}`,
+    `Mergeable: ${pr.mergeableState ?? '(unknown)'} · mergeable=${pr.mergeable ?? '?'}`,
+    `URL: ${pr.url}`,
+    ctx.diffTruncated
+      ? '⚠ diff truncated — comment on what you can read, ask Tom to point you at specific files if you need the rest.'
+      : null,
+    '',
+    '--- DIFF ---',
+    ''
+  ]
+    .filter((l): l is string => l !== null)
+    .join('\n')
+  return header + ctx.diff
+}
+
+function makePostPrReview(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const verdictRaw = parseString(params, 'verdict').trim().toLowerCase()
+    if (
+      verdictRaw !== 'approve' &&
+      verdictRaw !== 'request-changes' &&
+      verdictRaw !== 'comment'
+    ) {
+      throw new Error(
+        `verdict must be approve / request-changes / comment — got ${verdictRaw}`
+      )
+    }
+    const body = parseString(params, 'body')
+    if (!body.trim()) throw new Error('body must not be empty')
+
+    const verdictLabel =
+      verdictRaw === 'approve'
+        ? 'APPROVE'
+        : verdictRaw === 'request-changes'
+          ? 'REQUEST CHANGES'
+          : 'COMMENT'
+    const approved = await deps.requestEditConfirm({
+      summary: `${verdictLabel} on ${agentId}'s PR`,
+      note:
+        'Mucka has read the diff and drafted this review. Tweak the wording if you want — it submits to GitHub on approve.',
+      editable: { text: body, multiline: true }
+    })
+    if (approved === null) return `Tom said no. No review posted for ${agentId}.`
+    const finalBody = approved.trim()
+    if (!finalBody) return `Tom blanked the review. No review posted for ${agentId}.`
+
+    try {
+      const result = await window.mucka.submitPrReview({
+        agentId,
+        verdict: verdictRaw as 'approve' | 'request-changes' | 'comment',
+        body: finalBody
+      })
+      return `Posted ${verdictLabel.toLowerCase()} on ${agentId}'s PR — ${result.url}`
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return `Review failed: ${message}`
+    }
+  }
+}
+
 function makeBroadcastToAgents(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const text = parseString(params, 'text')
@@ -788,6 +881,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     get_pr_status: (params) => getPrStatus(params),
     get_recent_events: (params) => getRecentEvents(params),
     get_cockpit_doc: (params) => getCockpitDoc(params),
+    get_product_doc: (params) => getProductDoc(params),
     list_memories: (params) => listMemoriesHandler(params),
     get_memory: (params) => getMemoryHandler(params),
     remember: (params) => rememberHandler(params),
@@ -806,6 +900,8 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     restart_agent: makeRestartAgent(deps),
     send_to_agent: makeSendToAgent(deps),
     broadcast_to_agents: makeBroadcastToAgents(deps),
+    read_pr_diff: (params) => readPrDiffHandler(params),
+    post_pr_review: makePostPrReview(deps),
     deploy_to_vercel: makeDeployToVercel(deps),
     open_pr: makeOpenPr(deps),
 
