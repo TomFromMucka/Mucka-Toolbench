@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { RefreshCw } from 'lucide-react'
-import type { JobEvent, JobEventSource, JobEventTone } from '@shared/types'
+import type {
+  JobEvent,
+  JobEventSource,
+  JobEventTone,
+  RoadmapCard,
+  RoadmapColumn
+} from '@shared/types'
 import { useAgentsState } from '../state/AgentsContext'
 import { useEventsState } from '../state/EventsContext'
 import { Clipboard } from './Clipboard'
@@ -167,98 +173,36 @@ function JobsView(): React.JSX.Element {
   )
 }
 
-/* ─── Roadmap (pulled from MUCKA.md → ## Roadmap) ─────────────────────── */
+/* ─── Roadmap kanban (sqlite-backed) ──────────────────────────────────── */
 
-type Block =
-  | { kind: 'h3'; text: string }
-  | { kind: 'bullet'; text: string }
-  | { kind: 'para'; text: string }
+const COLUMN_ORDER: RoadmapColumn[] = ['backlog', 'next', 'doing', 'shipped', 'parked']
 
-function parseRoadmap(raw: string): Block[] {
-  const lines = raw.split(/\r?\n/)
-  // Drop the leading `## Roadmap` line — the Clipboard header already
-  // labels this view.
-  const stripped = lines
-    .filter((l, i) => !(i === 0 && /^##\s+/.test(l)))
-
-  const blocks: Block[] = []
-  let currentBullet: string | null = null
-  let currentPara: string | null = null
-
-  const flushBullet = (): void => {
-    if (currentBullet !== null) {
-      blocks.push({ kind: 'bullet', text: stripInline(currentBullet.trim()) })
-      currentBullet = null
-    }
-  }
-  const flushPara = (): void => {
-    if (currentPara !== null) {
-      const text = currentPara.trim()
-      if (text.length > 0) blocks.push({ kind: 'para', text: stripInline(text) })
-      currentPara = null
-    }
-  }
-
-  for (const line of stripped) {
-    if (line.trim().length === 0) {
-      flushBullet()
-      flushPara()
-      continue
-    }
-    const h3 = line.match(/^###\s+(.+?)\s*$/)
-    if (h3) {
-      flushBullet()
-      flushPara()
-      blocks.push({ kind: 'h3', text: h3[1] })
-      continue
-    }
-    const bullet = line.match(/^\s*-\s+(.+)$/)
-    if (bullet) {
-      flushBullet()
-      flushPara()
-      currentBullet = bullet[1]
-      continue
-    }
-    // Continuation: indented under the current bullet (the file wraps
-    // bullets with a 2-space indent).
-    if (/^\s{2,}/.test(line) && currentBullet !== null) {
-      currentBullet += ' ' + line.trim()
-      continue
-    }
-    // Otherwise: free paragraph (rare in Roadmap, but handle it).
-    flushBullet()
-    if (currentPara === null) currentPara = line.trim()
-    else currentPara += ' ' + line.trim()
-  }
-  flushBullet()
-  flushPara()
-  return blocks
+const COLUMN_LABEL: Record<RoadmapColumn, string> = {
+  backlog: 'Backlog',
+  next: 'Next up',
+  doing: 'Doing',
+  shipped: 'Shipped',
+  parked: 'Parked'
 }
 
-/** Cheap markdown-to-plain pass — drops `**`, `` ` ``, `[text](url)` decoration. */
-function stripInline(s: string): string {
-  return s
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+const COLUMN_ACCENT: Record<RoadmapColumn, string> = {
+  backlog: 'rgba(234, 233, 232, 0.45)',
+  next: 'var(--orange)',
+  doing: 'var(--orange)',
+  shipped: 'var(--color-status-ok, #5fb35f)',
+  parked: 'rgba(234, 233, 232, 0.35)'
 }
 
 function RoadmapView(): React.JSX.Element {
-  const [text, setText] = useState('')
+  const [cards, setCards] = useState<RoadmapCard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
-    setLoading(true)
     setError(null)
     try {
-      const payload = await window.mucka.getCockpitDoc('Roadmap')
-      if (!payload.found) {
-        setError('Roadmap section not found in MUCKA.md.')
-        setText('')
-      } else {
-        setText(payload.text)
-      }
+      const next = await window.mucka.listRoadmap()
+      setCards(next)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
@@ -269,9 +213,18 @@ function RoadmapView(): React.JSX.Element {
 
   useEffect(() => {
     void load()
+    const off = window.mucka.onRoadmapUpdate(() => {
+      void load()
+    })
+    return off
   }, [load])
 
-  const blocks = parseRoadmap(text)
+  const grouped = new Map<RoadmapColumn, RoadmapCard[]>()
+  for (const col of COLUMN_ORDER) grouped.set(col, [])
+  for (const c of cards) grouped.get(c.column)?.push(c)
+  for (const col of COLUMN_ORDER) {
+    grouped.get(col)?.sort((a, b) => a.sortOrder - b.sortOrder)
+  }
 
   return (
     <div
@@ -285,12 +238,14 @@ function RoadmapView(): React.JSX.Element {
           background: 'var(--surface2)'
         }}
       >
-        <span className="t-label-sm text-dirty-grey">from MUCKA.md</span>
+        <span className="t-label-sm text-dirty-grey">
+          {cards.length} cards · drag + edit landing next slice
+        </span>
         <button
           type="button"
           onClick={() => void load()}
-          title="Reload Roadmap from MUCKA.md"
-          aria-label="Reload Roadmap"
+          title="Reload roadmap"
+          aria-label="Reload roadmap"
           className="grid size-6 place-items-center rounded-sm transition-colors hover:bg-van-white/10"
           style={{ color: 'var(--dirty-grey)' }}
         >
@@ -298,55 +253,139 @@ function RoadmapView(): React.JSX.Element {
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-        {loading ? (
-          <p className="t-body-md text-dirty-grey">Loading…</p>
-        ) : error ? (
-          <p className="t-body-md text-orange">{error}</p>
-        ) : blocks.length === 0 ? (
-          <p className="t-body-md text-dirty-grey">Roadmap is empty.</p>
-        ) : (
-          <div className="space-y-2">
-            {blocks.map((b, i) => (
-              <BlockView key={i} block={b} />
+      {loading ? (
+        <p className="px-3 py-2 t-body-md text-dirty-grey">Loading…</p>
+      ) : error ? (
+        <p className="px-3 py-2 t-body-md text-orange">{error}</p>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+          <div className="flex h-full min-h-0 gap-2 px-2 py-2">
+            {COLUMN_ORDER.map((col) => (
+              <KanbanColumn
+                key={col}
+                column={col}
+                cards={grouped.get(col) ?? []}
+              />
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KanbanColumn({
+  column,
+  cards
+}: {
+  column: RoadmapColumn
+  cards: RoadmapCard[]
+}): React.JSX.Element {
+  return (
+    <div
+      className="flex h-full min-h-0 w-[180px] shrink-0 flex-col"
+      style={{ background: 'var(--surface2)', borderRadius: 6 }}
+    >
+      <div
+        className="flex items-center justify-between border-b px-2 py-1.5"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className="inline-block size-2 shrink-0 rounded-full"
+            style={{ background: COLUMN_ACCENT[column] }}
+          />
+          <span
+            className="truncate"
+            style={{
+              fontFamily: 'var(--font-soehne-breit)',
+              fontWeight: 500,
+              fontSize: '11px',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--van-white)'
+            }}
+          >
+            {COLUMN_LABEL[column]}
+          </span>
+        </div>
+        <span
+          className="font-mono text-[0.65rem]"
+          style={{ color: 'var(--dirty-grey)' }}
+        >
+          {cards.length}
+        </span>
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 py-1.5">
+        {cards.length === 0 ? (
+          <p
+            className="px-1 py-3 text-center text-[0.7rem]"
+            style={{ color: 'rgba(234, 233, 232, 0.35)' }}
+          >
+            empty
+          </p>
+        ) : (
+          cards.map((card) => <KanbanCard key={card.id} card={card} />)
         )}
       </div>
     </div>
   )
 }
 
-function BlockView({ block }: { block: Block }): React.JSX.Element {
-  if (block.kind === 'h3') {
-    return (
-      <h3
-        className="mt-3 mb-1"
+function KanbanCard({ card }: { card: RoadmapCard }): React.JSX.Element {
+  return (
+    <div
+      className="chamfer-sm px-2 py-1.5"
+      style={{
+        background: 'var(--surface)',
+        color: 'var(--van-white)',
+        border: '1px solid var(--border)'
+      }}
+    >
+      <div
+        className="leading-snug"
         style={{
-          fontFamily: 'var(--font-soehne-breit)',
+          fontFamily: 'var(--font-soehne)',
           fontWeight: 500,
-          fontSize: '13px',
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          color: 'var(--orange)'
+          fontSize: '12px'
         }}
       >
-        {block.text}
-      </h3>
-    )
-  }
-  if (block.kind === 'bullet') {
-    return (
-      <div className="flex items-start gap-2 t-body-md leading-snug">
-        <span
-          className="mt-[8px] inline-block size-1.5 shrink-0 rounded-full"
-          style={{ background: 'var(--dirty-grey)' }}
-        />
-        <span className="text-van-white">{block.text}</span>
+        {card.title}
       </div>
-    )
-  }
-  return (
-    <p className="t-body-md leading-snug text-dirty-grey">{block.text}</p>
+      {card.body.trim().length > 0 ? (
+        <div
+          className="mt-1 leading-snug"
+          style={{
+            fontFamily: 'var(--font-soehne)',
+            fontSize: '11px',
+            color: 'var(--dirty-grey)',
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden'
+          }}
+        >
+          {card.body}
+        </div>
+      ) : null}
+      {card.tags.length > 0 ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {card.tags.map((t) => (
+            <span
+              key={t}
+              className="chamfer-sm px-1 py-px text-[0.6rem]"
+              style={{
+                background: 'rgba(255, 78, 0, 0.18)',
+                color: 'var(--orange)',
+                fontFamily: 'var(--font-soehne)'
+              }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
