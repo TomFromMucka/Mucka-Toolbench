@@ -179,13 +179,13 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'unlinked') {
     return (
       <li
-        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        className="t-body-md flex flex-col gap-1 border-b px-3 py-2 leading-snug last:border-b-0"
         style={{ borderColor: 'var(--border)' }}
       >
-        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
+        <span className="t-label-sm truncate text-dirty-grey">
           {row.agent.displayName.toLowerCase()}
         </span>
-        <span className="flex-1 text-dirty-grey">
+        <span className="text-dirty-grey">
           No Vercel project linked — run{' '}
           <span className="font-mono text-[0.78rem]">vercel link</span> in the
           worktree or set a project id in Settings.
@@ -197,15 +197,17 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'error') {
     return (
       <li
-        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        className="t-body-md flex items-start gap-2 border-b px-3 py-2 leading-snug last:border-b-0"
         style={{ borderColor: 'var(--border)' }}
       >
-        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
-          {row.agent.displayName.toLowerCase()}
-        </span>
-        <span className="flex-1" style={{ color: 'var(--red)' }}>
-          {row.summary.error}
-        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <span className="t-label-sm block truncate text-dirty-grey">
+            {row.agent.displayName.toLowerCase()}
+          </span>
+          <span className="block break-words" style={{ color: 'var(--red)' }}>
+            {row.summary.error}
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => onRefreshAgent(row.agent.id)}
@@ -220,13 +222,13 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'empty') {
     return (
       <li
-        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        className="t-body-md flex flex-col gap-1 border-b px-3 py-2 leading-snug last:border-b-0"
         style={{ borderColor: 'var(--border)' }}
       >
-        <span className="t-label-sm shrink-0 text-dirty-grey">
+        <span className="t-label-sm truncate text-dirty-grey">
           {agentsLabel(row.agents)}
         </span>
-        <span className="ml-2 flex-1 text-dirty-grey">
+        <span className="text-dirty-grey">
           {projectLabel(null, row.summary.projectId)} · {row.branchLabel} — {row.message}
         </span>
       </li>
@@ -237,27 +239,39 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   const pillVariant = STATE_PILL[deployment.state]
   return (
     <li
-      className="t-body-md grid grid-cols-[auto_auto_1fr_auto] items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+      className="t-body-md flex flex-col gap-1 border-b px-3 py-2 leading-snug last:border-b-0"
       style={{ borderColor: 'var(--border)' }}
     >
-      <span className="t-label-sm shrink-0 text-dirty-grey">
-        {agentsLabel(row.agents)}
-      </span>
-      {pillVariant ? (
-        <StatusPill
-          variant={pillVariant}
-          className={clsx(deployment.state === 'building' && 'animate-pulse')}
-        >
-          {STATE_LABEL[deployment.state]}
-        </StatusPill>
-      ) : (
-        <span
-          className="t-label-sm chamfer-sm px-1.5 py-0.5"
-          style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
-        >
-          {STATE_LABEL[deployment.state]}
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="t-label-sm min-w-0 flex-1 truncate text-dirty-grey">
+          {agentsLabel(row.agents)}
         </span>
-      )}
+        {pillVariant ? (
+          <StatusPill
+            variant={pillVariant}
+            className={clsx('shrink-0', deployment.state === 'building' && 'animate-pulse')}
+          >
+            {STATE_LABEL[deployment.state]}
+          </StatusPill>
+        ) : (
+          <span
+            className="t-label-sm chamfer-sm shrink-0 px-1.5 py-0.5"
+            style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
+          >
+            {STATE_LABEL[deployment.state]}
+          </span>
+        )}
+        {deployment.url ? (
+          <button
+            type="button"
+            onClick={() => openUrl(deployment.url)}
+            className="t-label-sm shrink-0 text-orange hover:underline"
+            title={deployment.url}
+          >
+            open
+          </button>
+        ) : null}
+      </div>
       <button
         type="button"
         onClick={() => openUrl(deployment.inspectorUrl ?? deployment.url)}
@@ -268,13 +282,13 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
             : 'Open in Vercel dashboard'
         }
       >
-        <div className="flex items-baseline gap-1.5">
-          <span className="truncate text-van-white">
+        <div className="flex min-w-0 items-baseline gap-1.5">
+          <span className="min-w-0 truncate text-van-white">
             {deployment.commitMessage ?? '(no commit message)'}
           </span>
           {deployment.isProduction ? (
             <span
-              className="t-label-sm chamfer-sm px-1 py-px"
+              className="t-label-sm chamfer-sm shrink-0 px-1 py-px"
               style={{
                 background: 'rgba(234, 233, 232, 0.10)',
                 color: 'var(--van-white)'
@@ -289,16 +303,6 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
           {relativeTime(deployment.createdAt)}
         </div>
       </button>
-      {deployment.url ? (
-        <button
-          type="button"
-          onClick={() => openUrl(deployment.url)}
-          className="t-label-sm shrink-0 text-orange hover:underline"
-          title={deployment.url}
-        >
-          open
-        </button>
-      ) : null}
     </li>
   )
 }
