@@ -28,12 +28,15 @@ interface AgentClipboardProps {
   agent: Agent
   config: AgentConfig
   gitStatus?: GitStatus
+  /** Claude Code's reported context window usage (0-100). */
+  contextPercent?: number | null
 }
 
 export function AgentClipboard({
   agent,
   config,
-  gitStatus
+  gitStatus,
+  contextPercent
 }: AgentClipboardProps): React.JSX.Element {
   return (
     <Clipboard
@@ -48,15 +51,37 @@ export function AgentClipboard({
       }
       bodyClassName="bg-surface-2"
       rightSlot={
-        <span className="flex items-center gap-1.5">
-          <span
-            className={clsx(
-              'inline-block size-2 rounded-full',
-              config.running ? STATUS_DOT[agent.status] : 'bg-dirty-grey'
-            )}
-          />
-          <span style={{ color: 'rgba(234, 233, 232, 0.85)' }}>
-            {config.running ? STATUS_LABEL[agent.status] : 'stopped'}
+        <span className="flex items-center gap-2">
+          {config.running &&
+          typeof contextPercent === 'number' &&
+          contextPercent >= 0 ? (
+            <span
+              className="chamfer-sm px-1.5 py-0.5 font-mono tabular-nums text-[0.65rem]"
+              title={`Claude Code context window — ${contextPercent}% remaining`}
+              style={{
+                background:
+                  contextPercent <= 15
+                    ? 'rgba(255, 90, 74, 0.22)'
+                    : 'rgba(234, 233, 232, 0.10)',
+                color:
+                  contextPercent <= 15
+                    ? 'var(--orange)'
+                    : 'rgba(234, 233, 232, 0.85)'
+              }}
+            >
+              ctx {contextPercent}%
+            </span>
+          ) : null}
+          <span className="flex items-center gap-1.5">
+            <span
+              className={clsx(
+                'inline-block size-2 rounded-full',
+                config.running ? STATUS_DOT[agent.status] : 'bg-dirty-grey'
+              )}
+            />
+            <span style={{ color: 'rgba(234, 233, 232, 0.85)' }}>
+              {config.running ? STATUS_LABEL[agent.status] : 'stopped'}
+            </span>
           </span>
         </span>
       }

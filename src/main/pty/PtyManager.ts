@@ -3,7 +3,6 @@ import type { IPty } from 'node-pty'
 import type { WebContents } from 'electron'
 import type {
   AgentId,
-  AgentStatus,
   AgentStatusEvent,
   PtyDataEvent,
   PtyExitEvent,
@@ -35,9 +34,13 @@ export class PtyManager {
 
   constructor(webContents: WebContents) {
     this.webContents = webContents
-    this.statusDetector = new StatusDetector((agentId: AgentId, status: AgentStatus) => {
+    this.statusDetector = new StatusDetector((emit) => {
       if (this.webContents.isDestroyed()) return
-      const event: AgentStatusEvent = { agentId, status }
+      const event: AgentStatusEvent = {
+        agentId: emit.agentId,
+        status: emit.status,
+        contextPercent: emit.contextPercent
+      }
       this.webContents.send('agent:status', event)
     })
   }

@@ -70,7 +70,7 @@ export function AgentGrid({
   restartVersion
 }: AgentGridProps): React.JSX.Element {
   const { events } = useEventsState()
-  const { statusFor } = useAgentStatuses()
+  const { statusFor, contextPercentFor } = useAgentStatuses()
   const list: AgentConfig[] =
     agents.length > 0
       ? agents
@@ -98,6 +98,7 @@ export function AgentGrid({
             agent={buildAgent(cfg, findLatestForAgent(events, cfg.id), liveStatus)}
             config={cfg}
             gitStatus={gitStatus[cfg.id]}
+            contextPercent={contextPercentFor(cfg.id)}
           />
         )
       })}

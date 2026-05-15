@@ -64,18 +64,47 @@ function detectStatus(buffer: string): AgentStatus {
   return 'idle'
 }
 
+/**
+ * Pull the context window % out of Claude Code's TUI footer. The
+ * format has drifted slightly between TUI revisions, so try a few
+ * shapes. Returns null when no plausible match is in the tail.
+ */
+function detectContextPercent(buffer: string): number | null {
+  const tail = buffer.slice(-SCAN_TAIL_BYTES)
+  const patterns: RegExp[] = [
+    /context\s+left\s+until\s+auto-compact[:\s]+(\d{1,3})\s*%/i,
+    /(\d{1,3})\s*%\s+context\s+(?:left|remaining)/i,
+    /context[:\s]+(\d{1,3})\s*%/i,
+    /(\d{1,3})\s*%\s*·?\s*context/i
+  ]
+  for (const re of patterns) {
+    const m = tail.match(re)
+    if (!m) continue
+    const n = parseInt(m[1], 10)
+    if (Number.isFinite(n) && n >= 0 && n <= 100) return n
+  }
+  return null
+}
+
 interface Tracker {
   agentId: AgentId
   buffer: string
   status: AgentStatus
+  contextPercent: number | null
   decayTimer: NodeJS.Timeout | null
+}
+
+export interface StatusEmit {
+  agentId: AgentId
+  status: AgentStatus
+  contextPercent: number | null
 }
 
 export class StatusDetector {
   private readonly trackers = new Map<TerminalId, Tracker>()
-  private readonly emit: (agentId: AgentId, status: AgentStatus) => void
+  private readonly emit: (event: StatusEmit) => void
 
-  constructor(emit: (agentId: AgentId, status: AgentStatus) => void) {
+  constructor(emit: (event: StatusEmit) => void) {
     this.emit = emit
   }
 
@@ -92,9 +121,10 @@ export class StatusDetector {
       agentId,
       buffer: '',
       status: 'idle',
+      contextPercent: null,
       decayTimer: null
     })
-    this.emit(agentId, 'idle')
+    this.emit({ agentId, status: 'idle', contextPercent: null })
   }
 
   ingest(terminalId: TerminalId, data: string): void {
@@ -104,21 +134,33 @@ export class StatusDetector {
     const stripped = stripAnsi(data)
     tracker.buffer = (tracker.buffer + stripped).slice(-TAIL_BYTES)
 
-    const next = detectStatus(tracker.buffer)
-    if (next !== tracker.status) {
-      tracker.status = next
-      this.emit(tracker.agentId, next)
+    const nextStatus = detectStatus(tracker.buffer)
+    const nextContext = detectContextPercent(tracker.buffer)
+    const statusChanged = nextStatus !== tracker.status
+    const contextChanged = nextContext !== tracker.contextPercent
+    if (statusChanged || contextChanged) {
+      tracker.status = nextStatus
+      tracker.contextPercent = nextContext
+      this.emit({
+        agentId: tracker.agentId,
+        status: nextStatus,
+        contextPercent: nextContext
+      })
     }
 
     if (tracker.decayTimer) {
       clearTimeout(tracker.decayTimer)
       tracker.decayTimer = null
     }
-    if (next !== 'idle') {
+    if (nextStatus !== 'idle') {
       tracker.decayTimer = setTimeout(() => {
         if (tracker.status !== 'idle') {
           tracker.status = 'idle'
-          this.emit(tracker.agentId, 'idle')
+          this.emit({
+            agentId: tracker.agentId,
+            status: 'idle',
+            contextPercent: tracker.contextPercent
+          })
         }
         tracker.decayTimer = null
       }, IDLE_DECAY_MS)
@@ -130,7 +172,7 @@ export class StatusDetector {
     if (!tracker) return
     if (tracker.decayTimer) clearTimeout(tracker.decayTimer)
     this.trackers.delete(terminalId)
-    this.emit(tracker.agentId, 'idle')
+    this.emit({ agentId: tracker.agentId, status: 'idle', contextPercent: null })
   }
 
   disposeAll(): void {

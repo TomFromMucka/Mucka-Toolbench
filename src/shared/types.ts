@@ -209,6 +209,12 @@ export interface GitStatusEvent {
 export interface AgentStatusEvent {
   agentId: AgentId
   status: AgentStatus
+  /**
+   * Context window usage Claude Code reports at the bottom of its TUI
+   * (`Context left until auto-compact: 87%`). Null when the agent isn't
+   * running Claude Code or the value isn't currently visible.
+   */
+  contextPercent?: number | null
 }
 
 /* ─── Mucka PM agent ─────────────────────────────────────────────────── */
