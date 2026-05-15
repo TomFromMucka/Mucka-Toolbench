@@ -69,13 +69,13 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (31).**
+**Mucka tools (34).**
 
 Read-only (auto-execute):
 - `list_agents`, `get_git_status`, `get_recent_output`,
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
-  `get_pr_status`, `get_cockpit_doc`, `list_memories`, `get_memory`,
-  `list_roadmap`.
+  `get_pr_status`, `get_cockpit_doc`, `get_product_doc`,
+  `list_memories`, `get_memory`, `list_roadmap`, `read_pr_diff`.
 
 Chrome writes (auto-execute):
 - `set_banner_status`, `append_note`, `flag_attention`,
@@ -85,8 +85,8 @@ Chrome writes (auto-execute):
 Confirm-gated:
 - `set_agent_worktree`, `set_agent_command`, `restart_agent`,
   `stop_agent`, `send_to_agent` (edit-confirm),
-  `broadcast_to_agents` (edit-confirm), `deploy_to_vercel`, `open_pr`,
-  `forget`, `delete_roadmap_card`.
+  `broadcast_to_agents` (edit-confirm), `post_pr_review` (edit-confirm),
+  `deploy_to_vercel`, `open_pr`, `forget`, `delete_roadmap_card`.
 
 ## Systems
 
@@ -184,6 +184,17 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-16** — Product context + PR reviews. `PRODUCT.md` scaffold
+  added at toolbench root (Mission, Audience, Brand & voice, Current
+  focus, Stack, Quality bar, Repos, Glossary — Tom to fill in). New
+  `src/main/doc/ProductDoc.ts` mirrors the CockpitDoc loader; Mucka
+  picked up `get_product_doc(section?)`. `pm.md` gains a "Product —
+  at a glance" block telling her to read PRODUCT.md before reviewing
+  a PR or making confident product-direction calls. PR review tools:
+  `read_pr_diff` (auto — fetches the diff via the GitHub REST API,
+  capped at 40k chars) and `post_pr_review` (edit-confirm — submits
+  approve / request-changes / comment via the `/pulls/{n}/reviews`
+  endpoint, logs a job-sheet event). Tool count 31 → 34.
 - **2026-05-15** — Text-mode Mucka migrated to the Claude Agent SDK.
   Auth now flows through the `claude` CLI (Pro/Max subscription) so
   ANTHROPIC_API_KEY is no longer required for text. Same prompt, same

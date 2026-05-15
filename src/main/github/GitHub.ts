@@ -247,6 +247,84 @@ export async function getPullRequest(
   return toPullRequest(raw)
 }
 
+/**
+ * Pull the unified diff for a PR — used by Mucka's review_pr tool to
+ * read the diff into her context before drafting a review.
+ */
+export async function fetchPrDiff(
+  repo: RepoLink,
+  number: number,
+  opts: FetchOpts = {}
+): Promise<string> {
+  const t = token()
+  if (!t) throw new Error('GITHUB_TOKEN not set')
+  const res = await fetch(
+    `${API_BASE}/repos/${repo.owner}/${repo.name}/pulls/${number}`,
+    {
+      headers: {
+        authorization: `Bearer ${t}`,
+        accept: 'application/vnd.github.diff',
+        'x-github-api-version': '2022-11-28'
+      },
+      signal: opts.signal
+    }
+  )
+  if (!res.ok) {
+    throw new Error(`GitHub diff ${res.status}: ${await safeText(res)}`)
+  }
+  return res.text()
+}
+
+export type ReviewEvent = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'
+
+export interface ReviewResult {
+  id: number
+  url: string
+  state: string
+}
+
+interface ReviewRaw {
+  id: number
+  html_url: string
+  state: string
+}
+
+/**
+ * Post a review on a PR (approve / request-changes / comment).
+ * Body is the markdown summary; per-line comments aren't supported in
+ * this initial pass — Mucka inlines references like `src/foo.ts:42` in
+ * the body text instead.
+ */
+export async function submitPrReview(
+  repo: RepoLink,
+  number: number,
+  body: string,
+  event: ReviewEvent,
+  opts: FetchOpts = {}
+): Promise<ReviewResult> {
+  const t = token()
+  if (!t) throw new Error('GITHUB_TOKEN not set')
+  const res = await fetch(
+    `${API_BASE}/repos/${repo.owner}/${repo.name}/pulls/${number}/reviews`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${t}`,
+        accept: 'application/vnd.github+json',
+        'content-type': 'application/json',
+        'x-github-api-version': '2022-11-28'
+      },
+      body: JSON.stringify({ body, event }),
+      signal: opts.signal
+    }
+  )
+  if (!res.ok) {
+    throw new Error(`Review submit ${res.status}: ${await safeText(res)}`)
+  }
+  const json = (await res.json()) as ReviewRaw
+  return { id: json.id, url: json.html_url, state: json.state }
+}
+
 export async function listCheckRuns(
   repo: RepoLink,
   sha: string,
