@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { MuckaTextMessage, MuckaTextSegment } from '@shared/types'
 import { Clipboard } from './Clipboard'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { useMuckaText } from '../mucka/MuckaTextContext'
+import { useAgentsState } from '../state/AgentsContext'
 import { MuckaVoiceButton } from './MuckaVoiceButton'
 
 const PLACEHOLDER =
@@ -74,8 +75,28 @@ function ChatMessage({ message }: { message: MuckaTextMessage }): React.JSX.Elem
 export function MuckaChat(): React.JSX.Element {
   const { state, isSpeaking, credentialStatus } = useMuckaSession()
   const { status, messages, streaming, error, send } = useMuckaText()
+  const { agents } = useAgentsState()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [draft, setDraft] = useState('')
+  const [flash, setFlash] = useState<string | null>(null)
+  const flashTimerRef = useRef<number | null>(null)
+  const runningCount = agents.filter((a) => a.running).length
+
+  const showFlash = useCallback((message: string): void => {
+    setFlash(message)
+    if (flashTimerRef.current !== null) {
+      window.clearTimeout(flashTimerRef.current)
+    }
+    flashTimerRef.current = window.setTimeout(() => setFlash(null), 3200)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current !== null) {
+        window.clearTimeout(flashTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -115,7 +136,36 @@ export function MuckaChat(): React.JSX.Element {
     await send(text)
   }
 
+  const handleBroadcast = useCallback(async (): Promise<void> => {
+    const text = draft.trim()
+    if (!text) return
+    try {
+      const result = await window.mucka.broadcastToAgents({ text })
+      setDraft('')
+      if (result.sent.length === 0) {
+        showFlash(
+          result.skipped.length > 0
+            ? `Skipped — no running agents (${result.skipped.length} stopped)`
+            : 'No agents to broadcast to'
+        )
+        return
+      }
+      const skipped = result.skipped.length > 0
+        ? ` · skipped ${result.skipped.length}`
+        : ''
+      showFlash(`Broadcast → ${result.sent.join(', ')}${skipped}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showFlash(`Broadcast failed: ${message}`)
+    }
+  }, [draft, showFlash])
+
   function handleKey(e: React.KeyboardEvent<HTMLInputElement>): void {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      void handleBroadcast()
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       void handleSend()
@@ -194,6 +244,19 @@ export function MuckaChat(): React.JSX.Element {
           ) : null}
         </div>
 
+        {flash ? (
+          <div
+            className="border-t px-3 py-1 t-label-sm"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'rgba(255, 78, 0, 0.10)',
+              color: 'var(--orange)',
+              fontFamily: 'var(--font-soehne)'
+            }}
+          >
+            {flash}
+          </div>
+        ) : null}
         <div
           className="flex items-center gap-2 border-t px-3 py-2"
           style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}
@@ -208,7 +271,9 @@ export function MuckaChat(): React.JSX.Element {
               textOk
                 ? streaming
                   ? 'Mucka is replying…'
-                  : 'Type to Mucka (Claude)…'
+                  : runningCount > 0
+                    ? `Type to Mucka · ⌘⏎ broadcast to ${runningCount} agent${runningCount === 1 ? '' : 's'}`
+                    : 'Type to Mucka (Claude)…'
                 : 'Set ANTHROPIC_API_KEY to enable text chat.'
             }
             className={clsx(

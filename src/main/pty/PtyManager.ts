@@ -137,6 +137,11 @@ export class PtyManager {
    * split / preview sub-terminal. Used when Tom (or Mucka) stops the
    * agent from the cockpit UI.
    */
+  /** Whether a terminal is currently live (PTY spawned). */
+  hasTerminal(terminalId: TerminalId): boolean {
+    return this.ptys.has(terminalId)
+  }
+
   killByAgent(agentId: AgentId): void {
     const targets = [...this.ptys.values()].filter((e) => e.agentId === agentId)
     for (const entry of targets) {

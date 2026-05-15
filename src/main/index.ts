@@ -498,6 +498,43 @@ function registerIpc(): void {
     }
   )
 
+  ipcMain.handle(
+    'broadcast:send',
+    (_event, input: { text: string; agentIds?: AgentId[] }) => {
+      const raw = typeof input?.text === 'string' ? input.text : ''
+      if (raw.trim().length === 0) {
+        return { sent: [] as AgentId[], skipped: [] as AgentId[] }
+      }
+      const targets: AgentId[] =
+        input?.agentIds && input.agentIds.length > 0
+          ? input.agentIds
+          : getAgentConfigs()
+              .filter((a) => a.running)
+              .map((a) => a.id)
+
+      const sent: AgentId[] = []
+      const skipped: AgentId[] = []
+      for (const id of targets) {
+        if (ptyManager?.hasTerminal(id)) {
+          ptyManager.write({ terminalId: id, data: raw + '\r' })
+          sent.push(id)
+        } else {
+          skipped.push(id)
+        }
+      }
+      if (sent.length > 0) {
+        const preview = raw.replace(/\s+/g, ' ').trim()
+        logEvent({
+          source: 'system',
+          kind: 'broadcast',
+          message: `Broadcast → ${sent.join(', ')}: ${preview.slice(0, 100)}${preview.length > 100 ? '…' : ''}`,
+          tone: 'normal'
+        })
+      }
+      return { sent, skipped }
+    }
+  )
+
   ipcMain.handle('fs:listDir', (_event, path: string) => fsListDir(path))
 
   ipcMain.handle('fs:reveal', (_event, path: string) => revealInOs(path))
