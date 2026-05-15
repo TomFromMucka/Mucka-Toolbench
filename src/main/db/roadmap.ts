@@ -62,10 +62,24 @@ export function listCards(): RoadmapCard[] {
 }
 
 export function getCard(id: string): RoadmapCard | null {
-  const row = getDb()
+  // Exact match first.
+  const exact = getDb()
     .prepare<[string], CardRow>(`SELECT * FROM roadmap_cards WHERE id = ?`)
     .get(id)
-  return row ? rowToCard(row) : null
+  if (exact) return rowToCard(exact)
+  // Fall back to a unique prefix match so Mucka can pass the short id
+  // she sees in list_roadmap output (UUIDs are noisy on screen / in
+  // voice transcripts). Only resolves when exactly one card matches.
+  const trimmed = id.trim()
+  if (trimmed.length < 4) return null
+  if (!/^[A-Za-z0-9-]+$/.test(trimmed)) return null
+  const matches = getDb()
+    .prepare<[string], CardRow>(
+      `SELECT * FROM roadmap_cards WHERE id LIKE ? || '%' LIMIT 2`
+    )
+    .all(trimmed)
+  if (matches.length === 1) return rowToCard(matches[0])
+  return null
 }
 
 function nextSortOrder(column: RoadmapColumn): number {
@@ -126,8 +140,8 @@ export function updateCard(input: RoadmapUpdateInput): RoadmapCard {
           SET title = ?, body = ?, tags = ?, updated_at = ?
         WHERE id = ?`
     )
-    .run(title, body, joinTags(tags), now, input.id)
-  const saved = getCard(input.id)
+    .run(title, body, joinTags(tags), now, current.id)
+  const saved = getCard(current.id)
   if (!saved) throw new Error('card update lost row')
   return saved
 }
@@ -141,6 +155,7 @@ export function moveCard(input: RoadmapMoveInput): RoadmapCard {
   const now = Date.now()
   const fromColumn = current.column
   const fromOrder = current.sortOrder
+  const targetId = current.id
 
   const tx = getDb().transaction(() => {
     // Close the gap in the source column.
@@ -162,7 +177,7 @@ export function moveCard(input: RoadmapMoveInput): RoadmapCard {
             SET sort_order = sort_order + 1, updated_at = ?
           WHERE kanban_column = ? AND sort_order >= ? AND id != ?`
       )
-      .run(now, input.column, targetOrder, input.id)
+      .run(now, input.column, targetOrder, targetId)
 
     // Place the card.
     getDb()
@@ -171,11 +186,11 @@ export function moveCard(input: RoadmapMoveInput): RoadmapCard {
             SET kanban_column = ?, sort_order = ?, updated_at = ?
           WHERE id = ?`
       )
-      .run(input.column, targetOrder, now, input.id)
+      .run(input.column, targetOrder, now, targetId)
   })
   tx()
 
-  const saved = getCard(input.id)
+  const saved = getCard(targetId)
   if (!saved) throw new Error('card move lost row')
   return saved
 }
@@ -184,7 +199,7 @@ export function deleteCard(id: string): boolean {
   const current = getCard(id)
   if (!current) return false
   const tx = getDb().transaction(() => {
-    getDb().prepare(`DELETE FROM roadmap_cards WHERE id = ?`).run(id)
+    getDb().prepare(`DELETE FROM roadmap_cards WHERE id = ?`).run(current.id)
     // Close the gap in the column.
     getDb()
       .prepare(

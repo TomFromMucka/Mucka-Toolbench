@@ -618,7 +618,9 @@ function describeCardLine(card: RoadmapCard): string {
       ? ''
       : ` — ${card.body.replace(/\s+/g, ' ').trim().slice(0, 100)}${card.body.length > 100 ? '…' : ''}`
   const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
-  return `  • ${card.title}${tagPart} (${card.id.slice(0, 8)})${bodyExcerpt}`
+  // Emit the full uuid so move/update/delete round-trip without
+  // ambiguity. The backend also accepts unique prefixes as a fallback.
+  return `  • ${card.title}${tagPart}\n    id: ${card.id}${bodyExcerpt}`
 }
 
 async function listRoadmapHandler(): Promise<string> {
@@ -650,7 +652,7 @@ async function createRoadmapCardHandler(
   const tags = parseTags(params['tags'])
   const card = await window.mucka.createRoadmapCard({ title, column, body, tags })
   const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
-  return `Created card "${card.title}" in ${ROADMAP_LABEL[card.column]}${tagPart} (id ${card.id.slice(0, 8)}).`
+  return `Created card "${card.title}" in ${ROADMAP_LABEL[card.column]}${tagPart} (id ${card.id}).`
 }
 
 async function updateRoadmapCardHandler(
@@ -665,7 +667,7 @@ async function updateRoadmapCardHandler(
   if (typeof params['body'] === 'string') patch.body = params['body'] as string
   if (typeof params['tags'] === 'string') patch.tags = parseTags(params['tags'])
   const card = await window.mucka.updateRoadmapCard(patch)
-  return `Updated card "${card.title}" (id ${card.id.slice(0, 8)}).`
+  return `Updated card "${card.title}" (id ${card.id}).`
 }
 
 async function moveRoadmapCardHandler(
@@ -683,8 +685,10 @@ function makeDeleteRoadmapCard(deps: ToolDeps) {
     const id = parseString(params, 'id').trim()
     if (!id) throw new Error('id must not be empty')
     const cards = await window.mucka.listRoadmap()
-    const target = cards.find((c) => c.id === id)
-    if (!target) return `No card with id ${id.slice(0, 8)} — nothing to delete.`
+    const target =
+      cards.find((c) => c.id === id) ??
+      cards.find((c) => c.id.startsWith(id))
+    if (!target) return `No card with id ${id} — nothing to delete.`
     const ok = await deps.requestConfirm({
       summary: `Delete card "${target.title}"`,
       note: `From ${ROADMAP_LABEL[target.column]}. ${
