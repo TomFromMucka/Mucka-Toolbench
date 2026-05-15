@@ -68,7 +68,7 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (30).**
+**Mucka tools (31).**
 
 Read-only (auto-execute):
 - `list_agents`, `get_git_status`, `get_recent_output`,
@@ -83,8 +83,9 @@ Chrome writes (auto-execute):
 
 Confirm-gated:
 - `set_agent_worktree`, `set_agent_command`, `restart_agent`,
-  `stop_agent`, `send_to_agent` (edit-confirm), `deploy_to_vercel`,
-  `open_pr`, `forget`, `delete_roadmap_card`.
+  `stop_agent`, `send_to_agent` (edit-confirm),
+  `broadcast_to_agents` (edit-confirm), `deploy_to_vercel`, `open_pr`,
+  `forget`, `delete_roadmap_card`.
 
 ## Systems
 
@@ -174,6 +175,17 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-15** — Cross-agent broadcast. `⌘⏎` in the Mucka chat input
+  types the current draft into every running agent's primary terminal
+  in parallel (plain Enter still goes to Mucka). New `broadcast:send`
+  IPC handles the fan-out — logs a system job-sheet event with the
+  preview + recipient list, returns which agents got it vs were
+  skipped (no live shell). The chat placeholder shows the running-
+  agent count so the shortcut is discoverable; a short orange flash
+  above the input names recipients after a send. Mucka picked up a
+  `broadcast_to_agents` tool (edit-confirm) with an optional comma-
+  separated subset (defaults to every running agent). Tool count 30
+  → 31. Prompt pushed via `mucka:sync`.
 - **2026-05-15** — Roadmap kanban (slices 1–4). The middle-column
   "Roadmap" tab is now a 5-lane drag-and-drop kanban
   (Backlog · Next · Doing · Shipped · Parked) backed by a new
