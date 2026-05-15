@@ -4,6 +4,7 @@ import type { MuckaTextMessage, MuckaTextSegment } from '@shared/types'
 import { Clipboard } from './Clipboard'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { useMuckaText } from '../mucka/MuckaTextContext'
+import { MuckaVoiceButton } from './MuckaVoiceButton'
 
 const PLACEHOLDER =
   "Type to chat with Mucka via Claude, or hit ⌘M to talk by voice."
@@ -194,7 +195,7 @@ export function MuckaChat(): React.JSX.Element {
         </div>
 
         <div
-          className="flex items-center gap-2 border-t px-2 py-1.5"
+          className="flex items-center gap-2 border-t px-3 py-2"
           style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}
         >
           <input
@@ -211,10 +212,11 @@ export function MuckaChat(): React.JSX.Element {
                 : 'Set ANTHROPIC_API_KEY to enable text chat.'
             }
             className={clsx(
-              'chamfer-sm t-body-md flex-1 px-2 py-1 focus:outline-none',
+              'chamfer-sm t-body-md flex-1 px-3 focus:outline-none',
               !textOk && 'cursor-not-allowed'
             )}
             style={{
+              height: '34px',
               background: 'var(--surface)',
               color: 'var(--van-white)',
               fontFamily: 'var(--font-soehne)'
@@ -225,13 +227,14 @@ export function MuckaChat(): React.JSX.Element {
             onClick={() => void handleSend()}
             disabled={!textOk || streaming || draft.trim().length === 0}
             className={clsx(
-              'mucka-btn mucka-btn-primary mucka-btn-sm',
+              'mucka-btn mucka-btn-primary mucka-btn-sm shrink-0',
               (draft.trim().length === 0 || !textOk || streaming) &&
                 'cursor-not-allowed opacity-50'
             )}
           >
             <span className="mucka-btn-label">send</span>
           </button>
+          <MuckaVoiceButton />
         </div>
       </div>
     </Clipboard>
