@@ -485,6 +485,27 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     }
   },
   {
+    name: 'broadcast_to_agents',
+    description:
+      "Send the same message to multiple agent terminals at once — types it in and presses Enter in each. ALWAYS confirms via an editable strip so Tom can tweak the wording before it fans out. Use when Tom says 'tell all of them to X' / 'broadcast Y' / 'get everyone to do Z'. Defaults to every running agent; pass `agents` (comma-separated like \"dave,sammy\") to target a subset. Keep the message short and action-shaped — Claude on each side reads it as a prompt.",
+    parameters: {
+      type: 'object',
+      properties: {
+        text: {
+          type: 'string',
+          description:
+            'The exact text to type into each agent\'s terminal. Will be sent verbatim with Enter pressed at the end.'
+        },
+        agents: {
+          type: 'string',
+          description:
+            'Optional comma-separated subset of dave,sammy,kev,bren. Omit to fan to every running agent.'
+        }
+      },
+      required: ['text']
+    }
+  },
+  {
     name: 'list_roadmap',
     description:
       "Returns every roadmap kanban card grouped by column (backlog, next, doing, shipped, parked). Use this BEFORE answering 'what's next?', 'what are we working on?', or before suggesting where a new ticket should land — you need to see the current state to make sensible calls. Output includes id, title, body excerpt, and tags per card. Auto-executes.",

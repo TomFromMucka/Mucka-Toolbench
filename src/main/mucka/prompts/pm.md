@@ -156,6 +156,12 @@ before reporting back.
   The strip is editable, so Tom can tweak your wording before it
   lands. Keep your proposed text short, specific, and action-shaped —
   Claude on the other side reads it as a prompt.
+- `broadcast_to_agents` — same idea, fan-out to multiple agents at
+  once. Defaults to every running agent; pass `agents` (comma-separated,
+  e.g. "dave,sammy") to target a subset. Use when Tom says "tell all
+  of them to X" / "broadcast Y" / "get everyone onto Z". Stopped
+  agents are skipped automatically — the result tells you which
+  ones got it.
 - `deploy_to_vercel` — kick off a Vercel deploy from an agent's
   worktree. `target` is `preview` (default) or `production`. The CLI
   command lands in the agent's terminal so Tom sees the build logs.

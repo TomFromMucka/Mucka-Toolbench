@@ -701,6 +701,57 @@ function makeDeleteRoadmapCard(deps: ToolDeps) {
   }
 }
 
+function makeBroadcastToAgents(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const text = parseString(params, 'text')
+    if (!text.trim()) throw new Error('text must not be empty')
+
+    let targetIds: AgentId[] | undefined
+    if (typeof params['agents'] === 'string' && (params['agents'] as string).trim().length > 0) {
+      const raw = (params['agents'] as string)
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s.length > 0)
+      const invalid = raw.filter(
+        (s) => !MUCKA_AGENT_IDS.includes(s as AgentId)
+      )
+      if (invalid.length > 0) {
+        throw new Error(
+          `agents must be from: ${MUCKA_AGENT_IDS.join(', ')} — got ${invalid.join(', ')}`
+        )
+      }
+      targetIds = raw as AgentId[]
+    }
+
+    const targetLabel = targetIds
+      ? targetIds.join(', ')
+      : 'every running agent'
+    const approved = await deps.requestEditConfirm({
+      summary: `Broadcast to ${targetLabel}`,
+      note: 'Will type this and press Enter in each agent\'s shell.',
+      editable: { text, multiline: true }
+    })
+    if (approved === null) return `Tom said no. Broadcast cancelled.`
+    const trimmed = approved.trim()
+    if (!trimmed) return `Tom blanked the message. Broadcast cancelled.`
+
+    const result = await window.mucka.broadcastToAgents({
+      text: trimmed,
+      agentIds: targetIds
+    })
+    if (result.sent.length === 0) {
+      return result.skipped.length > 0
+        ? `No live shells — skipped ${result.skipped.join(', ')}.`
+        : 'No running agents to broadcast to.'
+    }
+    const skippedPart =
+      result.skipped.length > 0
+        ? ` (skipped ${result.skipped.join(', ')} — no live shell)`
+        : ''
+    return `Broadcast to ${result.sent.join(', ')}: ${trimmed.slice(0, 120)}${trimmed.length > 120 ? '…' : ''}${skippedPart}`
+  }
+}
+
 function makeSendToAgent(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
@@ -750,6 +801,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     set_agent_command: makeSetAgentCommand(deps),
     restart_agent: makeRestartAgent(deps),
     send_to_agent: makeSendToAgent(deps),
+    broadcast_to_agents: makeBroadcastToAgents(deps),
     deploy_to_vercel: makeDeployToVercel(deps),
     open_pr: makeOpenPr(deps),
 
