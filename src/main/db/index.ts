@@ -78,6 +78,17 @@ function migrate(d: DatabaseType): void {
     );
     CREATE INDEX IF NOT EXISTS memories_type_idx ON memories(type);
     CREATE INDEX IF NOT EXISTS memories_updated_idx ON memories(updated_at DESC);
+    CREATE TABLE IF NOT EXISTS roadmap_cards (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      kanban_column TEXT NOT NULL,
+      sort_order INTEGER NOT NULL,
+      tags TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS roadmap_col_idx ON roadmap_cards(kanban_column, sort_order);
   `)
 
   // Idempotent column additions for older databases.

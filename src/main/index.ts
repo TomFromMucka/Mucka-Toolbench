@@ -37,6 +37,15 @@ import {
   listDocSections,
   readCockpitDoc
 } from './doc/CockpitDoc'
+import { mirrorToMarkdown, readRoadmapSection } from './doc/RoadmapMirror'
+import {
+  createCard as roadmapCreate,
+  deleteCard as roadmapDelete,
+  listCards as roadmapList,
+  moveCard as roadmapMove,
+  seedFromRoadmapMarkdown as roadmapSeed,
+  updateCard as roadmapUpdate
+} from './db/roadmap'
 import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
 import {
@@ -60,6 +69,9 @@ import type {
   MemoryWriteInput,
   MicAccess,
   MuckaTextToolResult,
+  RoadmapCreateInput,
+  RoadmapMoveInput,
+  RoadmapUpdateInput,
   VoiceTranscriptInput
 } from '@shared/types'
 import type {
@@ -79,6 +91,17 @@ let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
 let mainWindowRef: BrowserWindow | null = null
 let lastAttentionCount = 0
+
+function afterRoadmapMutation(): void {
+  try {
+    mirrorToMarkdown(roadmapList())
+  } catch {
+    /* non-fatal */
+  }
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('roadmap:update')
+  }
+}
 
 function applyAttentionToShell(count: number): void {
   const safe = Math.max(0, Math.floor(count))
@@ -430,6 +453,32 @@ function registerIpc(): void {
 
   ipcMain.handle('memory:forget', (_event, topic: string) => forgetMemory(topic))
 
+  ipcMain.handle('roadmap:list', () => roadmapList())
+
+  ipcMain.handle('roadmap:create', (_event, input: RoadmapCreateInput) => {
+    const card = roadmapCreate(input)
+    afterRoadmapMutation()
+    return card
+  })
+
+  ipcMain.handle('roadmap:update', (_event, input: RoadmapUpdateInput) => {
+    const card = roadmapUpdate(input)
+    afterRoadmapMutation()
+    return card
+  })
+
+  ipcMain.handle('roadmap:move', (_event, input: RoadmapMoveInput) => {
+    const card = roadmapMove(input)
+    afterRoadmapMutation()
+    return card
+  })
+
+  ipcMain.handle('roadmap:delete', (_event, id: string) => {
+    const ok = roadmapDelete(id)
+    if (ok) afterRoadmapMutation()
+    return ok
+  })
+
   ipcMain.handle('fs:listDir', (_event, path: string) => fsListDir(path))
 
   ipcMain.handle('fs:reveal', (_event, path: string) => revealInOs(path))
@@ -483,6 +532,14 @@ app.whenReady().then(() => {
   })
 
   ensureSeeded()
+  // First-launch import: lift the existing ## Roadmap markdown into the
+  // sqlite kanban so Tom's current notes survive the migration.
+  try {
+    const md = readRoadmapSection()
+    if (md.length > 0) roadmapSeed(md)
+  } catch {
+    /* non-fatal — kanban just starts empty */
+  }
   // Primary terminalId === agentId, so we restore the same buffers we wrote.
   scrollback.loadFromDisk(getAgentConfigs().map((a) => a.id))
   configureMediaPermissions()
