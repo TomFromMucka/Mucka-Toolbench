@@ -186,6 +186,7 @@ export async function sendMessage(text: string): Promise<void> {
     const userMessage = appendChat('user', [{ kind: 'text', text: trimmed }])
     emitMessage(userMessage)
 
+    const claudePath = process.env.CLAUDE_CODE_PATH?.trim() || undefined
     const options: Options = {
       systemPrompt: loadPrompt(),
       cwd: app.getAppPath(),
@@ -195,7 +196,8 @@ export async function sendMessage(text: string): Promise<void> {
       // sees the running conversation. The first turn of a fresh cockpit
       // boot starts a new session.
       ...(hasPriorTurnThisBoot ? { continue: true } : {}),
-      ...(MODEL ? { model: MODEL } : {})
+      ...(MODEL ? { model: MODEL } : {}),
+      ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {})
     }
 
     const q = query({ prompt: trimmed, options })
