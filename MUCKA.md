@@ -172,6 +172,19 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-15** — Preview viewport sizes. Each preview Clipboard has a
+  device dropdown (Fit / iPhone SE…14 Pro Max / iPad Mini…12.9" / Desktop
+  1280…1920) plus a rotate toggle for landscape. Picking a device portals
+  the iframe to `document.body` at the chosen pixel size, anchored to
+  the panel's body area with a high z-index — so larger-than-panel sizes
+  overlap the Vercel/Git panels rather than reflowing the grid. Esc
+  returns to Fit. Reload button still works, and bumping the size
+  re-keys the iframe.
+- **2026-05-15** — Folder picker on Start. The agent idle screen now
+  opens a folder picker first (VSCode-style), persists the choice as
+  the agent's worktreePath, then spawns the shell there. Small
+  secondary "resume at <tail>" link skips the picker when returning to
+  the same folder.
 - **2026-05-15** — Explorer sidebar. New collapsible left column with a
   VSCode-style file tree. Top-of-panel dropdown switches between the
   four agent worktrees, a Reveal-in-Finder button (Lucide
