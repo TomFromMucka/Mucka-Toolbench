@@ -196,7 +196,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'get_cockpit_doc',
     description:
-      "Reads the cockpit's living spec at MUCKA.md (mission, current capabilities, systems, recent changes, roadmap). Call this BEFORE answering questions about what the workstation can do, what's coming next, what shipped recently, or when Tom asks for priority suggestions — the doc is the source of truth and isn't in your prompt by default. Pass `section` to fetch just one block (e.g. \"Roadmap\", \"Capabilities\", \"Recent changes\"); omit for the whole file.",
+      "Reads the cockpit's living spec at MUCKA.md (mission, current capabilities, systems, recent changes, roadmap). Call this BEFORE answering questions about what the toolbench can do, what's coming next, what shipped recently, or when Tom asks for priority suggestions — the doc is the source of truth and isn't in your prompt by default. Pass `section` to fetch just one block (e.g. \"Roadmap\", \"Capabilities\", \"Recent changes\"); omit for the whole file.",
     parameters: {
       type: 'object',
       properties: {

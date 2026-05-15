@@ -112,7 +112,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#1a1612',
-    title: 'Mucka Workstation',
+    title: 'Mucka Toolbench',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -428,7 +428,7 @@ function configureMediaPermissions(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('ai.mucka.workstation')
+  electronApp.setAppUserModelId('ai.mucka.toolbench')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

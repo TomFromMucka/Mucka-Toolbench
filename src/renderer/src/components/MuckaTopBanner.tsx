@@ -54,7 +54,7 @@ export function MuckaTopBanner({
           className="text-[0.68rem] uppercase tracking-[0.22em]"
           style={{ color: 'rgba(234, 233, 232, 0.55)' }}
         >
-          Workstation
+          Toolbench
         </span>
       </div>
 

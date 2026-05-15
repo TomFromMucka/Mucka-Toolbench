@@ -1,11 +1,11 @@
-# Mucka Workstation — agent guide
+# Mucka Toolbench — agent guide
 
 Personal dev cockpit. One Electron window that runs four Claude Code agents
 in parallel git worktrees on the same project, plus a fifth "Mucka" agent
 acting as PM. Optimised for a 3840×1200 ultrawide.
 
-This document is for whichever agent is editing the workstation itself
-(not the four agents *inside* the workstation — they have their own
+This document is for whichever agent is editing the toolbench itself
+(not the four agents *inside* the toolbench — they have their own
 context).
 
 ## What is here today vs. what is coming

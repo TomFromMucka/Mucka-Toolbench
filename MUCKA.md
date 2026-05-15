@@ -1,4 +1,4 @@
-# Mucka Workstation — living spec
+# Mucka Toolbench — living spec
 
 > Source of truth for what the cockpit is, what works today, and what's
 > next. Mucka pulls this on demand via `get_cockpit_doc` — it isn't
