@@ -16,9 +16,14 @@ type PresetId =
   | 'iphone-14'
   | 'iphone-14-pro'
   | 'iphone-14-pro-max'
+  | 'pixel-7'
+  | 'galaxy-s22'
+  | 'galaxy-s22-ultra'
   | 'ipad-mini'
   | 'ipad-pro-11'
   | 'ipad-pro-13'
+  | 'galaxy-tab-s8'
+  | 'galaxy-tab-s8-plus'
   | 'desktop-sm'
   | 'desktop'
   | 'desktop-lg'
@@ -38,9 +43,14 @@ const PRESETS: Preset[] = [
   { id: 'iphone-14', label: 'iPhone 14', width: 390, height: 844, device: 'phone' },
   { id: 'iphone-14-pro', label: 'iPhone 14 Pro', width: 393, height: 852, device: 'phone' },
   { id: 'iphone-14-pro-max', label: 'iPhone 14 Pro Max', width: 430, height: 932, device: 'phone' },
+  { id: 'pixel-7', label: 'Pixel 7', width: 412, height: 915, device: 'phone' },
+  { id: 'galaxy-s22', label: 'Galaxy S22', width: 360, height: 780, device: 'phone' },
+  { id: 'galaxy-s22-ultra', label: 'Galaxy S22 Ultra', width: 384, height: 824, device: 'phone' },
   { id: 'ipad-mini', label: 'iPad Mini', width: 768, height: 1024, device: 'tablet' },
   { id: 'ipad-pro-11', label: 'iPad Pro 11"', width: 834, height: 1194, device: 'tablet' },
   { id: 'ipad-pro-13', label: 'iPad Pro 13"', width: 1024, height: 1366, device: 'tablet' },
+  { id: 'galaxy-tab-s8', label: 'Galaxy Tab S8', width: 800, height: 1280, device: 'tablet' },
+  { id: 'galaxy-tab-s8-plus', label: 'Galaxy Tab S8+', width: 853, height: 1366, device: 'tablet' },
   { id: 'desktop-sm', label: 'Desktop · 1280', width: 1280, height: 800, device: 'desktop' },
   { id: 'desktop', label: 'Desktop · 1440', width: 1440, height: 900, device: 'desktop' },
   { id: 'desktop-lg', label: 'Desktop · 1920', width: 1920, height: 1080, device: 'desktop' }
