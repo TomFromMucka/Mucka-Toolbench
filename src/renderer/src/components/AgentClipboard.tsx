@@ -41,7 +41,11 @@ export function AgentClipboard({
       subtitle={
         <GitStatusBadges status={gitStatus} fallbackLabel={agent.branch} />
       }
-      attention={agent.needsAttention}
+      attention={
+        agent.needsAttention ||
+        agent.status === 'awaiting-input' ||
+        agent.status === 'blocked'
+      }
       bodyClassName="bg-surface-2"
       rightSlot={
         <span className="flex items-center gap-1.5">
