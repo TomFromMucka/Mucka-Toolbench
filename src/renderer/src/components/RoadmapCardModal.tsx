@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
-import { Pencil, Trash2, X } from 'lucide-react'
+import { ImagePlus, Pencil, Trash2, X } from 'lucide-react'
 import type {
   RoadmapCard,
   RoadmapColumn,
@@ -58,6 +58,12 @@ export function RoadmapCardModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const titleRef = useRef<HTMLInputElement | null>(null)
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // In create mode, pre-generate the card id client-side so any images
+  // attached before the first save land in the right per-card folder.
+  // Re-rolled each time a new create flow opens.
+  const [createId, setCreateId] = useState<string>(() => crypto.randomUUID())
 
   // Re-sync local form state whenever the source card changes — e.g. when
   // the parent reopens the modal for a different ticket without unmounting.
@@ -70,7 +76,10 @@ export function RoadmapCardModal({
     setTagsRaw(card?.tags.join(', ') ?? '')
     setError(null)
     setBusy(false)
+    if (!card) setCreateId(crypto.randomUUID())
   }, [open, card, defaultColumn, initialMode])
+
+  const editingCardId = card?.id ?? createId
 
   // Esc closes (or, in edit-from-view, reverts to view).
   useEffect(() => {
@@ -108,7 +117,13 @@ export function RoadmapCardModal({
     setBusy(true)
     try {
       if (mode === 'create') {
-        const input: RoadmapCreateInput = { title: t, body, column, tags }
+        const input: RoadmapCreateInput = {
+          id: createId,
+          title: t,
+          body,
+          column,
+          tags
+        }
         await window.mucka.createRoadmapCard(input)
         onClose()
       } else if (card) {
@@ -125,7 +140,93 @@ export function RoadmapCardModal({
     } finally {
       setBusy(false)
     }
-  }, [body, card, column, mode, onClose, tags, title])
+  }, [body, card, column, createId, mode, onClose, tags, title])
+
+  const insertAtCursor = useCallback((snippet: string): void => {
+    const el = bodyRef.current
+    if (!el) {
+      setBody((prev) => (prev.length > 0 ? prev + '\n' + snippet : snippet))
+      return
+    }
+    const start = el.selectionStart ?? body.length
+    const end = el.selectionEnd ?? body.length
+    const next = body.slice(0, start) + snippet + body.slice(end)
+    setBody(next)
+    // Place caret just after the inserted snippet on the next tick.
+    requestAnimationFrame(() => {
+      const at = start + snippet.length
+      if (bodyRef.current) {
+        bodyRef.current.focus()
+        bodyRef.current.setSelectionRange(at, at)
+      }
+    })
+  }, [body])
+
+  const attachBlob = useCallback(
+    async (name: string, blob: Blob): Promise<void> => {
+      try {
+        const buf = new Uint8Array(await blob.arrayBuffer())
+        const saved = await window.mucka.attachRoadmapImage({
+          cardId: editingCardId,
+          name,
+          bytes: buf
+        })
+        const alt = name.replace(/\.[^.]+$/, '')
+        insertAtCursor(`\n\n![${alt}](${saved.url})\n\n`)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        setError(`Image attach failed: ${message}`)
+      }
+    },
+    [editingCardId, insertAtCursor]
+  )
+
+  const handlePickFiles = useCallback(
+    async (files: FileList | File[] | null): Promise<void> => {
+      if (!files) return
+      const list = Array.from(files as ArrayLike<File>)
+      for (const f of list) {
+        if (!f.type.startsWith('image/')) continue
+        const name = f.name || `image-${Date.now()}.png`
+        await attachBlob(name, f)
+      }
+    },
+    [attachBlob]
+  )
+
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>): Promise<void> => {
+      const items = e.clipboardData?.items
+      if (!items || items.length === 0) return
+      const images: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]
+        if (it.kind === 'file' && it.type.startsWith('image/')) {
+          const f = it.getAsFile()
+          if (f) images.push(f)
+        }
+      }
+      if (images.length === 0) return
+      e.preventDefault()
+      for (const f of images) {
+        const ext = f.type.split('/')[1] ?? 'png'
+        const name = f.name && f.name !== 'image.png'
+          ? f.name
+          : `pasted-${Date.now()}.${ext}`
+        await attachBlob(name, f)
+      }
+    },
+    [attachBlob]
+  )
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLTextAreaElement>): Promise<void> => {
+      if (!e.dataTransfer || e.dataTransfer.files.length === 0) return
+      e.preventDefault()
+      await handlePickFiles(e.dataTransfer.files)
+    },
+    [handlePickFiles]
+  )
 
   const handleDelete = useCallback(async (): Promise<void> => {
     if (!card) return
@@ -205,6 +306,7 @@ export function RoadmapCardModal({
           ) : (
             <EditBody
               titleRef={titleRef}
+              bodyRef={bodyRef}
               title={title}
               body={body}
               column={column}
@@ -213,6 +315,9 @@ export function RoadmapCardModal({
               onBody={setBody}
               onColumn={setColumn}
               onTagsRaw={setTagsRaw}
+              onPaste={(e) => void handlePaste(e)}
+              onDrop={(e) => void handleDrop(e)}
+              onPickFiles={(files) => void handlePickFiles(files)}
             />
           )}
         </div>
@@ -364,6 +469,7 @@ function ViewBody({ card }: { card: RoadmapCard }): React.JSX.Element {
 
 function EditBody({
   titleRef,
+  bodyRef,
   title,
   body,
   column,
@@ -371,9 +477,13 @@ function EditBody({
   onTitle,
   onBody,
   onColumn,
-  onTagsRaw
+  onTagsRaw,
+  onPaste,
+  onDrop,
+  onPickFiles
 }: {
   titleRef: React.RefObject<HTMLInputElement | null>
+  bodyRef: React.RefObject<HTMLTextAreaElement | null>
   title: string
   body: string
   column: RoadmapColumn
@@ -382,7 +492,11 @@ function EditBody({
   onBody: (v: string) => void
   onColumn: (v: RoadmapColumn) => void
   onTagsRaw: (v: string) => void
+  onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
+  onDrop: (e: React.DragEvent<HTMLTextAreaElement>) => void
+  onPickFiles: (files: FileList | null) => void
 }): React.JSX.Element {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   return (
     <div className="space-y-3 px-5 py-4">
       <Field label="Title">
@@ -445,24 +559,65 @@ function EditBody({
 
       <Field
         label="Description"
-        hint="Markdown — # heading, **bold**, `code`, lists, links."
+        hint="Markdown · paste, drop, or attach images"
       >
-        <textarea
-          value={body}
-          onChange={(e) => onBody(e.target.value)}
-          rows={12}
-          placeholder="Why this matters, acceptance criteria, links, etc."
-          className="chamfer-sm w-full px-3 py-2 focus:outline-none"
-          style={{
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: '12.5px',
-            lineHeight: 1.5,
-            background: 'var(--surface2)',
-            color: 'var(--van-white)',
-            border: '1px solid var(--border)',
-            resize: 'vertical'
-          }}
-        />
+        <div className="space-y-1.5">
+          <textarea
+            ref={bodyRef}
+            value={body}
+            onChange={(e) => onBody(e.target.value)}
+            onPaste={onPaste}
+            onDrop={onDrop}
+            onDragOver={(e) => e.preventDefault()}
+            rows={12}
+            placeholder="Why this matters, acceptance criteria, links, etc."
+            className="chamfer-sm w-full px-3 py-2 focus:outline-none"
+            style={{
+              fontFamily: 'var(--font-mono), monospace',
+              fontSize: '12.5px',
+              lineHeight: 1.5,
+              background: 'var(--surface2)',
+              color: 'var(--van-white)',
+              border: '1px solid var(--border)',
+              resize: 'vertical'
+            }}
+          />
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="chamfer-sm flex items-center gap-1.5 px-2 py-1 transition-colors"
+              style={{
+                background: 'rgba(234, 233, 232, 0.10)',
+                color: 'var(--van-white)',
+                fontFamily: 'var(--font-soehne)',
+                fontSize: '12px'
+              }}
+              title="Pick an image from your computer"
+            >
+              <Icon icon={ImagePlus} size={13} strokeWidth={2.25} />
+              <span>Attach image</span>
+            </button>
+            <span
+              className="text-[0.65rem]"
+              style={{ color: 'var(--dirty-grey)' }}
+            >
+              ⌘V to paste · drop to upload
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                onPickFiles(e.target.files)
+                // Reset so the same file can be re-picked.
+                if (fileInputRef.current) fileInputRef.current.value = ''
+              }}
+            />
+          </div>
+        </div>
       </Field>
     </div>
   )
