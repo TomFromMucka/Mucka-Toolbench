@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: mucka-tmp
+appId: ai.mucka.toolbench
+productName: Mucka Toolbench
 directories:
   buildResources: build
 files:
@@ -11,8 +11,9 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - 'node_modules/@anthropic-ai/claude-agent-sdk/**'
 win:
-  executableName: mucka-tmp
+  executableName: Mucka Toolbench
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
