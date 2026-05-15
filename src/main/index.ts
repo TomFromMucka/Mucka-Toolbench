@@ -1,6 +1,7 @@
-// Load .env from the project root before any module reads process.env.
-// Kept at the very top so getAgentConfigs / Mucka.ts see the values.
-import 'dotenv/config'
+// Boot-time setup MUST run before the rest of main loads its modules so
+// .env is loaded and process.env is populated before getAgentConfigs /
+// Mucka.ts / MuckaTextAgent.ts etc. read it.
+import './bootstrap'
 
 import {
   app,
