@@ -6,9 +6,12 @@ import type {
   MuckaTextMessage,
   MuckaTextSegment,
   MuckaTextStatus,
-  MuckaTextStreamEvent
+  MuckaTextStreamEvent,
+  MuckaTextToolCall,
+  MuckaTextToolResult
 } from '@shared/types'
 import { appendChat, clearChat, listChat } from '../db/chat'
+import { buildMuckaMcpServer } from './agentTools'
 
 /**
  * Text-mode Mucka backed by the Claude Agent SDK — uses Tom's Claude
@@ -21,11 +24,43 @@ import { appendChat, clearChat, listChat } from '../db/chat'
 const MODEL = process.env.MUCKA_TEXT_MODEL?.trim() || undefined
 const PROMPT_FALLBACK =
   'You are Mucka, a terse British PM for the dev cockpit.'
+const TOOL_CALL_TIMEOUT_MS = 60_000
 
 let webContents: WebContents | null = null
 let promptCache: string | null = null
 let inFlight = false
 let hasPriorTurnThisBoot = false
+
+interface PendingCall {
+  resolve: (result: MuckaTextToolResult) => void
+  reject: (err: Error) => void
+  timer: NodeJS.Timeout
+}
+const pendingCalls = new Map<string, PendingCall>()
+let callCounter = 0
+
+const mcpServer = buildMuckaMcpServer({
+  dispatch: (name, params) => dispatchTool(name, params)
+})
+
+function dispatchTool(
+  name: string,
+  params: Record<string, unknown>
+): Promise<{ ok: boolean; result: string }> {
+  callCounter += 1
+  const callId = `a${Date.now().toString(36)}${callCounter}`
+  return new Promise<MuckaTextToolResult>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingCalls.delete(callId)
+      reject(new Error(`tool ${name} timed out after ${TOOL_CALL_TIMEOUT_MS}ms`))
+    }, TOOL_CALL_TIMEOUT_MS)
+    pendingCalls.set(callId, { resolve, reject, timer })
+    emitToolCall({ callId, name, params })
+  }).then(
+    (r) => ({ ok: r.ok, result: r.result }),
+    (err) => ({ ok: false, result: err instanceof Error ? err.message : String(err) })
+  )
+}
 
 export function bindMuckaTextBroadcaster(wc: WebContents): void {
   webContents = wc
@@ -106,6 +141,11 @@ function emitMessage(message: MuckaTextMessage): void {
   webContents.send('mucka:text-message', message)
 }
 
+function emitToolCall(call: MuckaTextToolCall): void {
+  if (!webContents || webContents.isDestroyed()) return
+  webContents.send('mucka:text-tool-call', call)
+}
+
 interface AssistantTextBlock {
   type: 'text'
   text: string
@@ -150,6 +190,7 @@ export async function sendMessage(text: string): Promise<void> {
       systemPrompt: loadPrompt(),
       cwd: app.getAppPath(),
       includePartialMessages: true,
+      mcpServers: { mucka: mcpServer },
       // Resume the SDK's session log from prior turns this boot so it
       // sees the running conversation. The first turn of a fresh cockpit
       // boot starts a new session.
@@ -206,10 +247,13 @@ export async function sendMessage(text: string): Promise<void> {
 }
 
 /**
- * Slice 1 stub — tools land in slice 2. The renderer-side tool-result
- * IPC handler is still wired through `MuckaText.acceptToolResult`; once
- * the agent backend dispatches tools via MCP this becomes a no-op.
+ * Renderer posts a tool result here after executing it. Resolves the
+ * pending dispatch promise so the MCP server can return to the model.
  */
-export function acceptToolResult(): void {
-  /* no-op until slice 2 */
+export function acceptToolResult(result: MuckaTextToolResult): void {
+  const pending = pendingCalls.get(result.callId)
+  if (!pending) return
+  pendingCalls.delete(result.callId)
+  clearTimeout(pending.timer)
+  pending.resolve(result)
 }
