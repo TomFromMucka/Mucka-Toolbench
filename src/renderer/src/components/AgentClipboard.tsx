@@ -60,11 +60,11 @@ export function AgentClipboard({
               title={`Claude Code context window — ${contextPercent}% remaining`}
               style={{
                 background:
-                  contextPercent <= 15
+                  contextPercent <= 50
                     ? 'rgba(255, 90, 74, 0.22)'
                     : 'rgba(234, 233, 232, 0.10)',
                 color:
-                  contextPercent <= 15
+                  contextPercent <= 50
                     ? 'var(--orange)'
                     : 'rgba(234, 233, 232, 0.85)'
               }}

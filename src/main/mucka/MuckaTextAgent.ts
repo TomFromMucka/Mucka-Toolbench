@@ -186,7 +186,12 @@ export async function sendMessage(text: string): Promise<void> {
     const userMessage = appendChat('user', [{ kind: 'text', text: trimmed }])
     emitMessage(userMessage)
 
-    const claudePath = process.env.CLAUDE_CODE_PATH?.trim() || undefined
+    // We deliberately don't pass `pathToClaudeCodeExecutable`. The Agent
+    // SDK bundles its own `claude` runner inside its package (unpacked
+    // from asar in the production build) and reads the user's auth from
+    // ~/.claude/ regardless. Tom's local `~/.local/bin/claude` wrapper
+    // resolves to ENOTDIR when spawned directly by Node, so the
+    // override was actively breaking text chat.
     const options: Options = {
       systemPrompt: loadPrompt(),
       cwd: app.getAppPath(),
@@ -196,8 +201,7 @@ export async function sendMessage(text: string): Promise<void> {
       // sees the running conversation. The first turn of a fresh cockpit
       // boot starts a new session.
       ...(hasPriorTurnThisBoot ? { continue: true } : {}),
-      ...(MODEL ? { model: MODEL } : {}),
-      ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {})
+      ...(MODEL ? { model: MODEL } : {})
     }
 
     const q = query({ prompt: trimmed, options })
