@@ -321,18 +321,38 @@ function DeviceOverlay({
   slotId: 'left' | 'right'
   onClose: () => void
 }): React.JSX.Element {
+  // Shift the overlay left/up when the device size would otherwise spill
+  // off-screen. Right edge pins to `window.innerWidth - MARGIN` so wide
+  // desktop sizes (1440, 1920) stay fully visible from the right column.
+  const MARGIN = 12
+  const viewportRight = window.innerWidth - MARGIN
+  const viewportBottom = window.innerHeight - MARGIN
+  const wantedLeft = anchorRect.left
+  const wantedTop = anchorRect.top
+  const left =
+    wantedLeft + width > viewportRight
+      ? Math.max(MARGIN, viewportRight - width)
+      : wantedLeft
+  const top =
+    wantedTop + height > viewportBottom
+      ? Math.max(MARGIN, viewportBottom - height)
+      : wantedTop
+
   return createPortal(
     <div
       style={{
         position: 'fixed',
-        top: anchorRect.top,
-        left: anchorRect.left,
+        top,
+        left,
         width: `${width}px`,
         height: `${height}px`,
         zIndex: 80,
         boxShadow: '0 24px 60px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4)',
         background: 'white',
-        pointerEvents: 'auto'
+        pointerEvents: 'auto',
+        // Hard right-edge cut so the iframe never visually bleeds off the
+        // window — the cockpit page bg shows past this seam.
+        outline: '2px solid var(--charcoal)'
       }}
     >
       <button
