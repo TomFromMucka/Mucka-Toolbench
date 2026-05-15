@@ -154,6 +154,19 @@ function RunningAgentPanel({
   const detectionBufferRef = useRef('')
   const lastPushedUrlRef = useRef<string | null>(null)
   const [stopping, setStopping] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const previewErrorTimerRef = useRef<number | null>(null)
+
+  const flashPreviewError = useCallback((msg: string): void => {
+    setPreviewError(msg)
+    if (previewErrorTimerRef.current !== null) {
+      window.clearTimeout(previewErrorTimerRef.current)
+    }
+    previewErrorTimerRef.current = window.setTimeout(
+      () => setPreviewError(null),
+      5000
+    )
+  }, [])
 
   const handleStop = useCallback(async (): Promise<void> => {
     if (stopping) return
@@ -186,7 +199,29 @@ function RunningAgentPanel({
     setActiveId(terminalId)
   }, [agent])
 
-  const startPreview = useCallback((): void => {
+  const startPreview = useCallback(async (): Promise<void> => {
+    // Preflight — Tom's spent a few minutes staring at npm ENOENT when
+    // the agent was pointed at a folder without a package.json. Catch
+    // it before we spawn a tab that's just going to fail.
+    try {
+      const listing = await window.mucka.listDir(agent.worktreePath)
+      if (!listing.exists) {
+        flashPreviewError(`Folder doesn't exist: ${agent.worktreePath}`)
+        return
+      }
+      if (
+        listing.entries.length > 0 &&
+        !listing.entries.some((e) => e.name === 'package.json')
+      ) {
+        flashPreviewError(
+          `No package.json in ${agent.worktreePath} — point this agent at a Node project (Stop → Start → Open folder).`
+        )
+        return
+      }
+    } catch {
+      /* fall through — preview tab will surface the real error inline */
+    }
+
     counterRef.current += 1
     const n = counterRef.current
     const terminalId = `${agent.id}:t${n}`
@@ -213,7 +248,7 @@ function RunningAgentPanel({
     // Old URL is stale until the new server prints its own — clear so the
     // iframe falls back to the placeholder during the transition.
     clearPreviewUrl()
-  }, [agent.id, clearPreviewUrl])
+  }, [agent.id, agent.worktreePath, clearPreviewUrl, flashPreviewError])
 
   const closeTab = useCallback(
     (terminalId: TerminalId): void => {
@@ -259,6 +294,19 @@ function RunningAgentPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {previewError ? (
+        <div
+          className="border-b px-2 py-1 t-label-sm"
+          style={{
+            background: 'rgba(255, 78, 0, 0.12)',
+            color: 'var(--orange)',
+            borderColor: 'var(--border)',
+            fontFamily: 'var(--font-soehne)'
+          }}
+        >
+          {previewError}
+        </div>
+      ) : null}
       <div
         className="flex items-stretch gap-px overflow-x-auto border-b px-1 py-1"
         style={{
@@ -337,7 +385,7 @@ function RunningAgentPanel({
         </button>
         <button
           type="button"
-          onClick={startPreview}
+          onClick={() => void startPreview()}
           title={`Fresh preview — runs \`${PREVIEW_COMMAND}\` in a new tab and binds its localhost URL to the iframe`}
           className="chamfer-sm ml-1 t-label-sm flex items-center gap-1 px-1.5 py-0.5"
           style={{

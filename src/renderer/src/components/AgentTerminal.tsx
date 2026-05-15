@@ -100,6 +100,24 @@ export function AgentTerminal({
       theme: THEME
     })
 
+    // VSCode-style Shift+Enter — send ESC+CR (the iTerm2 convention) so
+    // Claude Code's TUI treats it as a multi-line continuation instead
+    // of submitting the prompt. Plain Enter still sends \r.
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      if (
+        event.type === 'keydown' &&
+        event.key === 'Enter' &&
+        event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        window.mucka.writePty({ terminalId, data: '\x1b\r' })
+        return false
+      }
+      return true
+    })
+
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host)
