@@ -12,6 +12,12 @@ import {
   shell,
   systemPreferences
 } from 'electron'
+import {
+  deleteCardAttachments,
+  installAttachmentProtocol,
+  registerAttachmentScheme,
+  saveImage as attachmentsSaveImage
+} from './attachments/Attachments'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -475,9 +481,22 @@ function registerIpc(): void {
 
   ipcMain.handle('roadmap:delete', (_event, id: string) => {
     const ok = roadmapDelete(id)
-    if (ok) afterRoadmapMutation()
+    if (ok) {
+      void deleteCardAttachments(id)
+      afterRoadmapMutation()
+    }
     return ok
   })
+
+  ipcMain.handle(
+    'roadmap:attachImage',
+    async (
+      _event,
+      input: { cardId: string; name: string; bytes: Uint8Array }
+    ) => {
+      return attachmentsSaveImage(input.cardId, input.name, input.bytes)
+    }
+  )
 
   ipcMain.handle('fs:listDir', (_event, path: string) => fsListDir(path))
 
@@ -524,8 +543,12 @@ function configureMediaPermissions(): void {
   )
 }
 
+// Privileged schemes must be registered BEFORE app is ready.
+registerAttachmentScheme()
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('ai.mucka.toolbench')
+  installAttachmentProtocol()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

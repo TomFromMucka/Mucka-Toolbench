@@ -83,7 +83,9 @@ export function createCard(input: RoadmapCreateInput): RoadmapCard {
   if (!isValidColumn(input.column)) {
     throw new Error(`column must be one of: ${COLUMNS.join(', ')}`)
   }
-  const id = randomUUID()
+  // Accept a client-generated id so attachments uploaded before the
+  // first save (during create flow) still resolve.
+  const id = input.id && /^[A-Za-z0-9_-]+$/.test(input.id) ? input.id : randomUUID()
   const now = Date.now()
   const sortOrder = input.sortOrder ?? nextSortOrder(input.column)
 

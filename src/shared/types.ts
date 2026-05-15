@@ -299,12 +299,20 @@ export interface RoadmapCard {
 }
 
 export interface RoadmapCreateInput {
+  /** Optional client-generated id so attachments saved before create resolve. */
+  id?: string
   title: string
   body?: string
   column: RoadmapColumn
   tags?: string[]
   /** When set, insert at this sortOrder; otherwise append to the end of the column. */
   sortOrder?: number
+}
+
+export interface RoadmapAttachment {
+  filename: string
+  /** mucka-asset:// URL suitable for use in markdown ![]() */
+  url: string
 }
 
 export interface RoadmapUpdateInput {
@@ -480,6 +488,14 @@ export interface MuckaApi {
   moveRoadmapCard(input: RoadmapMoveInput): Promise<RoadmapCard>
   deleteRoadmapCard(id: string): Promise<boolean>
   onRoadmapUpdate(handler: () => void): () => void
+
+  /** Save a pasted/dropped image to the card's attachment folder. */
+  attachRoadmapImage(input: {
+    cardId: string
+    name: string
+    /** Raw bytes — Uint8Array transfers cleanly across IPC. */
+    bytes: Uint8Array
+  }): Promise<RoadmapAttachment>
 
   /* Filesystem — used by the Explorer sidebar */
   listDir(path: string): Promise<FsListing>

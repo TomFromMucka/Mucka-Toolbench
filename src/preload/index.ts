@@ -11,6 +11,7 @@ import type {
   MemoryListQuery,
   MemoryWriteInput,
   FsListing,
+  RoadmapAttachment,
   RoadmapCard,
   RoadmapCreateInput,
   RoadmapMoveInput,
@@ -143,6 +144,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.on('roadmap:update', listener)
     return () => ipcRenderer.off('roadmap:update', listener)
   },
+  attachRoadmapImage: (input: { cardId: string; name: string; bytes: Uint8Array }) =>
+    ipcRenderer.invoke('roadmap:attachImage', input) as Promise<RoadmapAttachment>,
 
   listDir: (path: string) =>
     ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,
