@@ -483,5 +483,99 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       },
       required: ['agent', 'text']
     }
+  },
+  {
+    name: 'list_roadmap',
+    description:
+      "Returns every roadmap kanban card grouped by column (backlog, next, doing, shipped, parked). Use this BEFORE answering 'what's next?', 'what are we working on?', or before suggesting where a new ticket should land — you need to see the current state to make sensible calls. Output includes id, title, body excerpt, and tags per card. Auto-executes.",
+    parameters: { type: 'object', properties: {}, required: [] }
+  },
+  {
+    name: 'create_roadmap_card',
+    description:
+      "Create a new ticket on the roadmap kanban. Use when Tom describes a new feature, bug, or idea worth tracking. Default the column to 'backlog' for rough ideas, 'next' for things Tom flagged as priority, 'doing' only if Tom explicitly says he's starting it now. Body supports markdown. Auto-executes.",
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description:
+            'Short ticket title — one line, sentence case. The headline shown on the card.'
+        },
+        column: {
+          type: 'string',
+          description: 'Which lane to land in.',
+          enum: ['backlog', 'next', 'doing', 'shipped', 'parked']
+        },
+        body: {
+          type: 'string',
+          description:
+            "Optional longer description. Markdown — # heading, **bold**, lists, links. Include acceptance criteria or 'Why:' context when it helps future you."
+        },
+        tags: {
+          type: 'string',
+          description:
+            'Optional comma-separated tags (e.g. "frontend,voice", "bug", "infra").'
+        }
+      },
+      required: ['title', 'column']
+    }
+  },
+  {
+    name: 'update_roadmap_card',
+    description:
+      'Edit an existing roadmap card by id. Use to rewrite title, expand the body, or replace tags. Get the id from list_roadmap first. Pass only the fields you want to change; omitted fields stay as they were. Auto-executes.',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The exact card id returned by list_roadmap.'
+        },
+        title: { type: 'string', description: 'New title.' },
+        body: { type: 'string', description: 'New markdown body.' },
+        tags: {
+          type: 'string',
+          description:
+            'Comma-separated tags. Replaces the existing tag set; pass an empty string to clear them.'
+        }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'move_roadmap_card',
+    description:
+      "Move a roadmap card to a different lane (e.g. backlog → next when Tom prioritises it, doing → shipped when work lands). Use when Tom says 'pull X into next', 'mark Y as done', 'park that one', etc. Auto-executes.",
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The exact card id returned by list_roadmap.'
+        },
+        column: {
+          type: 'string',
+          description: 'Destination lane.',
+          enum: ['backlog', 'next', 'doing', 'shipped', 'parked']
+        }
+      },
+      required: ['id', 'column']
+    }
+  },
+  {
+    name: 'delete_roadmap_card',
+    description:
+      "Permanently remove a roadmap card. REQUIRES Tom's confirmation — destructive. Prefer move_roadmap_card to 'parked' for cold ideas; only delete when the card is plainly wrong, duplicate, or Tom explicitly says drop it.",
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The exact card id returned by list_roadmap.'
+        }
+      },
+      required: ['id']
+    }
   }
 ] as const

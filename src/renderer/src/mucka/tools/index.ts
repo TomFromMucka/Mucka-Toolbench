@@ -7,6 +7,8 @@ import type {
   JobEvent,
   MemoryListItem,
   MemoryType,
+  RoadmapCard,
+  RoadmapColumn,
   VercelAgentSummary,
   VercelDeployment
 } from '@shared/types'
@@ -575,6 +577,130 @@ function makeDeployToVercel(deps: ToolDeps) {
   }
 }
 
+/* ─── Roadmap kanban tools ───────────────────────────────────────────── */
+
+const ROADMAP_COLUMNS: readonly RoadmapColumn[] = [
+  'backlog',
+  'next',
+  'doing',
+  'shipped',
+  'parked'
+] as const
+
+const ROADMAP_LABEL: Record<RoadmapColumn, string> = {
+  backlog: 'Backlog',
+  next: 'Next up',
+  doing: 'Doing',
+  shipped: 'Shipped',
+  parked: 'Parked'
+}
+
+function parseColumn(raw: unknown, label = 'column'): RoadmapColumn {
+  if (typeof raw !== 'string' || !(ROADMAP_COLUMNS as readonly string[]).includes(raw)) {
+    throw new Error(
+      `${label} must be one of: ${ROADMAP_COLUMNS.join(', ')} — got ${JSON.stringify(raw)}`
+    )
+  }
+  return raw as RoadmapColumn
+}
+
+function parseTags(raw: unknown): string[] {
+  if (typeof raw !== 'string') return []
+  return raw
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
+}
+
+function describeCardLine(card: RoadmapCard): string {
+  const bodyExcerpt =
+    card.body.trim().length === 0
+      ? ''
+      : ` — ${card.body.replace(/\s+/g, ' ').trim().slice(0, 100)}${card.body.length > 100 ? '…' : ''}`
+  const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
+  return `  • ${card.title}${tagPart} (${card.id.slice(0, 8)})${bodyExcerpt}`
+}
+
+async function listRoadmapHandler(): Promise<string> {
+  const cards = await window.mucka.listRoadmap()
+  if (cards.length === 0) return 'Roadmap is empty.'
+  const lines: string[] = []
+  for (const col of ROADMAP_COLUMNS) {
+    const inCol = cards
+      .filter((c) => c.column === col)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    lines.push(`${ROADMAP_LABEL[col]} (${inCol.length})`)
+    if (inCol.length === 0) {
+      lines.push('  · empty')
+    } else {
+      for (const c of inCol) lines.push(describeCardLine(c))
+    }
+    lines.push('')
+  }
+  return lines.join('\n').trim()
+}
+
+async function createRoadmapCardHandler(
+  params: Record<string, unknown>
+): Promise<string> {
+  const title = parseString(params, 'title').trim()
+  if (!title) throw new Error('title must not be empty')
+  const column = parseColumn(params['column'])
+  const body = typeof params['body'] === 'string' ? (params['body'] as string) : ''
+  const tags = parseTags(params['tags'])
+  const card = await window.mucka.createRoadmapCard({ title, column, body, tags })
+  const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
+  return `Created card "${card.title}" in ${ROADMAP_LABEL[card.column]}${tagPart} (id ${card.id.slice(0, 8)}).`
+}
+
+async function updateRoadmapCardHandler(
+  params: Record<string, unknown>
+): Promise<string> {
+  const id = parseString(params, 'id').trim()
+  if (!id) throw new Error('id must not be empty')
+  const patch: { id: string; title?: string; body?: string; tags?: string[] } = {
+    id
+  }
+  if (typeof params['title'] === 'string') patch.title = (params['title'] as string).trim()
+  if (typeof params['body'] === 'string') patch.body = params['body'] as string
+  if (typeof params['tags'] === 'string') patch.tags = parseTags(params['tags'])
+  const card = await window.mucka.updateRoadmapCard(patch)
+  return `Updated card "${card.title}" (id ${card.id.slice(0, 8)}).`
+}
+
+async function moveRoadmapCardHandler(
+  params: Record<string, unknown>
+): Promise<string> {
+  const id = parseString(params, 'id').trim()
+  if (!id) throw new Error('id must not be empty')
+  const column = parseColumn(params['column'])
+  const card = await window.mucka.moveRoadmapCard({ id, column })
+  return `Moved "${card.title}" to ${ROADMAP_LABEL[card.column]}.`
+}
+
+function makeDeleteRoadmapCard(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const id = parseString(params, 'id').trim()
+    if (!id) throw new Error('id must not be empty')
+    const cards = await window.mucka.listRoadmap()
+    const target = cards.find((c) => c.id === id)
+    if (!target) return `No card with id ${id.slice(0, 8)} — nothing to delete.`
+    const ok = await deps.requestConfirm({
+      summary: `Delete card "${target.title}"`,
+      note: `From ${ROADMAP_LABEL[target.column]}. ${
+        target.body.trim().length > 0
+          ? target.body.replace(/\s+/g, ' ').trim().slice(0, 150)
+          : 'No description.'
+      }`
+    })
+    if (!ok) return `Tom said no. "${target.title}" kept.`
+    const removed = await window.mucka.deleteRoadmapCard(id)
+    return removed
+      ? `Deleted "${target.title}".`
+      : `Tried to delete "${target.title}" but it was already gone.`
+  }
+}
+
 function makeSendToAgent(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
@@ -625,6 +751,12 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     restart_agent: makeRestartAgent(deps),
     send_to_agent: makeSendToAgent(deps),
     deploy_to_vercel: makeDeployToVercel(deps),
-    open_pr: makeOpenPr(deps)
+    open_pr: makeOpenPr(deps),
+
+    list_roadmap: () => listRoadmapHandler(),
+    create_roadmap_card: (params) => createRoadmapCardHandler(params),
+    update_roadmap_card: (params) => updateRoadmapCardHandler(params),
+    move_roadmap_card: (params) => moveRoadmapCardHandler(params),
+    delete_roadmap_card: makeDeleteRoadmapCard(deps)
   }
 }
