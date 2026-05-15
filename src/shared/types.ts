@@ -273,6 +273,54 @@ export interface CockpitDocPayload {
   found: boolean
 }
 
+/* ─── Roadmap kanban ─────────────────────────────────────────────────── */
+
+/**
+ * Kanban columns, in left-to-right display order.
+ * - backlog: raw ideas that aren't queued yet
+ * - next:    queued — pull next when there's capacity
+ * - doing:   in flight right now
+ * - shipped: landed (replaces the manual Recent-changes log over time)
+ * - parked:  not now, but worth keeping (low-priority or paused)
+ */
+export type RoadmapColumn = 'backlog' | 'next' | 'doing' | 'shipped' | 'parked'
+
+export interface RoadmapCard {
+  id: string
+  title: string
+  /** Optional longer body — markdown-ish plain text. */
+  body: string
+  column: RoadmapColumn
+  /** Position within the column, lower first. */
+  sortOrder: number
+  tags: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+export interface RoadmapCreateInput {
+  title: string
+  body?: string
+  column: RoadmapColumn
+  tags?: string[]
+  /** When set, insert at this sortOrder; otherwise append to the end of the column. */
+  sortOrder?: number
+}
+
+export interface RoadmapUpdateInput {
+  id: string
+  title?: string
+  body?: string
+  tags?: string[]
+}
+
+export interface RoadmapMoveInput {
+  id: string
+  column: RoadmapColumn
+  /** New position in target column (0-based). Omit to append to end. */
+  sortOrder?: number
+}
+
 /* ─── Filesystem (Explorer panel) ────────────────────────────────────── */
 
 export type FsEntryKind = 'dir' | 'file' | 'symlink' | 'other'
@@ -424,6 +472,14 @@ export interface MuckaApi {
   getMemory(topic: string): Promise<Memory | null>
   rememberMemory(input: MemoryWriteInput): Promise<Memory>
   forgetMemory(topic: string): Promise<boolean>
+
+  /* Roadmap kanban — sqlite-backed cards, mirrored to MUCKA.md ## Roadmap */
+  listRoadmap(): Promise<RoadmapCard[]>
+  createRoadmapCard(input: RoadmapCreateInput): Promise<RoadmapCard>
+  updateRoadmapCard(input: RoadmapUpdateInput): Promise<RoadmapCard>
+  moveRoadmapCard(input: RoadmapMoveInput): Promise<RoadmapCard>
+  deleteRoadmapCard(id: string): Promise<boolean>
+  onRoadmapUpdate(handler: () => void): () => void
 
   /* Filesystem — used by the Explorer sidebar */
   listDir(path: string): Promise<FsListing>

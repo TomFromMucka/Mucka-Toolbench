@@ -11,6 +11,10 @@ import type {
   MemoryListQuery,
   MemoryWriteInput,
   FsListing,
+  RoadmapCard,
+  RoadmapCreateInput,
+  RoadmapMoveInput,
+  RoadmapUpdateInput,
   GitStatus,
   GitStatusEvent,
   JobEvent,
@@ -123,6 +127,22 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('memory:remember', input) as Promise<Memory>,
   forgetMemory: (topic: string) =>
     ipcRenderer.invoke('memory:forget', topic) as Promise<boolean>,
+
+  listRoadmap: () =>
+    ipcRenderer.invoke('roadmap:list') as Promise<RoadmapCard[]>,
+  createRoadmapCard: (input: RoadmapCreateInput) =>
+    ipcRenderer.invoke('roadmap:create', input) as Promise<RoadmapCard>,
+  updateRoadmapCard: (input: RoadmapUpdateInput) =>
+    ipcRenderer.invoke('roadmap:update', input) as Promise<RoadmapCard>,
+  moveRoadmapCard: (input: RoadmapMoveInput) =>
+    ipcRenderer.invoke('roadmap:move', input) as Promise<RoadmapCard>,
+  deleteRoadmapCard: (id: string) =>
+    ipcRenderer.invoke('roadmap:delete', id) as Promise<boolean>,
+  onRoadmapUpdate: (handler: () => void) => {
+    const listener = (): void => handler()
+    ipcRenderer.on('roadmap:update', listener)
+    return () => ipcRenderer.off('roadmap:update', listener)
+  },
 
   listDir: (path: string) =>
     ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,
