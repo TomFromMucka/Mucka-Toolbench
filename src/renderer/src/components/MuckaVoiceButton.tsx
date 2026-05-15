@@ -48,7 +48,7 @@ export function MuckaVoiceButton(): React.JSX.Element {
         title={title}
         aria-label={LABEL[state]}
         className={clsx(
-          'grid shrink-0 place-items-center transition-opacity',
+          'grid shrink-0 place-items-center overflow-hidden transition-opacity',
           unavailable && 'cursor-not-allowed opacity-40',
           !unavailable && !live && 'opacity-80 hover:opacity-100',
           connecting && 'animate-pulse'
@@ -59,6 +59,9 @@ export function MuckaVoiceButton(): React.JSX.Element {
           background: 'transparent'
         }}
       >
+        {/* The source asset has ~40% transparent padding around the
+            hex-bolt mark. Render it larger than the button and clip the
+            padding so the mark fills the visible 34×34 area. */}
         <img
           src={live ? BOLT_ANIMATED : BOLT_STATIC}
           alt=""
@@ -66,8 +69,8 @@ export function MuckaVoiceButton(): React.JSX.Element {
           draggable={false}
           style={{
             display: 'block',
-            height: '34px',
-            width: '34px',
+            height: '56px',
+            width: '56px',
             objectFit: 'contain'
           }}
         />
