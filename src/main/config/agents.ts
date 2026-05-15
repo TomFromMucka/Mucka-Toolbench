@@ -20,7 +20,8 @@ const DEFAULTS: AgentConfig[] = [
     needsAttention: false,
     attentionReason: null,
     previewUrl: 'http://localhost:3001',
-    vercelProjectId: null
+    vercelProjectId: null,
+    running: false
   },
   {
     id: 'sammy',
@@ -32,7 +33,8 @@ const DEFAULTS: AgentConfig[] = [
     needsAttention: false,
     attentionReason: null,
     previewUrl: null,
-    vercelProjectId: null
+    vercelProjectId: null,
+    running: false
   },
   {
     id: 'kev',
@@ -44,7 +46,8 @@ const DEFAULTS: AgentConfig[] = [
     needsAttention: false,
     attentionReason: null,
     previewUrl: null,
-    vercelProjectId: null
+    vercelProjectId: null,
+    running: false
   },
   {
     id: 'bren',
@@ -56,7 +59,8 @@ const DEFAULTS: AgentConfig[] = [
     needsAttention: false,
     attentionReason: null,
     previewUrl: 'http://localhost:3002',
-    vercelProjectId: null
+    vercelProjectId: null,
+    running: false
   }
 ]
 

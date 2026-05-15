@@ -132,6 +132,18 @@ export class PtyManager {
     this.statusDetector.release(terminalId)
   }
 
+  /**
+   * Kill every PTY owned by an agent — its primary terminal + every
+   * split / preview sub-terminal. Used when Tom (or Mucka) stops the
+   * agent from the cockpit UI.
+   */
+  killByAgent(agentId: AgentId): void {
+    const targets = [...this.ptys.values()].filter((e) => e.agentId === agentId)
+    for (const entry of targets) {
+      this.kill(entry.terminalId)
+    }
+  }
+
   killAll(): void {
     for (const id of [...this.ptys.keys()]) {
       this.kill(id)

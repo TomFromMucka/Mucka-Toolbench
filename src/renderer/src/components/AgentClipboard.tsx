@@ -48,11 +48,11 @@ export function AgentClipboard({
           <span
             className={clsx(
               'inline-block size-2 rounded-full',
-              STATUS_DOT[agent.status]
+              config.running ? STATUS_DOT[agent.status] : 'bg-dirty-grey'
             )}
           />
           <span style={{ color: 'rgba(234, 233, 232, 0.85)' }}>
-            {STATUS_LABEL[agent.status]}
+            {config.running ? STATUS_LABEL[agent.status] : 'stopped'}
           </span>
         </span>
       }

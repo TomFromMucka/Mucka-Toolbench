@@ -375,6 +375,38 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     }
   },
   {
+    name: 'start_agent',
+    description:
+      "Spin up an idle agent — spawn its primary shell at its configured worktree. Idle agents show a 'Start' screen with no PTY running. Call this when Tom says 'wake up Sammy' / 'get Kev going' / 'start that one'. Auto-executes; non-destructive (it's just spawning a shell).",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        }
+      },
+      required: ['agent']
+    }
+  },
+  {
+    name: 'stop_agent',
+    description:
+      "Park an agent — kill its primary shell and every sub-terminal. REQUIRES Tom's confirmation since any unsaved state in the running session is lost. The agent's config is preserved; a future `start_agent` brings it back. Use when Tom says 'put Bren to sleep' / 'shut Dave down' / 'park that one'.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        }
+      },
+      required: ['agent']
+    }
+  },
+  {
     name: 'restart_agent',
     description:
       "Kill and respawn an agent's shell with its current config. REQUIRES confirmation — useful when a shell is stuck or Tom wants a fresh session without changing config.",

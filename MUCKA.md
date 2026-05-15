@@ -68,7 +68,7 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (23).**
+**Mucka tools (25).**
 
 Read-only (auto-execute):
 - `list_agents`, `get_git_status`, `get_recent_output`,
@@ -77,12 +77,12 @@ Read-only (auto-execute):
 
 Chrome writes (auto-execute):
 - `set_banner_status`, `append_note`, `flag_attention`,
-  `clear_attention`, `set_agent_preview`, `remember`.
+  `clear_attention`, `set_agent_preview`, `remember`, `start_agent`.
 
 Confirm-gated:
 - `set_agent_worktree`, `set_agent_command`, `restart_agent`,
-  `send_to_agent` (edit-confirm), `deploy_to_vercel`, `open_pr`,
-  `forget`.
+  `stop_agent`, `send_to_agent` (edit-confirm), `deploy_to_vercel`,
+  `open_pr`, `forget`.
 
 ## Systems
 
@@ -172,6 +172,15 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-15** — Idle-until-started agents. Each agent has a
+  persistent `running` flag in sqlite; new column defaults to `0`
+  so the cockpit boots with all four agents stopped (no zsh
+  processes spawned unprompted). The agent clipboard shows a Start
+  screen with a `command + cwd` preview and a primary CTA; a Stop
+  button lives in the running-state tab strip and tears down the
+  primary shell + every sub-terminal. Two new Mucka tools wired:
+  `start_agent` (auto-execute) and `stop_agent` (confirm-gated).
+  Stopped agents show "stopped" in the status pill.
 - **2026-05-15** — Mucka rebrand · Slices 1–4. The cockpit is now on
   the same design system as Mucka Pro mobile, in a dark-mode skin.
   Söhne (Sohne Breit Kräftig display + Sohne body) replaces Caveat
