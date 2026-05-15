@@ -68,21 +68,23 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (25).**
+**Mucka tools (30).**
 
 Read-only (auto-execute):
 - `list_agents`, `get_git_status`, `get_recent_output`,
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
-  `get_pr_status`, `get_cockpit_doc`, `list_memories`, `get_memory`.
+  `get_pr_status`, `get_cockpit_doc`, `list_memories`, `get_memory`,
+  `list_roadmap`.
 
 Chrome writes (auto-execute):
 - `set_banner_status`, `append_note`, `flag_attention`,
-  `clear_attention`, `set_agent_preview`, `remember`, `start_agent`.
+  `clear_attention`, `set_agent_preview`, `remember`, `start_agent`,
+  `create_roadmap_card`, `update_roadmap_card`, `move_roadmap_card`.
 
 Confirm-gated:
 - `set_agent_worktree`, `set_agent_command`, `restart_agent`,
   `stop_agent`, `send_to_agent` (edit-confirm), `deploy_to_vercel`,
-  `open_pr`, `forget`.
+  `open_pr`, `forget`, `delete_roadmap_card`.
 
 ## Systems
 
@@ -172,6 +174,19 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-15** — Roadmap kanban (slices 1–4). The middle-column
+  "Roadmap" tab is now a 5-lane drag-and-drop kanban
+  (Backlog · Next · Doing · Shipped · Parked) backed by a new
+  `roadmap_cards` sqlite table. Cards have markdown bodies and image
+  attachments saved under `<userData>/roadmap-attachments/<cardId>/`,
+  served via a new `mucka-asset://` custom protocol. Click to view
+  rendered markdown + image; Edit / Delete (confirm) in the same
+  modal. Drag between columns or reorder within one. `## Roadmap` in
+  MUCKA.md is auto-mirrored from sqlite on every change. Mucka picked
+  up five tools: `list_roadmap`, `create_roadmap_card`,
+  `update_roadmap_card`, `move_roadmap_card` (all auto), and
+  `delete_roadmap_card` (confirm-gated). Tool count 25 → 30. Prompt
+  pushed via `mucka:sync`.
 - **2026-05-15** — Preview viewport sizes. Each preview Clipboard has a
   device dropdown (Fit / iPhone SE…14 Pro Max / iPad Mini…12.9" / Desktop
   1280…1920) plus a rotate toggle for landscape. Picking a device portals
