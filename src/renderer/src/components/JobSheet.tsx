@@ -77,20 +77,20 @@ export function JobSheet(): React.JSX.Element {
                       {day}
                     </div>
                   ) : null}
-                  <div className="grid grid-cols-[44px_64px_1fr] items-baseline gap-2 t-body-md leading-[26px]">
+                  <div className="grid grid-cols-[44px_minmax(0,8rem)_minmax(0,1fr)] items-baseline gap-2 t-body-md leading-[26px]">
                     <span className="t-label-sm text-dirty-grey tabular-nums">
                       {fmtTime(event.ts)}
                     </span>
-                    <span className="t-label-sm flex items-center gap-1.5 text-dirty-grey">
+                    <span className="t-label-sm flex min-w-0 items-center gap-1.5 text-dirty-grey">
                       <span
                         className={clsx(
-                          'inline-block size-2 rounded-full',
+                          'inline-block size-2 shrink-0 rounded-full',
                           TONE_DOT[event.tone]
                         )}
                       />
-                      {labelFor(event.source)}
+                      <span className="truncate">{labelFor(event.source)}</span>
                     </span>
-                    <span className={clsx('truncate', TONE_TEXT[event.tone])}>
+                    <span className={clsx('min-w-0 truncate', TONE_TEXT[event.tone])}>
                       {event.message}
                     </span>
                   </div>

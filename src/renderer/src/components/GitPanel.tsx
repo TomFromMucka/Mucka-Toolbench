@@ -139,13 +139,13 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'no-repo') {
     return (
       <li
-        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        className="t-body-md flex flex-col gap-1 border-b px-3 py-2 leading-snug last:border-b-0"
         style={{ borderColor: 'var(--border)' }}
       >
-        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
+        <span className="t-label-sm truncate text-dirty-grey">
           {row.agent.displayName.toLowerCase()}
         </span>
-        <span className="flex-1 text-dirty-grey">
+        <span className="text-dirty-grey">
           Worktree origin isn&apos;t a GitHub repo.
         </span>
       </li>
@@ -155,15 +155,17 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'error') {
     return (
       <li
-        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        className="t-body-md flex items-start gap-2 border-b px-3 py-2 leading-snug last:border-b-0"
         style={{ borderColor: 'var(--border)' }}
       >
-        <span className="t-label-sm w-12 shrink-0 text-dirty-grey">
-          {row.agent.displayName.toLowerCase()}
-        </span>
-        <span className="flex-1" style={{ color: 'var(--red)' }}>
-          {row.summary.error}
-        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <span className="t-label-sm block truncate text-dirty-grey">
+            {row.agent.displayName.toLowerCase()}
+          </span>
+          <span className="block break-words" style={{ color: 'var(--red)' }}>
+            {row.summary.error}
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => onRefreshAgent(row.agent.id)}
@@ -178,13 +180,13 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   if (row.kind === 'no-pr') {
     return (
       <li
-        className="t-body-md flex items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+        className="t-body-md flex flex-col gap-1 border-b px-3 py-2 leading-snug last:border-b-0"
         style={{ borderColor: 'var(--border)' }}
       >
-        <span className="t-label-sm shrink-0 text-dirty-grey">
+        <span className="t-label-sm truncate text-dirty-grey">
           {agentsLabel(row.agents)}
         </span>
-        <span className="ml-2 flex-1 text-dirty-grey">
+        <span className="text-dirty-grey">
           {repoLabel(row.summary)} · {row.summary.branch} — no open PR
         </span>
       </li>
@@ -196,41 +198,51 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
   const checkVariant = CHECK_PILL[summary.checkSummary]
   return (
     <li
-      className="t-body-md grid grid-cols-[auto_auto_1fr_auto] items-baseline gap-2 border-b px-3 py-1.5 leading-snug last:border-b-0"
+      className="t-body-md flex flex-col gap-1 border-b px-3 py-2 leading-snug last:border-b-0"
       style={{ borderColor: 'var(--border)' }}
     >
-      <span className="t-label-sm shrink-0 text-dirty-grey">
-        {agentsLabel(row.agents)}
-      </span>
-      {checkVariant ? (
-        <StatusPill
-          variant={checkVariant}
-          className={clsx(summary.checkSummary === 'pending' && 'animate-pulse')}
-        >
-          {CHECK_LABEL[summary.checkSummary]}
-        </StatusPill>
-      ) : (
-        <span
-          className="t-label-sm chamfer-sm px-1.5 py-0.5"
-          style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
-        >
-          {CHECK_LABEL[summary.checkSummary]}
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="t-label-sm min-w-0 flex-1 truncate text-dirty-grey">
+          {agentsLabel(row.agents)}
         </span>
-      )}
+        {checkVariant ? (
+          <StatusPill
+            variant={checkVariant}
+            className={clsx('shrink-0', summary.checkSummary === 'pending' && 'animate-pulse')}
+          >
+            {CHECK_LABEL[summary.checkSummary]}
+          </StatusPill>
+        ) : (
+          <span
+            className="t-label-sm chamfer-sm shrink-0 px-1.5 py-0.5"
+            style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
+          >
+            {CHECK_LABEL[summary.checkSummary]}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => openUrl(pr.url)}
+          className="t-label-sm shrink-0 text-orange hover:underline"
+          title={pr.url}
+        >
+          open
+        </button>
+      </div>
       <button
         type="button"
         onClick={() => openUrl(pr.url)}
         className="min-w-0 text-left"
         title={`#${pr.number} · ${pr.headBranch} → ${pr.baseBranch}`}
       >
-        <div className="flex items-baseline gap-1.5">
+        <div className="flex min-w-0 items-baseline gap-1.5">
           <span className="t-body-sm shrink-0 text-dirty-grey">
             #{pr.number}
           </span>
-          <span className="truncate text-van-white">{pr.title}</span>
+          <span className="min-w-0 truncate text-van-white">{pr.title}</span>
           {pr.isDraft ? (
             <span
-              className="t-label-sm chamfer-sm px-1 py-px"
+              className="t-label-sm chamfer-sm shrink-0 px-1 py-px"
               style={{
                 background: 'rgba(234, 233, 232, 0.10)',
                 color: 'var(--van-white)'
@@ -241,7 +253,7 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
           ) : null}
           {mergeable ? (
             <span
-              className="t-label-sm chamfer-sm px-1 py-px"
+              className="t-label-sm chamfer-sm shrink-0 px-1 py-px"
               style={{
                 background: 'rgba(255, 154, 74, 0.18)',
                 color: 'var(--pill-pending-fg)'
@@ -255,14 +267,6 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
           {repoLabel(summary)} · {summary.branch} → {pr.baseBranch} ·{' '}
           {relativeTime(pr.updatedAt || pr.createdAt)}
         </div>
-      </button>
-      <button
-        type="button"
-        onClick={() => openUrl(pr.url)}
-        className="t-label-sm shrink-0 text-orange hover:underline"
-        title={pr.url}
-      >
-        open
       </button>
     </li>
   )
