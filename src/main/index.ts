@@ -143,7 +143,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#1a1612',
-    title: 'Mucka Toolbench',
+    title: app.isPackaged ? 'Mucka Toolbench' : 'Mucka Toolbench [DEV]',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

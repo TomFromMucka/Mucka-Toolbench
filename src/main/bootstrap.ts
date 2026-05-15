@@ -1,7 +1,27 @@
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
 import dotenv from 'dotenv'
+
+/**
+ * In dev (`npm run dev`) redirect userData to a separate folder so the
+ * dev window doesn't fight the installed .app for the same sqlite DB,
+ * scrollback files, attachments folder, etc. Both can run side-by-side
+ * with independent state.
+ *
+ * Must happen BEFORE anything else reads `app.getPath('userData')`.
+ */
+function redirectDevUserData(): string | null {
+  if (app.isPackaged) return null
+  const devPath = join(app.getPath('appData'), 'mucka-toolbench-dev')
+  mkdirSync(devPath, { recursive: true })
+  app.setPath('userData', devPath)
+  // eslint-disable-next-line no-console
+  console.log(`[mucka] dev mode — userData → ${devPath}`)
+  return devPath
+}
+
+redirectDevUserData()
 
 /**
  * Side-effect import — runs BEFORE the rest of main loads its modules,
