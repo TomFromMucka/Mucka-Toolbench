@@ -8,6 +8,7 @@ import type {
   CockpitDocPayload,
   Memory,
   MemoryListItem,
+  BroadcastResult,
   MemoryListQuery,
   MemoryWriteInput,
   FsListing,
@@ -146,6 +147,9 @@ const muckaApi: MuckaApi = {
   },
   attachRoadmapImage: (input: { cardId: string; name: string; bytes: Uint8Array }) =>
     ipcRenderer.invoke('roadmap:attachImage', input) as Promise<RoadmapAttachment>,
+
+  broadcastToAgents: (input: { text: string; agentIds?: AgentId[] }) =>
+    ipcRenderer.invoke('broadcast:send', input) as Promise<BroadcastResult>,
 
   listDir: (path: string) =>
     ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,

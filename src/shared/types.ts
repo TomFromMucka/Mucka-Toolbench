@@ -273,6 +273,15 @@ export interface CockpitDocPayload {
   found: boolean
 }
 
+/* ─── Cross-agent broadcast ──────────────────────────────────────────── */
+
+export interface BroadcastResult {
+  /** Agents that received the text (primary PTY was live). */
+  sent: AgentId[]
+  /** Agents that were targeted but skipped (no live shell). */
+  skipped: AgentId[]
+}
+
 /* ─── Roadmap kanban ─────────────────────────────────────────────────── */
 
 /**
@@ -499,6 +508,13 @@ export interface MuckaApi {
 
   /* Filesystem — used by the Explorer sidebar */
   listDir(path: string): Promise<FsListing>
+  /** Type a string into multiple agents' terminals in parallel, then press Enter. */
+  broadcastToAgents(input: {
+    text: string
+    /** Subset of agent ids; omit to fan to every currently running agent. */
+    agentIds?: AgentId[]
+  }): Promise<BroadcastResult>
+
   /** Reveal a file or folder in the OS file manager (Finder on macOS). */
   revealInOs(path: string): Promise<void>
   /** Open a file or folder with the OS default handler. */
