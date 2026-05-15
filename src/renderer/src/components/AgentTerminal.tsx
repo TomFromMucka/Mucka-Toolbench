@@ -72,6 +72,12 @@ export function AgentTerminal({
   const onDataRef = useRef(onData)
   // Captured at mount — autoCommand is intentionally one-shot.
   const autoCommandRef = useRef(autoCommand)
+  // Last (cols, rows) sent to the PTY — used to suppress redundant
+  // SIGWINCH on sub-pixel reflows. Without this, every Vercel/Git poll
+  // update, font load or attention-glow keyframe tick fires the
+  // ResizeObserver and zsh redraws its prompt, spamming the terminal
+  // with empty `$ ` lines.
+  const lastPtySizeRef = useRef<{ cols: number; rows: number } | null>(null)
 
   useEffect(() => {
     onDataRef.current = onData
@@ -131,11 +137,17 @@ export function AgentTerminal({
       if (host.offsetParent === null) return
       try {
         fit.fit()
-        window.mucka.resizePty({
-          terminalId,
-          cols: term.cols,
-          rows: term.rows
-        })
+        const cols = term.cols
+        const rows = term.rows
+        const prev = lastPtySizeRef.current
+        // Only send SIGWINCH when dimensions actually changed. Layout
+        // jitter from sibling panels (Vercel poll, Git poll, scrollbar
+        // appear/disappear, font swap) would otherwise spam the shell
+        // with redundant resize signals and force a prompt redraw each
+        // time.
+        if (prev && prev.cols === cols && prev.rows === rows) return
+        lastPtySizeRef.current = { cols, rows }
+        window.mucka.resizePty({ terminalId, cols, rows })
       } catch {
         /* nothing to fit */
       }
@@ -193,7 +205,13 @@ export function AgentTerminal({
     const handle = window.requestAnimationFrame(() => {
       try {
         fit.fit()
-        window.mucka.resizePty({ terminalId, cols: term.cols, rows: term.rows })
+        const cols = term.cols
+        const rows = term.rows
+        const prev = lastPtySizeRef.current
+        if (!prev || prev.cols !== cols || prev.rows !== rows) {
+          lastPtySizeRef.current = { cols, rows }
+          window.mucka.resizePty({ terminalId, cols, rows })
+        }
         term.focus()
       } catch {
         /* mid-teardown */
