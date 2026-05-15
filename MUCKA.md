@@ -172,6 +172,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-15** — Explorer sidebar. New collapsible left column with a
+  VSCode-style file tree. Top-of-panel dropdown switches between the
+  four agent worktrees, a Reveal-in-Finder button (Lucide
+  `FolderSearch`) calls `shell.showItemInFolder`, and clicking a file
+  opens it with the OS default handler. The tree lazy-loads each
+  folder via a new `src/main/fs` module + IPC; collapsed state +
+  selected worktree persist in localStorage. Collapsed view is a thin
+  charcoal rail with a folder-tree icon to re-expand.
 - **2026-05-15** — Idle-until-started agents. Each agent has a
   persistent `running` flag in sqlite; new column defaults to `0`
   so the cockpit boots with all four agents stopped (no zsh

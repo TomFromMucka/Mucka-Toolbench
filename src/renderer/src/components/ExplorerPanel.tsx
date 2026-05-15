@@ -1,8 +1,17 @@
 import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Folder, FolderTree, FolderOpen } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Folder,
+  FolderTree,
+  FolderOpen,
+  FolderSearch
+} from 'lucide-react'
 import type { AgentConfig, AgentId } from '@shared/types'
 import { Clipboard } from './Clipboard'
+import { FileTree } from './FileTree'
 import { Icon } from './ui/Icon'
+import { useFileTree } from '../hooks/useFileTree'
 
 interface ExplorerPanelProps {
   agents: AgentConfig[]
@@ -29,6 +38,8 @@ export function ExplorerPanel({
     () => agents.find((a) => a.id === selectedAgentId) ?? agents[0] ?? null,
     [agents, selectedAgentId]
   )
+
+  const tree = useFileTree(selected?.worktreePath ?? null)
 
   if (collapsed) {
     return <CollapsedRail onExpand={onToggle} />
@@ -63,7 +74,9 @@ export function ExplorerPanel({
 
         <WorktreeHeader agent={selected} />
 
-        <FileTreePlaceholder cwd={selected?.worktreePath ?? null} />
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          <FileTree api={tree} />
+        </div>
       </div>
     </Clipboard>
   )
@@ -189,32 +202,14 @@ function WorktreeHeader({ agent }: { agent: AgentConfig | null }): React.JSX.Ele
       </div>
       <button
         type="button"
-        title="Reveal in Finder (wired in slice 3)"
-        disabled
-        className="grid size-6 place-items-center rounded-sm opacity-40"
+        title="Reveal in Finder"
+        onClick={() => void window.mucka.revealInOs(agent.worktreePath)}
+        className="grid size-6 place-items-center rounded-sm transition-colors hover:bg-van-white/15"
         style={{ color: 'var(--van-white)' }}
         aria-label="Reveal in Finder"
       >
-        <Icon icon={FolderOpen} size={14} strokeWidth={2.25} />
+        <Icon icon={FolderSearch} size={14} strokeWidth={2.25} />
       </button>
-    </div>
-  )
-}
-
-function FileTreePlaceholder({ cwd }: { cwd: string | null }): React.JSX.Element {
-  return (
-    <div
-      className="min-h-0 flex-1 overflow-y-auto px-3 py-3 t-body-sm"
-      style={{ color: 'var(--dirty-grey)' }}
-    >
-      {cwd ? (
-        <p className="leading-snug">
-          File tree coming in slice 3 — will lazy-load entries under{' '}
-          <span className="font-mono text-[0.78rem]">{cwd}</span>.
-        </p>
-      ) : (
-        <p>Select a worktree to browse files.</p>
-      )}
     </div>
   )
 }
