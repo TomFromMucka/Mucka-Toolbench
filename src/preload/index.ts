@@ -43,7 +43,8 @@ import type {
   GitHubUpdateEvent,
   PrReviewContext,
   PrReviewSubmission,
-  PrReviewSubmitted
+  PrReviewSubmitted,
+  UpdaterStatus
 } from '@shared/types'
 
 const muckaApi: MuckaApi = {
@@ -239,8 +240,38 @@ const muckaApi: MuckaApi = {
   fetchPrReviewContext: (agentId: AgentId) =>
     ipcRenderer.invoke('github:review-context', agentId) as Promise<PrReviewContext>,
   submitPrReview: (input: PrReviewSubmission) =>
-    ipcRenderer.invoke('github:review-submit', input) as Promise<PrReviewSubmitted>
+    ipcRenderer.invoke('github:review-submit', input) as Promise<PrReviewSubmitted>,
+
+  getCurrentAppVersion: () => {
+    // ipcRenderer.invoke is async; the type contract is `string`, so we
+    // surface a synchronous fallback via the bridge — main has already
+    // set this at startup.
+    return (window as unknown as { __muckaVersion?: string }).__muckaVersion ?? ''
+  },
+  checkForUpdates: () =>
+    ipcRenderer.invoke('updater:check') as Promise<UpdaterStatus>,
+  downloadUpdate: () =>
+    ipcRenderer.invoke('updater:download') as Promise<void>,
+  installUpdate: () =>
+    ipcRenderer.invoke('updater:install') as Promise<void>,
+  onUpdaterStatus: (handler: (status: UpdaterStatus) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: UpdaterStatus) =>
+      handler(payload)
+    ipcRenderer.on('updater:status', listener)
+    return () => ipcRenderer.off('updater:status', listener)
+  }
 }
+
+// Resolve the app version once at preload boot so the renderer can read
+// it synchronously through MuckaApi.getCurrentAppVersion.
+ipcRenderer
+  .invoke('updater:version')
+  .then((v: string) => {
+    ;(window as unknown as { __muckaVersion?: string }).__muckaVersion = v
+  })
+  .catch(() => {
+    /* fallback to empty string */
+  })
 
 if (process.contextIsolated) {
   try {

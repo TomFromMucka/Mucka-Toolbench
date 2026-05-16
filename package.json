@@ -1,6 +1,6 @@
 {
   "name": "mucka-toolbench",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Personal dev cockpit for running parallel Claude Code agents on the same project",
   "main": "./out/main/index.js",
   "author": "Mucka",
@@ -18,6 +18,7 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:mac": "electron-vite build && electron-builder --mac",
     "install:mac": "bash scripts/install-mac.sh",
+    "release:mac": "electron-vite build && electron-builder --mac --publish always",
     "mucka:sync": "tsx scripts/mucka-sync.ts"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "better-sqlite3": "^12.10.0",
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^1.16.0",
     "node-pty": "^1.1.0",
     "react-markdown": "^10.1.0"

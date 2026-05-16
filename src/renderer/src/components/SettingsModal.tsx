@@ -5,7 +5,8 @@ import type {
   AgentUpdate,
   Memory,
   MemoryListItem,
-  MemoryType
+  MemoryType,
+  UpdaterStatus
 } from '@shared/types'
 import { Clipboard } from './Clipboard'
 
@@ -16,7 +17,7 @@ interface SettingsModalProps {
   onSave: (patch: AgentUpdate) => Promise<void>
 }
 
-type Tab = 'agents' | 'memory'
+type Tab = 'agents' | 'memory' | 'updates'
 
 const FIELD =
   'w-full rounded-sm border border-ink/20 bg-paper-cream px-2 py-1 font-mono text-[0.82rem] text-ink focus:border-mucka focus:outline-none focus:ring-1 focus:ring-mucka'
@@ -53,7 +54,13 @@ export function SettingsModal({
       >
         <Clipboard
           title="Settings"
-          subtitle={tab === 'agents' ? 'agent worktrees & commands' : "Mucka's long-term memory"}
+          subtitle={
+            tab === 'agents'
+              ? 'agent worktrees & commands'
+              : tab === 'memory'
+                ? "Mucka's long-term memory"
+                : 'app version + updates'
+          }
           paper="lined"
           rightSlot={
             <button
@@ -69,8 +76,10 @@ export function SettingsModal({
           <div className="max-h-[78vh] overflow-y-auto px-5 py-4">
             {tab === 'agents' ? (
               <AgentsTab agents={agents} onSave={onSave} onClose={onClose} />
-            ) : (
+            ) : tab === 'memory' ? (
               <MemoryTab />
+            ) : (
+              <UpdatesTab />
             )}
           </div>
         </Clipboard>
@@ -87,7 +96,8 @@ interface TabStripProps {
 function TabStrip({ tab, onChange }: TabStripProps): React.JSX.Element {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'agents', label: 'Agents' },
-    { id: 'memory', label: 'Memory' }
+    { id: 'memory', label: 'Memory' },
+    { id: 'updates', label: 'Updates' }
   ]
   return (
     <div className="flex gap-1 border-b border-ink/15 bg-paper-shadow/50 px-3 pt-2">
@@ -708,5 +718,179 @@ function FilterChip({
     >
       {label}
     </button>
+  )
+}
+
+/* ─── Updates tab ────────────────────────────────────────────────────── */
+
+function UpdatesTab(): React.JSX.Element {
+  const [status, setStatus] = useState<UpdaterStatus>({ kind: 'idle' })
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    return window.mucka.onUpdaterStatus((s) => setStatus(s))
+  }, [])
+
+  const currentVersion = window.mucka.getCurrentAppVersion() || 'unknown'
+
+  const handleCheck = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      const s = await window.mucka.checkForUpdates()
+      setStatus(s)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDownload = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      await window.mucka.downloadUpdate()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleInstall = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      await window.mucka.installUpdate()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-sm border border-ink/15 bg-paper-cream/60 p-3">
+        <div className="text-[0.7rem] uppercase tracking-[0.16em] text-ink-faint">
+          Installed
+        </div>
+        <div className="mt-1 font-mono text-[0.95rem] text-ink">
+          Mucka Toolbench v{currentVersion}
+        </div>
+      </div>
+
+      <UpdaterStatusCard status={status} />
+
+      <div className="flex flex-wrap gap-2">
+        {status.kind === 'available' ? (
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={busy}
+            className="rounded-sm border border-mucka bg-mucka px-3 py-1.5 text-[0.78rem] font-medium text-paper-cream hover:bg-mucka-deep disabled:opacity-50"
+          >
+            Download v{status.version}
+          </button>
+        ) : status.kind === 'downloaded' ? (
+          <button
+            type="button"
+            onClick={() => void handleInstall()}
+            disabled={busy}
+            className="rounded-sm border border-mucka bg-mucka px-3 py-1.5 text-[0.78rem] font-medium text-paper-cream hover:bg-mucka-deep disabled:opacity-50"
+          >
+            Restart and install v{status.version}
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => void handleCheck()}
+          disabled={busy || status.kind === 'checking' || status.kind === 'downloading'}
+          className="rounded-sm border border-ink/30 bg-paper-cream px-3 py-1.5 text-[0.78rem] text-ink hover:bg-paper-shadow disabled:opacity-50"
+        >
+          {status.kind === 'checking'
+            ? 'Checking…'
+            : status.kind === 'downloading'
+              ? 'Downloading…'
+              : 'Check for updates'}
+        </button>
+      </div>
+
+      <p className="text-[0.72rem] leading-snug text-ink-faint">
+        Updates ship from this repo's GitHub Releases. To publish a new
+        version: bump <span className="font-mono">version</span> in
+        package.json, then{' '}
+        <span className="font-mono">npm run release:mac</span> from the
+        cockpit project. The installed app picks it up next time you hit
+        "Check for updates".
+      </p>
+    </div>
+  )
+}
+
+function UpdaterStatusCard({
+  status
+}: {
+  status: UpdaterStatus
+}): React.JSX.Element | null {
+  if (status.kind === 'idle') return null
+  if (status.kind === 'unsupported') {
+    return (
+      <div className="rounded-sm border border-ink/15 bg-paper-cream/60 p-3 text-[0.78rem] text-ink-soft">
+        {status.reason}
+      </div>
+    )
+  }
+  if (status.kind === 'checking') {
+    return (
+      <div className="rounded-sm border border-ink/15 bg-paper-cream/60 p-3 text-[0.78rem] text-ink-soft">
+        Checking GitHub Releases…
+      </div>
+    )
+  }
+  if (status.kind === 'not-available') {
+    return (
+      <div className="rounded-sm border border-ink/15 bg-paper-cream/60 p-3 text-[0.78rem] text-ink-soft">
+        You're on the latest version (v{status.currentVersion}).
+      </div>
+    )
+  }
+  if (status.kind === 'available') {
+    return (
+      <div className="rounded-sm border border-mucka/40 bg-mucka/10 p-3 text-[0.82rem] text-ink">
+        <div className="font-medium text-mucka-deep">
+          v{status.version} is available.
+        </div>
+        {status.releaseNotes ? (
+          <div className="mt-2 whitespace-pre-wrap text-[0.74rem] leading-snug text-ink-soft">
+            {status.releaseNotes.slice(0, 600)}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+  if (status.kind === 'downloading') {
+    const pct = Math.round(status.percent ?? 0)
+    return (
+      <div className="rounded-sm border border-ink/15 bg-paper-cream/60 p-3 text-[0.78rem] text-ink-soft">
+        Downloading v{status.version}… {pct}%
+        <div className="mt-1 h-1 w-full overflow-hidden rounded-sm bg-ink/10">
+          <div
+            className="h-full bg-mucka transition-all"
+            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+          />
+        </div>
+      </div>
+    )
+  }
+  if (status.kind === 'downloaded') {
+    return (
+      <div className="rounded-sm border border-mucka/40 bg-mucka/10 p-3 text-[0.82rem] text-ink">
+        <div className="font-medium text-mucka-deep">
+          v{status.version} downloaded — ready to install.
+        </div>
+        <div className="mt-1 text-[0.74rem] text-ink-soft">
+          The app will quit and relaunch when you install.
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-sm border border-status-bad/40 bg-status-bad/10 p-3 text-[0.78rem] text-ink">
+      Update error: {status.message}
+    </div>
   )
 }
