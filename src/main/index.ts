@@ -265,7 +265,7 @@ function registerIpc(): void {
         logEvent({
           source: updated.id,
           kind: 'attention.flag',
-          message: `Flagged for Tom — ${updated.attentionReason ?? 'no reason'}`,
+          message: `Flagged for attention — ${updated.attentionReason ?? 'no reason'}`,
           tone: 'attention'
         })
       } else {
