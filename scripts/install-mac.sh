@@ -45,7 +45,7 @@ if pgrep -f "Mucka Toolbench.app/Contents/MacOS" >/dev/null; then
   fi
 fi
 
-echo "→ Replacing $APP_PATH…"
+echo "→ Replacing ${APP_PATH}…"
 rm -rf "$APP_PATH"
 ditto "$BUILT_APP" "$APP_PATH"
 
