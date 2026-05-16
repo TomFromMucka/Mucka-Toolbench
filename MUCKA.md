@@ -184,6 +184,17 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-16** — In-app auto-updater. `electron-updater` wired with
+  GitHub Releases publish target (`TomFromMucka/Mucka-Toolbench`).
+  Manual-trigger only — no polling — via a new **Updates** tab in
+  the Settings sheet. Tab shows installed version, "Check for
+  updates" button, then "Download" → "Restart and install" once a
+  newer release is on the repo. New `npm run release:mac` script
+  builds + publishes the DMG + `latest-mac.yml` to GitHub. Version
+  bumped to 0.2.0 to mark this baseline.
+- **2026-05-16** — Per-column agent panel expand/collapse.
+- **2026-05-16** — Preview URL bar made interactive + iframe sandbox
+  dropped so dev-server logins persist.
 - **2026-05-16** — Product context + PR reviews. `PRODUCT.md` scaffold
   added at toolbench root (Mission, Audience, Brand & voice, Current
   focus, Stack, Quality bar, Repos, Glossary — Tom to fill in). New
