@@ -71,14 +71,46 @@ export function BrowserPreview({
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const [bodyRect, setBodyRect] = useState<DOMRect | null>(null)
 
-  const url = agent?.previewUrl ?? null
+  const configuredUrl = agent?.previewUrl ?? null
   const subtitle = agent ? `${agent.displayName.toLowerCase()} · preview` : 'no agent'
   const placeholderPort = slotId === 'left' ? '3001' : '3002'
 
+  // src = what the iframe is actually loading right now. Starts from the
+  // agent's configured previewUrl and can be moved around via the URL
+  // bar without persisting back to the config.
+  const [src, setSrc] = useState<string | null>(configuredUrl)
+  const [barValue, setBarValue] = useState<string>(configuredUrl ?? '')
+
+  // Re-sync when the agent's configured URL changes (Settings edit, or
+  // the preview button binds a new localhost server). React's canonical
+  // "reset state on prop change" pattern.
+  const [prevConfigured, setPrevConfigured] = useState<string | null>(configuredUrl)
+  if (prevConfigured !== configuredUrl) {
+    setPrevConfigured(configuredUrl)
+    setSrc(configuredUrl)
+    setBarValue(configuredUrl ?? '')
+  }
+
+  const url = src
   const preset = findPreset(presetId)
   const inDeviceMode = preset !== null && url !== null
   const deviceW = preset ? (landscape ? preset.height : preset.width) : 0
   const deviceH = preset ? (landscape ? preset.width : preset.height) : 0
+
+  const navigateTo = (raw: string): void => {
+    const trimmed = raw.trim()
+    if (trimmed.length === 0) return
+    const base = src ?? configuredUrl ?? `http://localhost:${placeholderPort}`
+    let next: string
+    try {
+      next = new URL(trimmed, base).toString()
+    } catch {
+      // Last-ditch — let Chromium try to make sense of it as-is.
+      next = trimmed
+    }
+    setSrc(next)
+    setBarValue(next)
+  }
 
   // Track the body area's screen position so the portaled iframe stays
   // anchored to the panel even as the cockpit reflows.
@@ -164,12 +196,31 @@ export function BrowserPreview({
             <span className="size-2 rounded-full" style={{ background: '#febc2e' }} />
             <span className="size-2 rounded-full" style={{ background: '#28c840' }} />
           </div>
-          <div
-            className="ml-1 flex-1 truncate chamfer-sm px-2 py-1 font-mono text-[0.7rem]"
-            style={{ background: 'var(--surface2)', color: 'var(--dirty-grey)' }}
-          >
-            {url ?? `http://localhost:${placeholderPort}`}
-          </div>
+          <input
+            type="text"
+            value={barValue}
+            onChange={(e) => setBarValue(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                navigateTo(barValue)
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                setBarValue(src ?? '')
+                e.currentTarget.blur()
+              }
+            }}
+            spellCheck={false}
+            placeholder={`http://localhost:${placeholderPort}`}
+            title="Type a URL or /path — Enter navigates · Esc reverts"
+            className="ml-1 chamfer-sm flex-1 px-2 py-1 font-mono text-[0.7rem] focus:outline-none"
+            style={{
+              background: 'var(--surface2)',
+              color: barValue === (src ?? '') ? 'var(--dirty-grey)' : 'var(--van-white)',
+              border: '1px solid transparent'
+            }}
+          />
         </div>
 
         <div
@@ -181,7 +232,10 @@ export function BrowserPreview({
               <DevicePanelBackdrop preset={preset} landscape={landscape} />
             ) : (
               <iframe
-                key={`${url}#${reloadKey}`}
+                // Stable key so URL-bar navigations update src in place
+                // (cookies + session state preserved). Reload bumps
+                // reloadKey to force a remount.
+                key={`${slotId}#${reloadKey}`}
                 title={`preview-${slotId}`}
                 src={url}
                 className="size-full border-0"
@@ -389,7 +443,9 @@ function DeviceOverlay({
         <Icon icon={X} size={14} strokeWidth={2.5} />
       </button>
       <iframe
-        key={`${url}#${reloadKey}#${width}x${height}`}
+        // Stable key — URL-bar navigations + device resizes happen via
+        // src/style updates without remount, so cookies + auth survive.
+        key={`${slotId}-device#${reloadKey}`}
         title={`preview-${slotId}-device`}
         src={url}
         style={{ width: '100%', height: '100%', border: 0, background: 'white' }}
