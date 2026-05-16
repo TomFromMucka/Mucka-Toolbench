@@ -3,6 +3,8 @@
  * For mock-shell phase only the renderer reads these.
  */
 
+import type { SecretId, SecretStatus, SecretTestResult } from './secrets'
+
 export type AgentId = 'dave' | 'sammy' | 'kev' | 'bren'
 
 export type AgentStatus =
@@ -590,6 +592,12 @@ export interface MuckaApi {
   downloadUpdate(): Promise<void>
   installUpdate(): Promise<void>
   onUpdaterStatus(handler: (status: UpdaterStatus) => void): () => void
+
+  /* Credential store (Settings → API Keys, encrypted via safeStorage) */
+  listSecrets(): Promise<SecretStatus[]>
+  setSecret(id: SecretId, value: string): Promise<SecretStatus[]>
+  clearSecret(id: SecretId): Promise<SecretStatus[]>
+  testSecret(id: SecretId): Promise<SecretTestResult>
 }
 
 /* ─── Vercel integration ─────────────────────────────────────────────── */
