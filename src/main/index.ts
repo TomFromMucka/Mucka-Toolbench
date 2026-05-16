@@ -80,6 +80,14 @@ import {
   submitPrReview,
   type ReviewEvent
 } from './github/GitHub'
+import {
+  bindUpdaterBroadcaster,
+  checkForUpdates as updaterCheck,
+  downloadUpdate as updaterDownload,
+  getVersion as updaterVersion,
+  installUpdate as updaterInstall,
+  unbindUpdaterBroadcaster
+} from './updater/Updater'
 import { GitHubPoller } from './github/GitHubPoller'
 import type {
   MemoryListQuery,
@@ -169,6 +177,7 @@ function createWindow(): void {
   ptyManager = new PtyManager(mainWindow.webContents)
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
+  bindUpdaterBroadcaster(mainWindow.webContents)
   gitService = new GitService({
     webContents: mainWindow.webContents,
     getAgents: () => getAgentConfigs()
@@ -198,6 +207,7 @@ function createWindow(): void {
     githubPoller = null
     unbindEventsBroadcaster()
     unbindMuckaTextBroadcaster()
+    unbindUpdaterBroadcaster()
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
@@ -479,6 +489,11 @@ function registerIpc(): void {
       }
     }
   )
+
+  ipcMain.handle('updater:version', () => updaterVersion())
+  ipcMain.handle('updater:check', () => updaterCheck())
+  ipcMain.handle('updater:download', () => updaterDownload())
+  ipcMain.handle('updater:install', () => updaterInstall())
 
   ipcMain.handle(
     'github:review-submit',

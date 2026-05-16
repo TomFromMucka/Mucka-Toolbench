@@ -279,6 +279,18 @@ export interface CockpitDocPayload {
   found: boolean
 }
 
+/* ─── In-app updater ─────────────────────────────────────────────────── */
+
+export type UpdaterStatus =
+  | { kind: 'idle' }
+  | { kind: 'unsupported'; reason: string }
+  | { kind: 'checking' }
+  | { kind: 'not-available'; currentVersion: string }
+  | { kind: 'available'; version: string; releaseNotes: string | null }
+  | { kind: 'downloading'; version: string; percent: number; bytesPerSecond: number; transferred: number; total: number }
+  | { kind: 'downloaded'; version: string; releaseNotes: string | null }
+  | { kind: 'error'; message: string }
+
 /* ─── Cross-agent broadcast ──────────────────────────────────────────── */
 
 export interface BroadcastResult {
@@ -563,6 +575,13 @@ export interface MuckaApi {
   /* PR review — Mucka's review_pr tool */
   fetchPrReviewContext(agentId: AgentId): Promise<PrReviewContext>
   submitPrReview(input: PrReviewSubmission): Promise<PrReviewSubmitted>
+
+  /* In-app updater (GitHub Releases) */
+  getCurrentAppVersion(): string
+  checkForUpdates(): Promise<UpdaterStatus>
+  downloadUpdate(): Promise<void>
+  installUpdate(): Promise<void>
+  onUpdaterStatus(handler: (status: UpdaterStatus) => void): () => void
 }
 
 /* ─── Vercel integration ─────────────────────────────────────────────── */
