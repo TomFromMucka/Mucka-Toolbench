@@ -32,7 +32,15 @@ import {
   listMemories,
   rememberMemory
 } from './db/memories'
-import { listDir as fsListDir, openPathInOs, revealInOs } from './fs/index'
+import {
+  createFile as fsCreateFile,
+  createFolder as fsCreateFolder,
+  deletePath as fsDelete,
+  listDir as fsListDir,
+  openPathInOs,
+  renamePath as fsRename,
+  revealInOs
+} from './fs/index'
 import {
   bindEventsBroadcaster,
   listEvents,
@@ -657,6 +665,23 @@ function registerIpc(): void {
   ipcMain.handle('fs:reveal', (_event, path: string) => revealInOs(path))
 
   ipcMain.handle('fs:openPath', (_event, path: string) => openPathInOs(path))
+
+  ipcMain.handle(
+    'fs:createFile',
+    (_event, parentPath: string, name: string) => fsCreateFile(parentPath, name)
+  )
+
+  ipcMain.handle(
+    'fs:createFolder',
+    (_event, parentPath: string, name: string) => fsCreateFolder(parentPath, name)
+  )
+
+  ipcMain.handle(
+    'fs:rename',
+    (_event, fromPath: string, toName: string) => fsRename(fromPath, toName)
+  )
+
+  ipcMain.handle('fs:delete', (_event, path: string) => fsDelete(path))
 
   ipcMain.handle(
     'mucka:cockpit-doc',
