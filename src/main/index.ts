@@ -97,6 +97,14 @@ import {
   unbindUpdaterBroadcaster
 } from './updater/Updater'
 import { GitHubPoller } from './github/GitHubPoller'
+import {
+  clearSecret,
+  initSecrets,
+  listSecretStatuses,
+  setSecret,
+  testSecret
+} from './secrets/Secrets'
+import type { SecretId } from '@shared/secrets'
 import type {
   MemoryListQuery,
   MemoryWriteInput,
@@ -722,6 +730,17 @@ function registerIpc(): void {
       return { text: slice, sections, found: slice.length > 0 }
     }
   )
+
+  ipcMain.handle('secrets:list', () => listSecretStatuses())
+  ipcMain.handle('secrets:set', (_event, id: SecretId, value: string) => {
+    setSecret(id, value)
+    return listSecretStatuses()
+  })
+  ipcMain.handle('secrets:clear', (_event, id: SecretId) => {
+    clearSecret(id)
+    return listSecretStatuses()
+  })
+  ipcMain.handle('secrets:test', (_event, id: SecretId) => testSecret(id))
 }
 
 function configureMediaPermissions(): void {
@@ -748,6 +767,12 @@ registerAttachmentScheme()
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('ai.mucka.toolbench')
   installAttachmentProtocol()
+
+  // safeStorage isn't available before app.whenReady(); now it is, so
+  // we can apply any encrypted-store overrides to process.env. .env
+  // values already loaded by bootstrap.ts remain for keys the store
+  // doesn't set.
+  initSecrets()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

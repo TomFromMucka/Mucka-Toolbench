@@ -46,6 +46,7 @@ import type {
   PrReviewSubmitted,
   UpdaterStatus
 } from '@shared/types'
+import type { SecretId, SecretStatus, SecretTestResult } from '@shared/secrets'
 
 const muckaApi: MuckaApi = {
   listAgents: () => ipcRenderer.invoke('agents:list') as Promise<AgentConfig[]>,
@@ -267,7 +268,15 @@ const muckaApi: MuckaApi = {
       handler(payload)
     ipcRenderer.on('updater:status', listener)
     return () => ipcRenderer.off('updater:status', listener)
-  }
+  },
+  listSecrets: () =>
+    ipcRenderer.invoke('secrets:list') as Promise<SecretStatus[]>,
+  setSecret: (id: SecretId, value: string) =>
+    ipcRenderer.invoke('secrets:set', id, value) as Promise<SecretStatus[]>,
+  clearSecret: (id: SecretId) =>
+    ipcRenderer.invoke('secrets:clear', id) as Promise<SecretStatus[]>,
+  testSecret: (id: SecretId) =>
+    ipcRenderer.invoke('secrets:test', id) as Promise<SecretTestResult>
 }
 
 // Resolve the app version once at preload boot so the renderer can read
