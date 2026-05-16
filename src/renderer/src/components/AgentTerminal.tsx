@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import type { AgentId, TerminalId } from '@shared/types'
 
@@ -120,6 +121,18 @@ export function AgentTerminal({
 
     const fit = new FitAddon()
     term.loadAddon(fit)
+    // Web links: Cmd-click (Ctrl on Linux/Win) on any http/https URL in
+    // the terminal opens it in the system browser via the main process's
+    // setWindowOpenHandler (→ shell.openExternal). Hover gets a tooltip
+    // + underline automatically.
+    term.loadAddon(
+      new WebLinksAddon((event, url) => {
+        // Default behaviour also fires on plain click — VSCode-style
+        // requires the modifier key. Only react when ⌘/Ctrl is held.
+        if (!(event.metaKey || event.ctrlKey)) return
+        window.open(url, '_blank')
+      })
+    )
     term.open(host)
     termRef.current = term
     fitRef.current = fit
