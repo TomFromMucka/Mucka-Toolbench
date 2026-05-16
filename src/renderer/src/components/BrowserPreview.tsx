@@ -185,7 +185,14 @@ export function BrowserPreview({
                 title={`preview-${slotId}`}
                 src={url}
                 className="size-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                /*
+                Deliberately no `sandbox` attribute. Tightening it broke
+                login flows (cookies + magic-link popups) on dev servers
+                running at localhost. Trade-off: full iframe powers for
+                what is, by definition, your own code on your machine.
+                Cookies + localStorage persist across cockpit restarts
+                via Electron's default persistent session in userData.
+              */
               />
             )
           ) : (
@@ -386,7 +393,7 @@ function DeviceOverlay({
         title={`preview-${slotId}-device`}
         src={url}
         style={{ width: '100%', height: '100%', border: 0, background: 'white' }}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        /* Same reasoning as the fit-mode iframe — sandbox blocks login. */
       />
     </div>,
     document.body
