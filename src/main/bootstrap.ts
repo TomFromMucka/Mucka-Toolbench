@@ -96,3 +96,13 @@ function setClaudeEnv(path: string): string {
 
 loadEnv()
 resolveClaudeBinary()
+
+// electron-updater reads GH_TOKEN; the rest of the cockpit's GitHub
+// integration reads GITHUB_TOKEN. Keep Tom from needing both — alias
+// one to the other when only one is set.
+if (!process.env.GH_TOKEN && process.env.GITHUB_TOKEN) {
+  process.env.GH_TOKEN = process.env.GITHUB_TOKEN
+}
+if (!process.env.GITHUB_TOKEN && process.env.GH_TOKEN) {
+  process.env.GITHUB_TOKEN = process.env.GH_TOKEN
+}
