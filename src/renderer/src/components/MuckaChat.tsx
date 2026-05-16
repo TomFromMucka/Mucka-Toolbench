@@ -57,7 +57,7 @@ function messageHasVoice(m: MuckaTextMessage): boolean {
 
 function ChatMessage({ message }: { message: MuckaTextMessage }): React.JSX.Element {
   const side = message.role === 'user' ? 'items-end' : 'items-start'
-  const label = message.role === 'user' ? 'Tom' : 'Mucka'
+  const label = message.role === 'user' ? 'You' : 'Mucka'
   const viaVoice = messageHasVoice(message)
   return (
     <div className={clsx('flex flex-col gap-1', side)}>
