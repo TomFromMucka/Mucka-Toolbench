@@ -184,6 +184,13 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-16** — Repo prepped for public release. `pm.md` (the PM
+  prompt) and `PRODUCT.md` (the product doc) now read from
+  `~/.mucka-toolbench/` first and fall back to the shipped scaffolds.
+  Operators keep their personalised voice + product context outside
+  the repo. `npm run mucka:sync` refuses to overwrite a non-empty live
+  prompt with the shipped generic unless `--use-bundled-prompt` is
+  passed.
 - **2026-05-16** — In-app auto-updater. `electron-updater` wired with
   GitHub Releases publish target (`TomFromMucka/Mucka-Toolbench`).
   Manual-trigger only — no polling — via a new **Updates** tab in
