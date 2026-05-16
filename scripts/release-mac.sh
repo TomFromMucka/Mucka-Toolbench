@@ -16,32 +16,43 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-if [[ ! -f .env ]]; then
-  echo "  .env not found at $PROJECT_DIR/.env — release needs GITHUB_TOKEN." >&2
-  exit 1
-fi
-
-# Export every KEY=VALUE in .env to this shell. `allexport` makes every
-# subsequent assignment exported; the trailing `+a` switches it back off.
-set -a
-# shellcheck disable=SC1091
-. .env
-set +a
-
-# electron-publish reads GH_TOKEN; the rest of the cockpit's GitHub
-# integration reads GITHUB_TOKEN. Mirror them so either is enough.
-if [[ -z "${GH_TOKEN:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
-  export GH_TOKEN="$GITHUB_TOKEN"
-fi
-if [[ -z "${GITHUB_TOKEN:-}" && -n "${GH_TOKEN:-}" ]]; then
-  export GITHUB_TOKEN="$GH_TOKEN"
+# Token resolution — first source wins:
+#   1. GH_TOKEN already set in the shell (manual override / CI)
+#   2. `gh auth token` if the gh CLI is installed and logged in (the
+#      preferred path on Tom's machine — gh's token has the broad `repo`
+#      scope that the fine-grained PATs in .env tend to miss)
+#   3. GITHUB_TOKEN / GH_TOKEN from .env (legacy fallback)
+TOKEN_SOURCE=""
+if [[ -n "${GH_TOKEN:-}" ]]; then
+  TOKEN_SOURCE="shell env"
+elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  GH_TOKEN="$(gh auth token)"
+  export GH_TOKEN
+  TOKEN_SOURCE="gh CLI"
+elif [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . .env
+  set +a
+  if [[ -z "${GH_TOKEN:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
+    export GH_TOKEN="$GITHUB_TOKEN"
+    TOKEN_SOURCE=".env (GITHUB_TOKEN)"
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    TOKEN_SOURCE=".env (GH_TOKEN)"
+  fi
 fi
 
 if [[ -z "${GH_TOKEN:-}" ]]; then
-  echo "  Neither GH_TOKEN nor GITHUB_TOKEN is set in .env. Add a PAT" >&2
-  echo "  with public_repo write scope and try again." >&2
+  echo "  No GitHub token found. Options:" >&2
+  echo "    - run \`gh auth login\` (recommended, broad scope auto-set)" >&2
+  echo "    - or set GITHUB_TOKEN / GH_TOKEN in .env with Contents:write scope" >&2
   exit 1
 fi
+
+# Mirror to GITHUB_TOKEN for any tool that reads that name.
+export GITHUB_TOKEN="${GITHUB_TOKEN:-$GH_TOKEN}"
+
+echo "→ Using GitHub token from: $TOKEN_SOURCE"
 
 echo "→ Building + publishing…"
 npx electron-vite build
