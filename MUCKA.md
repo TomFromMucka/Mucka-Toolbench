@@ -184,6 +184,23 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-17** — Settings → API Keys tab. Credentials are now
+  enterable in-app, encrypted at rest via Electron's `safeStorage`
+  (macOS Keychain / Windows DPAPI), and persisted to
+  `<userData>/secrets.enc.json`. Per-row Save / Test / Clear; Test
+  buttons hit `/v1/user` (ElevenLabs), `/user` (GitHub),
+  `/v2/user` (Vercel) and report green/red. `.env` still works as a
+  fallback for any key not entered through the UI. Source-of-truth
+  badge per row (encrypted store · from .env · not set). New main
+  module at `src/main/secrets/Secrets.ts`, shared defs at
+  `src/shared/secrets.ts`. electron-builder also flipped to publish
+  releases directly (`releaseType: release`) rather than as drafts.
+- **2026-05-17** — Toolbench repo went public on GitHub.
+  `TomFromMucka/Mucka-Toolbench` is now MIT-licensed and open. The
+  cockpit's commercial PM voice (`pm.md`) and operator product context
+  (`PRODUCT.md`) live in `~/.mucka-toolbench/` overrides outside the
+  repo. Auto-updater (manual-trigger) confirmed working against the
+  v0.2.1 release.
 - **2026-05-16** — Repo prepped for public release. `pm.md` (the PM
   prompt) and `PRODUCT.md` (the product doc) now read from
   `~/.mucka-toolbench/` first and fall back to the shipped scaffolds.
