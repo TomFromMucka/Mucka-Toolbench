@@ -20,22 +20,26 @@
 
 import 'dotenv/config'
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { resolve, join } from 'node:path'
 import { TOOL_DEFINITIONS } from '../src/shared/mucka-tools.js'
 
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io'
-const PROMPT_PATH = resolve('src/main/mucka/prompts/pm.md')
+const BUNDLED_PROMPT_PATH = resolve('src/main/mucka/prompts/pm.md')
+const OVERRIDE_PROMPT_PATH = join(homedir(), '.mucka-toolbench/prompts/pm.md')
 const AGENT_NAME = 'Mucka — Toolbench PM'
 
 interface CliFlags {
   dryRun: boolean
   verbose: boolean
+  useBundledPrompt: boolean
 }
 
 function parseFlags(argv: string[]): CliFlags {
   return {
     dryRun: argv.includes('--dry-run'),
-    verbose: argv.includes('--verbose') || argv.includes('-v')
+    verbose: argv.includes('--verbose') || argv.includes('-v'),
+    useBundledPrompt: argv.includes('--use-bundled-prompt')
   }
 }
 
@@ -73,8 +77,20 @@ async function api<T = unknown>(
   return (await res.json()) as T
 }
 
-function readPrompt(): string {
-  return readFileSync(PROMPT_PATH, 'utf8').trim()
+interface LoadedPrompt {
+  text: string
+  source: 'override' | 'bundled'
+  path: string
+}
+
+function readPrompt(): LoadedPrompt {
+  try {
+    const text = readFileSync(OVERRIDE_PROMPT_PATH, 'utf8').trim()
+    return { text, source: 'override', path: OVERRIDE_PROMPT_PATH }
+  } catch {
+    const text = readFileSync(BUNDLED_PROMPT_PATH, 'utf8').trim()
+    return { text, source: 'bundled', path: BUNDLED_PROMPT_PATH }
+  }
 }
 
 function buildToolConfig(def: (typeof TOOL_DEFINITIONS)[number]): Record<string, unknown> {
@@ -160,7 +176,14 @@ async function syncTools(
 async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2))
   const env = readEnv()
-  const localPrompt = readPrompt()
+  const prompt = readPrompt()
+  const localPrompt = prompt.text
+
+  if (prompt.source === 'override') {
+    console.log(`Using prompt override at ${prompt.path}`)
+  } else {
+    console.log(`Using shipped prompt at ${prompt.path}`)
+  }
 
   if (!env.agentId) {
     if (flags.dryRun) {
@@ -210,6 +233,29 @@ async function main(): Promise<void> {
   )
   const livePrompt = extractLivePrompt(liveAgent)
   const liveToolIds = extractLiveToolIds(liveAgent)
+
+  // Foot-gun guard: if we'd be overwriting a non-empty live prompt with
+  // the shipped (generic) prompt because the operator's override is
+  // missing on this machine, refuse unless they explicitly opt in.
+  // Catches the case where mucka-sync is run on a clone that doesn't
+  // have `~/.mucka-toolbench/prompts/pm.md` yet.
+  if (
+    prompt.source === 'bundled' &&
+    livePrompt.length > 0 &&
+    livePrompt !== localPrompt &&
+    !flags.useBundledPrompt
+  ) {
+    console.error(
+      `\nRefusing to overwrite the live agent's prompt with the shipped generic.\n` +
+        `  override expected at: ${OVERRIDE_PROMPT_PATH}\n` +
+        `  live prompt: ${livePrompt.length} chars\n` +
+        `  shipped prompt: ${localPrompt.length} chars\n\n` +
+        `Either drop your personalised pm.md at the override path, or rerun\n` +
+        `with --use-bundled-prompt if you actually do want to push the\n` +
+        `shipped generic prompt to the agent.`
+    )
+    process.exit(1)
+  }
 
   if (flags.verbose) {
     console.log('— live conversation_config —')

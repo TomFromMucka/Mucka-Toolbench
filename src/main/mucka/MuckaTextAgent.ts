@@ -117,17 +117,23 @@ export function appendVoiceMessage(
 
 function loadPrompt(): string {
   if (promptCache !== null) return promptCache
-  try {
-    const path = join(__dirname, '../../src/main/mucka/prompts/pm.md')
-    promptCache = readFileSync(path, 'utf8')
-  } catch {
+  // Operator override first — `~/.mucka-toolbench/prompts/pm.md` lets the
+  // operator personalise Mucka's voice without forking the repo. Falls
+  // through to the shipped generic prompt when absent.
+  const candidates = [
+    join(app.getPath('home'), '.mucka-toolbench/prompts/pm.md'),
+    join(__dirname, '../../src/main/mucka/prompts/pm.md'),
+    join(__dirname, 'mucka/prompts/pm.md')
+  ]
+  for (const path of candidates) {
     try {
-      const fallback = join(__dirname, 'mucka/prompts/pm.md')
-      promptCache = readFileSync(fallback, 'utf8')
+      promptCache = readFileSync(path, 'utf8')
+      return promptCache
     } catch {
-      promptCache = PROMPT_FALLBACK
+      /* try next */
     }
   }
+  promptCache = PROMPT_FALLBACK
   return promptCache
 }
 

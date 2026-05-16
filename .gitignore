@@ -11,3 +11,4 @@ out
 .claude/runtime/
 .env
 .env.local
+.env.*.local
