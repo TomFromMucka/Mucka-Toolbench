@@ -1,6 +1,13 @@
-import type { AgentConfig, Agent, AgentId, AgentStatus, JobEvent } from '@shared/types'
+import type {
+  AgentConfig,
+  Agent,
+  AgentId,
+  AgentStatus,
+  GitStatus,
+  JobEvent
+} from '@shared/types'
 import { mockAgents } from '../data/mockAgents'
-import { AgentClipboard } from './AgentClipboard'
+import { AgentColumnStack } from './AgentColumnStack'
 import { spawnKey } from '../hooks/useAgents'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useEventsState } from '../state/EventsContext'
@@ -88,20 +95,38 @@ export function AgentGrid({
           running: false
         }))
 
+  interface Slot {
+    agent: Agent
+    config: AgentConfig
+    gitStatus: GitStatus | undefined
+    contextPercent: number | null
+    key: string
+  }
+
+  const slotFor = (cfg: AgentConfig | undefined): Slot | null => {
+    if (!cfg) return null
+    const liveStatus = cfg.needsAttention ? 'awaiting-input' : statusFor(cfg.id)
+    return {
+      agent: buildAgent(cfg, findLatestForAgent(events, cfg.id), liveStatus),
+      config: cfg,
+      gitStatus: gitStatus[cfg.id],
+      contextPercent: contextPercentFor(cfg.id),
+      key: `${spawnKey(cfg)}::r${restartVersion[cfg.id] ?? 0}`
+    }
+  }
+
+  // Visual layout is a 2x2 grid: indexes 0 & 1 across the top row,
+  // 2 & 3 across the bottom. Reshape into two column stacks so each
+  // column can own its own expand/collapse state independently.
+  const leftTop = slotFor(list[0])
+  const leftBottom = slotFor(list[2])
+  const rightTop = slotFor(list[1])
+  const rightBottom = slotFor(list[3])
+
   return (
-    <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-3">
-      {list.map((cfg) => {
-        const liveStatus = cfg.needsAttention ? 'awaiting-input' : statusFor(cfg.id)
-        return (
-          <AgentClipboard
-            key={`${spawnKey(cfg)}::r${restartVersion[cfg.id] ?? 0}`}
-            agent={buildAgent(cfg, findLatestForAgent(events, cfg.id), liveStatus)}
-            config={cfg}
-            gitStatus={gitStatus[cfg.id]}
-            contextPercent={contextPercentFor(cfg.id)}
-          />
-        )
-      })}
+    <div className="grid min-h-0 grid-cols-2 gap-3">
+      <AgentColumnStack top={leftTop} bottom={leftBottom} />
+      <AgentColumnStack top={rightTop} bottom={rightBottom} />
     </div>
   )
 }
