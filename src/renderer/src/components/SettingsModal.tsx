@@ -8,6 +8,14 @@ import type {
   MemoryType,
   UpdaterStatus
 } from '@shared/types'
+import {
+  SECRET_DEFS,
+  type SecretCategory,
+  type SecretDef,
+  type SecretId,
+  type SecretStatus,
+  type SecretTestResult
+} from '@shared/secrets'
 import { Clipboard } from './Clipboard'
 
 interface SettingsModalProps {
@@ -17,7 +25,7 @@ interface SettingsModalProps {
   onSave: (patch: AgentUpdate) => Promise<void>
 }
 
-type Tab = 'agents' | 'memory' | 'updates'
+type Tab = 'agents' | 'keys' | 'memory' | 'updates'
 
 const FIELD =
   'w-full rounded-sm border border-ink/20 bg-paper-cream px-2 py-1 font-mono text-[0.82rem] text-ink focus:border-mucka focus:outline-none focus:ring-1 focus:ring-mucka'
@@ -57,9 +65,11 @@ export function SettingsModal({
           subtitle={
             tab === 'agents'
               ? 'agent worktrees & commands'
-              : tab === 'memory'
-                ? "Mucka's long-term memory"
-                : 'app version + updates'
+              : tab === 'keys'
+                ? 'api keys & tokens (encrypted at rest)'
+                : tab === 'memory'
+                  ? "Mucka's long-term memory"
+                  : 'app version + updates'
           }
           paper="lined"
           rightSlot={
@@ -76,6 +86,8 @@ export function SettingsModal({
           <div className="max-h-[78vh] overflow-y-auto px-5 py-4">
             {tab === 'agents' ? (
               <AgentsTab agents={agents} onSave={onSave} onClose={onClose} />
+            ) : tab === 'keys' ? (
+              <KeysTab />
             ) : tab === 'memory' ? (
               <MemoryTab />
             ) : (
@@ -96,6 +108,7 @@ interface TabStripProps {
 function TabStrip({ tab, onChange }: TabStripProps): React.JSX.Element {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'agents', label: 'Agents' },
+    { id: 'keys', label: 'API Keys' },
     { id: 'memory', label: 'Memory' },
     { id: 'updates', label: 'Updates' }
   ]
@@ -120,6 +133,233 @@ function TabStrip({ tab, onChange }: TabStripProps): React.JSX.Element {
         )
       })}
     </div>
+  )
+}
+
+/* ─── API Keys tab ───────────────────────────────────────────────────── */
+
+const CATEGORY_LABEL: Record<SecretCategory, string> = {
+  elevenlabs: 'ElevenLabs',
+  github: 'GitHub',
+  vercel: 'Vercel'
+}
+
+const CATEGORY_NOTE: Record<SecretCategory, string> = {
+  elevenlabs: 'Voice mode. Without an API key, voice is disabled and text-mode Mucka still works.',
+  github: 'PR + check-runs panel. Without a token, the GitHub panel shows a configure banner.',
+  vercel: 'Deployment panel + deploy_to_vercel Mucka tool. Without a token, the panel shows a configure banner.'
+}
+
+const CATEGORY_ORDER: SecretCategory[] = ['elevenlabs', 'github', 'vercel']
+
+function KeysTab(): React.JSX.Element {
+  const [statuses, setStatuses] = useState<SecretStatus[] | null>(null)
+
+  useEffect(() => {
+    void window.mucka.listSecrets().then(setStatuses)
+  }, [])
+
+  const statusMap = useMemo(() => {
+    const m = new Map<SecretId, SecretStatus>()
+    for (const s of statuses ?? []) m.set(s.id, s)
+    return m
+  }, [statuses])
+
+  const grouped = useMemo(() => {
+    const g: Record<SecretCategory, SecretDef[]> = {
+      elevenlabs: [],
+      github: [],
+      vercel: []
+    }
+    for (const def of SECRET_DEFS) g[def.category].push(def)
+    return g
+  }, [])
+
+  return (
+    <>
+      <p className="mb-4 font-[var(--font-hand)] text-[0.92rem] text-ink-soft">
+        Drop API keys for the integrations you want. Values are encrypted via
+        your OS keychain (macOS Keychain / Windows DPAPI) — never plain text,
+        never sent anywhere except the relevant API. <code className="rounded-sm bg-paper-shadow/60 px-1 text-[0.8rem]">.env</code>{' '}
+        still works for keys you don&apos;t set here.
+      </p>
+
+      <div className="space-y-5">
+        {CATEGORY_ORDER.map((cat) => (
+          <section key={cat}>
+            <h3 className="mb-1 font-[var(--font-display)] text-[1.15rem] font-semibold text-ink">
+              {CATEGORY_LABEL[cat]}
+            </h3>
+            <p className="mb-2 text-[0.78rem] text-ink-faint">{CATEGORY_NOTE[cat]}</p>
+            <ul className="space-y-2">
+              {grouped[cat].map((def) => (
+                <SecretRow
+                  key={def.id}
+                  def={def}
+                  status={statusMap.get(def.id)}
+                  onChanged={setStatuses}
+                />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function SecretRow({
+  def,
+  status,
+  onChanged
+}: {
+  def: SecretDef
+  status: SecretStatus | undefined
+  onChanged: (next: SecretStatus[]) => void
+}): React.JSX.Element {
+  const [value, setValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [busy, setBusy] = useState<'test' | 'clear' | null>(null)
+  const [testResult, setTestResult] = useState<SecretTestResult | null>(null)
+  const isSet = status?.set ?? false
+  const placeholder = isSet && status?.last4 ? `••••••••${status.last4}` : 'not set'
+
+  const onSave = async (): Promise<void> => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    setSaving(true)
+    setTestResult(null)
+    try {
+      const next = await window.mucka.setSecret(def.id, trimmed)
+      onChanged(next)
+      setValue('')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setTestResult({ ok: false, reason: msg })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onClear = async (): Promise<void> => {
+    setBusy('clear')
+    setTestResult(null)
+    try {
+      const next = await window.mucka.clearSecret(def.id)
+      onChanged(next)
+      setValue('')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const onTest = async (): Promise<void> => {
+    setBusy('test')
+    try {
+      const r = await window.mucka.testSecret(def.id)
+      setTestResult(r)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <li className="rounded-sm border border-ink/20 bg-paper-cream/85 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <label className="font-sans text-[0.82rem] font-semibold text-ink">
+          {def.label}
+          {def.required ? (
+            <span className="ml-1 text-[0.7rem] uppercase tracking-wide text-mucka-deep">
+              required
+            </span>
+          ) : null}
+        </label>
+        <SourceBadge status={status} />
+      </div>
+      {def.hint ? (
+        <p className="mt-0.5 text-[0.74rem] text-ink-faint">{def.hint}</p>
+      ) : null}
+      <div className="mt-2 flex gap-2">
+        <input
+          type={def.secret ? 'password' : 'text'}
+          autoComplete="off"
+          spellCheck={false}
+          className={FIELD}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && value.trim().length > 0) {
+              void onSave()
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => void onSave()}
+          disabled={saving || value.trim().length === 0}
+          className="shrink-0 rounded-sm border border-ink/30 bg-paper-cream px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow disabled:opacity-40"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {def.testable ? (
+          <button
+            type="button"
+            onClick={() => void onTest()}
+            disabled={!isSet || busy !== null}
+            className="shrink-0 rounded-sm border border-ink/30 bg-paper-cream px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow disabled:opacity-40"
+          >
+            {busy === 'test' ? 'Testing…' : 'Test'}
+          </button>
+        ) : null}
+        {isSet ? (
+          <button
+            type="button"
+            onClick={() => void onClear()}
+            disabled={busy !== null}
+            className="shrink-0 rounded-sm border border-ink/30 bg-paper-cream px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow disabled:opacity-40"
+          >
+            {busy === 'clear' ? 'Clearing…' : 'Clear'}
+          </button>
+        ) : null}
+      </div>
+      {testResult ? <TestResult result={testResult} /> : null}
+    </li>
+  )
+}
+
+function SourceBadge({ status }: { status: SecretStatus | undefined }): React.JSX.Element | null {
+  if (!status || !status.set) {
+    return (
+      <span className="text-[0.66rem] uppercase tracking-[0.16em] text-ink-faint">
+        not set
+      </span>
+    )
+  }
+  if (status.source === 'store') {
+    return (
+      <span className="text-[0.66rem] uppercase tracking-[0.16em] text-status-ok">
+        encrypted store
+      </span>
+    )
+  }
+  return (
+    <span className="text-[0.66rem] uppercase tracking-[0.16em] text-ink-soft">
+      from .env
+    </span>
+  )
+}
+
+function TestResult({ result }: { result: SecretTestResult }): React.JSX.Element {
+  if (result.ok) {
+    return (
+      <p className="mt-2 text-[0.78rem] text-status-ok">
+        ✓ {result.detail ?? 'authenticated'}
+      </p>
+    )
+  }
+  return (
+    <p className="mt-2 text-[0.78rem] text-status-bad">✗ {result.reason}</p>
   )
 }
 
