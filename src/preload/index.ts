@@ -163,6 +163,14 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('fs:reveal', path) as Promise<void>,
   openPathInOs: (path: string) =>
     ipcRenderer.invoke('fs:openPath', path) as Promise<void>,
+  createFile: (parentPath: string, name: string) =>
+    ipcRenderer.invoke('fs:createFile', parentPath, name) as Promise<string>,
+  createFolder: (parentPath: string, name: string) =>
+    ipcRenderer.invoke('fs:createFolder', parentPath, name) as Promise<string>,
+  renamePath: (fromPath: string, toName: string) =>
+    ipcRenderer.invoke('fs:rename', fromPath, toName) as Promise<string>,
+  deletePath: (path: string) =>
+    ipcRenderer.invoke('fs:delete', path) as Promise<void>,
   onChatStream: (handler: (event: MuckaTextStreamEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextStreamEvent) =>
       handler(payload)

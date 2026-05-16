@@ -543,6 +543,14 @@ export interface MuckaApi {
   revealInOs(path: string): Promise<void>
   /** Open a file or folder with the OS default handler. */
   openPathInOs(path: string): Promise<void>
+  /** Create a new empty file under parentPath. Returns the full path. */
+  createFile(parentPath: string, name: string): Promise<string>
+  /** mkdir a new folder under parentPath. Returns the full path. */
+  createFolder(parentPath: string, name: string): Promise<string>
+  /** Rename a file/folder in place. Returns the new full path. */
+  renamePath(fromPath: string, toName: string): Promise<string>
+  /** Recursively delete a path. Always confirm in the UI first. */
+  deletePath(path: string): Promise<void>
 
   /* Free-form notes (replaces the notice board) */
   getNote(): Promise<string>
