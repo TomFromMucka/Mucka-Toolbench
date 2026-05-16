@@ -1,41 +1,47 @@
-# Mucka — product context
+# Product context
 
-> Tom's source of truth for what we're building, who it's for, and what
-> good looks like. Mucka (the PM agent) reads this on demand via
+> Source of truth for what you're building, who it's for, and what good
+> looks like. Mucka (the PM agent) reads this on demand via
 > `get_product_doc` so she can spot when a PR drifts from brand, suggest
 > sensible roadmap priorities, or push back on an idea that doesn't fit.
 >
-> Fill in the blanks. Terse > thorough — Mucka pulls the whole doc on
-> any substantive question, so concise framing beats long-form vision
-> statements. Use plain English; she's reading it, not a board deck.
+> **This file is a public scaffold.** Fill it in — but to keep your
+> product context private, place your filled-in copy at
+> `~/.mucka-toolbench/PRODUCT.md` instead. The cockpit reads the
+> override first and falls back to this scaffold. That way your
+> roadmap, brand strategy, and quality bar live outside the repo
+> (useful if you've forked the toolbench publicly).
+>
+> Terse > thorough — Mucka pulls the whole doc on any substantive
+> question, so concise framing beats long-form vision statements.
 
 ## Mission
 
-_What is Mucka? In two or three sentences — what it does, who it serves,
-why it exists. Include the one-line value prop you'd put at the top of
-the homepage._
+_What is the product? In two or three sentences — what it does, who it
+serves, why it exists. Include the one-line value prop you'd put at the
+top of the homepage._
 
 - 
 
 ## Audience
 
 _Who's the primary user, and the secondary one? What's a day in their
-life that Mucka slots into? Where do they meet Mucka — app store, web,
-referral, marketplace? What do they care about that competitors miss?_
+life that this product slots into? Where do they meet it — app store,
+web, referral, marketplace? What do they care about that competitors
+miss?_
 
 - 
 
 ## Brand & voice
 
-_How does Mucka talk and look. Be specific._
+_How the product talks and looks. Be specific._
 
-- **Voice.** (e.g. British, dry, builder's-mate energy. Direct, no
-  corporate fluff. Confident but never patronising.)
-- **Visual language.** (e.g. dark workshop wood for chrome, cream paper
-  for information, brand orange `#FF4E00` reserved for "Mucka is
-  speaking" / "look here". Söhne typography. Chamfered card silhouettes.)
-- **What Mucka is NOT.** (lines you won't cross — tone, dark patterns,
-  features that conflict with the mission)
+- **Voice.** (e.g. dry, direct, no corporate fluff. Confident but
+  never patronising.)
+- **Visual language.** (colour reserves, typography, component
+  silhouettes, motion — anything Mucka should check in a PR review)
+- **What the product is NOT.** (lines you won't cross — tone, dark
+  patterns, features that conflict with the mission)
 
 ## Current focus
 
@@ -66,7 +72,7 @@ catch in review that aren't obvious from the code alone._
   has at least one happy-path test, no console errors in dev, screenshot
   attached to the PR for any UI change)
 - **Performance / accessibility floors.** (e.g. Lighthouse mobile ≥ 90,
-  iOS Reduce Motion respected, keyboard-only path works)
+  Reduce Motion respected, keyboard-only path works)
 
 ## Repos & worktrees
 
