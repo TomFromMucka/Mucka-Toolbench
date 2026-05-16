@@ -196,7 +196,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'get_product_doc',
     description:
-      "Reads Tom's PRODUCT.md — Mucka Pro's mission, audience, brand & voice, current focus, stack snapshot, quality bar, repo/worktree map, glossary. Call this BEFORE answering substantive questions about what Mucka is, who it's for, how it should look or sound, or what's worth building next — and ALWAYS before reviewing a PR (so your critique is grounded in the actual quality bar). Pass `section` (e.g. \"Mission\", \"Brand & voice\", \"Quality bar\") for a slice; omit for the whole file.",
+      "Reads PRODUCT.md — the operator's source of truth for the product being built: mission, audience, brand & voice, current focus, stack snapshot, quality bar, repo/worktree map, glossary. Call this BEFORE answering substantive questions about what's being built, who it's for, how it should look or sound, or what's worth building next — and ALWAYS before reviewing a PR (so your critique is grounded in the actual quality bar). Pass `section` (e.g. \"Mission\", \"Brand & voice\", \"Quality bar\") for a slice; omit for the whole file.",
     parameters: {
       type: 'object',
       properties: {

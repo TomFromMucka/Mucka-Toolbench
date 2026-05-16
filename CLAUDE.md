@@ -194,9 +194,9 @@ Stored in `.env` at the project root (git-ignored). Copy
 - `ELEVENLABS_API_KEY` — your account key.
 - `MUCKA_AGENT_ID` — the Conv AI agent id. Leave unset on first run;
   `mucka:sync` creates the agent and prints the id to add to `.env`.
-- `ELEVENLABS_MUCKA_VOICE_ID` — same voice id used in Mucka Pro.
-  Required on first create; used by `mucka:sync` to (re-)set the agent's
-  voice on any run.
+- `ELEVENLABS_MUCKA_VOICE_ID` — the voice id from your ElevenLabs Voice
+  Library. Required on first create; used by `mucka:sync` to (re-)set
+  the agent's voice on any run.
 
 `.env` is loaded via `dotenv/config` at the top of `src/main/index.ts`
 and the `mucka:sync` script. If creds are missing the rest of the

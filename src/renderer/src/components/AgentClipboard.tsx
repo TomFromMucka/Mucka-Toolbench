@@ -13,7 +13,7 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
   thinking: 'thinking',
   editing: 'editing',
   running: 'running',
-  'awaiting-input': 'awaits Tom',
+  'awaiting-input': 'awaits input',
   blocked: 'blocked',
   done: 'done'
 }
