@@ -105,6 +105,17 @@ import {
   testSecret
 } from './secrets/Secrets'
 import type { SecretId } from '@shared/secrets'
+import {
+  createCredential,
+  deleteCredential,
+  listCredentials,
+  updateCredential
+} from './credentials/Credentials'
+import type {
+  CredentialCreateInput,
+  CredentialUpdateInput
+} from '@shared/credentials'
+import { installInputContextMenu } from './contextMenu/InputMenu'
 import type {
   MemoryListQuery,
   MemoryWriteInput,
@@ -190,6 +201,7 @@ function createWindow(): void {
   })
 
   mainWindowRef = mainWindow
+  installInputContextMenu(mainWindow.webContents)
   ptyManager = new PtyManager(mainWindow.webContents)
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
@@ -741,6 +753,20 @@ function registerIpc(): void {
     return listSecretStatuses()
   })
   ipcMain.handle('secrets:test', (_event, id: SecretId) => testSecret(id))
+
+  ipcMain.handle('credentials:list', () => listCredentials())
+  ipcMain.handle('credentials:create', (_event, input: CredentialCreateInput) => {
+    createCredential(input)
+    return listCredentials()
+  })
+  ipcMain.handle('credentials:update', (_event, input: CredentialUpdateInput) => {
+    updateCredential(input)
+    return listCredentials()
+  })
+  ipcMain.handle('credentials:delete', (_event, id: string) => {
+    deleteCredential(id)
+    return listCredentials()
+  })
 }
 
 function configureMediaPermissions(): void {
