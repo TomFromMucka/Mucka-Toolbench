@@ -184,6 +184,18 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-17** — Credentials library + right-click insert in preview
+  iframes. Settings → Credentials manages a list of `label · username ·
+  password` entries (encrypted via safeStorage, stored in
+  `<userData>/credentials.enc.json`). Right-clicking any input inside a
+  preview iframe pops a native menu — Insert password on password
+  fields, Insert username on text/email fields — pulling from the
+  library. Works on cross-origin sites: the cockpit uses
+  `WebFrameMain.executeJavaScript()` at the Electron layer to bypass
+  the iframe sandbox. Last-used credential floats to the top of the
+  menu so username→password fill is two right-clicks. New main
+  modules: `src/main/credentials/Credentials.ts` (CRUD),
+  `src/main/contextMenu/InputMenu.ts` (menu + injection).
 - **2026-05-17** — ⌘-click on a URL in an agent's terminal now opens
   it in the cockpit's preview pane (auto-switched to the `desktop ·
   1440` viewport) instead of the system browser. Preference: the

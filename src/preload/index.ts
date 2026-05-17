@@ -47,6 +47,11 @@ import type {
   UpdaterStatus
 } from '@shared/types'
 import type { SecretId, SecretStatus, SecretTestResult } from '@shared/secrets'
+import type {
+  CredentialCreateInput,
+  CredentialSummary,
+  CredentialUpdateInput
+} from '@shared/credentials'
 
 const muckaApi: MuckaApi = {
   listAgents: () => ipcRenderer.invoke('agents:list') as Promise<AgentConfig[]>,
@@ -276,7 +281,15 @@ const muckaApi: MuckaApi = {
   clearSecret: (id: SecretId) =>
     ipcRenderer.invoke('secrets:clear', id) as Promise<SecretStatus[]>,
   testSecret: (id: SecretId) =>
-    ipcRenderer.invoke('secrets:test', id) as Promise<SecretTestResult>
+    ipcRenderer.invoke('secrets:test', id) as Promise<SecretTestResult>,
+  listCredentials: () =>
+    ipcRenderer.invoke('credentials:list') as Promise<CredentialSummary[]>,
+  createCredential: (input: CredentialCreateInput) =>
+    ipcRenderer.invoke('credentials:create', input) as Promise<CredentialSummary[]>,
+  updateCredential: (input: CredentialUpdateInput) =>
+    ipcRenderer.invoke('credentials:update', input) as Promise<CredentialSummary[]>,
+  deleteCredential: (id: string) =>
+    ipcRenderer.invoke('credentials:delete', id) as Promise<CredentialSummary[]>
 }
 
 // Resolve the app version once at preload boot so the renderer can read

@@ -16,6 +16,7 @@ import {
   type SecretStatus,
   type SecretTestResult
 } from '@shared/secrets'
+import type { CredentialSummary } from '@shared/credentials'
 import { Clipboard } from './Clipboard'
 
 interface SettingsModalProps {
@@ -25,7 +26,7 @@ interface SettingsModalProps {
   onSave: (patch: AgentUpdate) => Promise<void>
 }
 
-type Tab = 'agents' | 'keys' | 'memory' | 'updates'
+type Tab = 'agents' | 'keys' | 'credentials' | 'memory' | 'updates'
 
 const FIELD =
   'w-full rounded-sm border border-ink/20 bg-paper-cream px-2 py-1 font-mono text-[0.82rem] text-ink focus:border-mucka focus:outline-none focus:ring-1 focus:ring-mucka'
@@ -67,9 +68,11 @@ export function SettingsModal({
               ? 'agent worktrees & commands'
               : tab === 'keys'
                 ? 'api keys & tokens (encrypted at rest)'
-                : tab === 'memory'
-                  ? "Mucka's long-term memory"
-                  : 'app version + updates'
+                : tab === 'credentials'
+                  ? 'site logins — right-click insert in preview panes'
+                  : tab === 'memory'
+                    ? "Mucka's long-term memory"
+                    : 'app version + updates'
           }
           paper="lined"
           rightSlot={
@@ -88,6 +91,8 @@ export function SettingsModal({
               <AgentsTab agents={agents} onSave={onSave} onClose={onClose} />
             ) : tab === 'keys' ? (
               <KeysTab />
+            ) : tab === 'credentials' ? (
+              <CredentialsTab />
             ) : tab === 'memory' ? (
               <MemoryTab />
             ) : (
@@ -109,6 +114,7 @@ function TabStrip({ tab, onChange }: TabStripProps): React.JSX.Element {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'agents', label: 'Agents' },
     { id: 'keys', label: 'API Keys' },
+    { id: 'credentials', label: 'Credentials' },
     { id: 'memory', label: 'Memory' },
     { id: 'updates', label: 'Updates' }
   ]
@@ -360,6 +366,261 @@ function TestResult({ result }: { result: SecretTestResult }): React.JSX.Element
   }
   return (
     <p className="mt-2 text-[0.78rem] text-status-bad">✗ {result.reason}</p>
+  )
+}
+
+/* ─── Credentials tab ────────────────────────────────────────────────── */
+
+interface CredDraft {
+  label: string
+  username: string
+  password: string
+}
+
+function emptyDraft(): CredDraft {
+  return { label: '', username: '', password: '' }
+}
+
+function CredentialsTab(): React.JSX.Element {
+  const [creds, setCreds] = useState<CredentialSummary[] | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<CredDraft>(emptyDraft())
+  const [adding, setAdding] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void window.mucka.listCredentials().then(setCreds)
+  }, [])
+
+  const startAdd = (): void => {
+    setEditingId(null)
+    setDraft(emptyDraft())
+    setAdding(true)
+  }
+
+  const startEdit = (cred: CredentialSummary): void => {
+    setAdding(false)
+    setEditingId(cred.id)
+    setDraft({ label: cred.label, username: cred.username, password: '' })
+  }
+
+  const cancel = (): void => {
+    setAdding(false)
+    setEditingId(null)
+    setDraft(emptyDraft())
+  }
+
+  const onSave = async (): Promise<void> => {
+    if (busy) return
+    if (!draft.label.trim()) return
+    setBusy(true)
+    try {
+      if (editingId) {
+        const patch: Parameters<typeof window.mucka.updateCredential>[0] = {
+          id: editingId,
+          label: draft.label,
+          username: draft.username
+        }
+        if (draft.password.length > 0) patch.password = draft.password
+        const next = await window.mucka.updateCredential(patch)
+        setCreds(next)
+      } else {
+        if (!draft.username && !draft.password) return
+        const next = await window.mucka.createCredential({
+          label: draft.label,
+          username: draft.username,
+          password: draft.password
+        })
+        setCreds(next)
+      }
+      cancel()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onDelete = async (id: string, label: string): Promise<void> => {
+    if (!window.confirm(`Delete credential "${label}"?\n\nCan't be undone.`)) return
+    setBusy(true)
+    try {
+      const next = await window.mucka.deleteCredential(id)
+      setCreds(next)
+      if (editingId === id) cancel()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const isEditing = (id: string): boolean => editingId === id
+
+  return (
+    <>
+      <p className="mb-3 font-[var(--font-hand)] text-[0.92rem] text-ink-soft">
+        Saved site logins for the preview panes. Right-click any input
+        field inside a preview iframe → pick a credential → username (or
+        password, if it&apos;s a password field) is typed in. Works on
+        cross-origin sites too — the cockpit is doing the injection at
+        the Electron layer, not the iframe&apos;s sandbox. Encrypted via
+        your OS keychain.
+      </p>
+
+      <ul className="space-y-2">
+        {(creds ?? []).map((cred) => (
+          <li
+            key={cred.id}
+            className="rounded-sm border border-ink/20 bg-paper-cream/85 p-3"
+          >
+            {isEditing(cred.id) ? (
+              <CredentialForm
+                draft={draft}
+                setDraft={setDraft}
+                onSave={() => void onSave()}
+                onCancel={cancel}
+                busy={busy}
+                editing
+              />
+            ) : (
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-sans text-[0.86rem] font-semibold text-ink">
+                    {cred.label}
+                  </div>
+                  <div className="truncate font-mono text-[0.78rem] text-ink-soft">
+                    {cred.username || '(no username)'}
+                    {cred.passwordLast4 ? (
+                      <span className="text-ink-faint">
+                        {' · ••••'}
+                        {cred.passwordLast4}
+                      </span>
+                    ) : (
+                      <span className="text-ink-faint"> · (no password)</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(cred)}
+                    className="rounded-sm border border-ink/30 bg-paper-cream px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onDelete(cred.id, cred.label)}
+                    className="rounded-sm border border-ink/30 bg-paper-cream px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+        {creds && creds.length === 0 && !adding ? (
+          <li className="rounded-sm border border-dashed border-ink/20 bg-paper-cream/40 p-3 text-center text-[0.85rem] text-ink-faint">
+            No credentials yet. Add one to start right-click-inserting in preview panes.
+          </li>
+        ) : null}
+      </ul>
+
+      <div className="mt-3">
+        {adding ? (
+          <div className="rounded-sm border border-ink/20 bg-paper-cream/85 p-3">
+            <CredentialForm
+              draft={draft}
+              setDraft={setDraft}
+              onSave={() => void onSave()}
+              onCancel={cancel}
+              busy={busy}
+              editing={false}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startAdd}
+            className="rounded-sm border border-ink/30 bg-paper-cream px-3 py-1.5 font-sans text-[0.8rem] text-ink hover:bg-paper-shadow"
+          >
+            + Add credential
+          </button>
+        )}
+      </div>
+    </>
+  )
+}
+
+function CredentialForm({
+  draft,
+  setDraft,
+  onSave,
+  onCancel,
+  busy,
+  editing
+}: {
+  draft: CredDraft
+  setDraft: (d: CredDraft) => void
+  onSave: () => void
+  onCancel: () => void
+  busy: boolean
+  editing: boolean
+}): React.JSX.Element {
+  return (
+    <div className="space-y-2">
+      <div>
+        <label className={LABEL}>Label</label>
+        <input
+          className={FIELD}
+          value={draft.label}
+          autoFocus
+          onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+          placeholder="e.g. Mucka prod admin"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={LABEL}>Username / email</label>
+          <input
+            className={FIELD}
+            value={draft.username}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => setDraft({ ...draft, username: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className={LABEL}>
+            Password{editing ? ' (leave blank to keep current)' : ''}
+          </label>
+          <input
+            type="password"
+            className={FIELD}
+            value={draft.password}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => setDraft({ ...draft, password: e.target.value })}
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="rounded-sm border border-ink/30 bg-paper-cream px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow disabled:opacity-40"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={busy || !draft.label.trim()}
+          className="rounded-sm border border-ink/30 bg-paper-cream px-2 py-1 font-sans text-[0.75rem] text-ink hover:bg-paper-shadow disabled:opacity-40"
+        >
+          {busy ? 'Saving…' : editing ? 'Save changes' : 'Save'}
+        </button>
+      </div>
+    </div>
   )
 }
 
