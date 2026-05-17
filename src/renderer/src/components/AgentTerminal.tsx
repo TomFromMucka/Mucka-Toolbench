@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import type { AgentId, TerminalId } from '@shared/types'
+import { requestPreviewNavigation } from '../state/previewBus'
 
 interface AgentTerminalProps {
   terminalId: TerminalId
@@ -130,7 +131,16 @@ export function AgentTerminal({
         // Default behaviour also fires on plain click — VSCode-style
         // requires the modifier key. Only react when ⌘/Ctrl is held.
         if (!(event.metaKey || event.ctrlKey)) return
-        window.open(url, '_blank')
+        // ⌘-Shift-click is the escape hatch — opens in the system
+        // browser (the old behaviour). Plain ⌘-click routes into the
+        // cockpit's preview pane bound to this agent (or any pane if
+        // none bound) at desktop viewport size.
+        if (event.shiftKey) {
+          window.open(url, '_blank')
+          return
+        }
+        const routed = requestPreviewNavigation({ url, fromAgent: agentId })
+        if (!routed) window.open(url, '_blank')
       })
     )
     term.open(host)
