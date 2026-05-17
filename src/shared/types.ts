@@ -4,6 +4,11 @@
  */
 
 import type { SecretId, SecretStatus, SecretTestResult } from './secrets'
+import type {
+  CredentialCreateInput,
+  CredentialSummary,
+  CredentialUpdateInput
+} from './credentials'
 
 export type AgentId = 'dave' | 'sammy' | 'kev' | 'bren'
 
@@ -598,6 +603,12 @@ export interface MuckaApi {
   setSecret(id: SecretId, value: string): Promise<SecretStatus[]>
   clearSecret(id: SecretId): Promise<SecretStatus[]>
   testSecret(id: SecretId): Promise<SecretTestResult>
+
+  /* Credentials library (right-click insert into preview iframes) */
+  listCredentials(): Promise<CredentialSummary[]>
+  createCredential(input: CredentialCreateInput): Promise<CredentialSummary[]>
+  updateCredential(input: CredentialUpdateInput): Promise<CredentialSummary[]>
+  deleteCredential(id: string): Promise<CredentialSummary[]>
 }
 
 /* ─── Vercel integration ─────────────────────────────────────────────── */
