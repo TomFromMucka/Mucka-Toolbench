@@ -4,6 +4,7 @@ import { Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react'
 import type { AgentConfig } from '@shared/types'
 import { Clipboard } from './Clipboard'
 import { Icon } from './ui/Icon'
+import { registerPreviewSlot } from '../state/previewBus'
 
 interface BrowserPreviewProps {
   slotId: 'left' | 'right'
@@ -141,6 +142,19 @@ export function BrowserPreview({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [inDeviceMode])
+
+  // Register with the preview bus so AgentTerminal's ⌘-click can route
+  // URLs into this pane. Re-registers when the slot's agent changes so
+  // routing can prefer "the slot that's already bound to that agent".
+  // Auto-flips to a desktop viewport on arrival — Tom's intent was
+  // "open a new tab in desktop size", not just navigate in place.
+  useEffect(() => {
+    return registerPreviewSlot(slotId, agent?.id ?? null, (url: string) => {
+      setPresetId('desktop')
+      setSrc(url)
+      setBarValue(url)
+    })
+  }, [slotId, agent?.id])
 
   return (
     <Clipboard

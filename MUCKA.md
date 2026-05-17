@@ -184,6 +184,12 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-17** — ⌘-click on a URL in an agent's terminal now opens
+  it in the cockpit's preview pane (auto-switched to the `desktop ·
+  1440` viewport) instead of the system browser. Preference: the
+  preview slot already bound to that agent; else left slot; else right.
+  ⌘-shift-click preserves the old behaviour and opens in the system
+  browser. Routing layer at `src/renderer/src/state/previewBus.ts`.
 - **2026-05-17** — Settings → API Keys tab. Credentials are now
   enterable in-app, encrypted at rest via Electron's `safeStorage`
   (macOS Keychain / Windows DPAPI), and persisted to
