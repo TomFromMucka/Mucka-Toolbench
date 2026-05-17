@@ -609,6 +609,11 @@ export interface MuckaApi {
   createCredential(input: CredentialCreateInput): Promise<CredentialSummary[]>
   updateCredential(input: CredentialUpdateInput): Promise<CredentialSummary[]>
   deleteCredential(id: string): Promise<CredentialSummary[]>
+
+  /* Live FS watching for the Explorer — main-process chokidar */
+  watchDir(path: string): Promise<void>
+  unwatchDir(path: string): Promise<void>
+  onFsChange(handler: (event: { path: string }) => void): () => void
 }
 
 /* ─── Vercel integration ─────────────────────────────────────────────── */

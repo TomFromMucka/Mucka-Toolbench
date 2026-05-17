@@ -289,7 +289,19 @@ const muckaApi: MuckaApi = {
   updateCredential: (input: CredentialUpdateInput) =>
     ipcRenderer.invoke('credentials:update', input) as Promise<CredentialSummary[]>,
   deleteCredential: (id: string) =>
-    ipcRenderer.invoke('credentials:delete', id) as Promise<CredentialSummary[]>
+    ipcRenderer.invoke('credentials:delete', id) as Promise<CredentialSummary[]>,
+  watchDir: (path: string) =>
+    ipcRenderer.invoke('fs:watch', path) as Promise<void>,
+  unwatchDir: (path: string) =>
+    ipcRenderer.invoke('fs:unwatch', path) as Promise<void>,
+  onFsChange: (handler: (event: { path: string }) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: { path: string }
+    ): void => handler(payload)
+    ipcRenderer.on('fs:changed', listener)
+    return () => ipcRenderer.off('fs:changed', listener)
+  }
 }
 
 // Resolve the app version once at preload boot so the renderer can read

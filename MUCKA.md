@@ -184,6 +184,16 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-17** — Explorer goes live. Each open folder is now watched
+  non-recursively in the main process via `chokidar` (sub-100ms updates,
+  near-zero steady-state CPU). When an agent's terminal writes a file
+  in a worktree the Explorer is showing, the tree refreshes
+  automatically — no more "I missed it because I was looking at the
+  terminal". Non-recursive by design: `node_modules` never gets watched
+  unless you specifically expand it. Renderer reloads in place without
+  flashing "Loading…" on already-shown rows. New main module:
+  `src/main/fs/Watcher.ts`. New IPC: `fs:watch`, `fs:unwatch`,
+  `fs:changed`.
 - **2026-05-17** — Credentials library + right-click insert in preview
   iframes. Settings → Credentials manages a list of `label · username ·
   password` entries (encrypted via safeStorage, stored in

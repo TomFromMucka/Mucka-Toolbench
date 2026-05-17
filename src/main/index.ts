@@ -116,6 +116,13 @@ import type {
   CredentialUpdateInput
 } from '@shared/credentials'
 import { installInputContextMenu } from './contextMenu/InputMenu'
+import {
+  bindFsWatcherBroadcaster,
+  shutdownAllWatchers,
+  unbindFsWatcherBroadcaster,
+  unwatchPath as fsUnwatch,
+  watchPath as fsWatch
+} from './fs/Watcher'
 import type {
   MemoryListQuery,
   MemoryWriteInput,
@@ -206,6 +213,7 @@ function createWindow(): void {
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
+  bindFsWatcherBroadcaster(mainWindow.webContents)
   gitService = new GitService({
     webContents: mainWindow.webContents,
     getAgents: () => getAgentConfigs()
@@ -236,6 +244,8 @@ function createWindow(): void {
     unbindEventsBroadcaster()
     unbindMuckaTextBroadcaster()
     unbindUpdaterBroadcaster()
+    unbindFsWatcherBroadcaster()
+    void shutdownAllWatchers()
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
@@ -767,6 +777,9 @@ function registerIpc(): void {
     deleteCredential(id)
     return listCredentials()
   })
+
+  ipcMain.handle('fs:watch', (_event, path: string) => fsWatch(path))
+  ipcMain.handle('fs:unwatch', (_event, path: string) => fsUnwatch(path))
 }
 
 function configureMediaPermissions(): void {
