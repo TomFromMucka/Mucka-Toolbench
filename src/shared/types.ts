@@ -9,6 +9,12 @@ import type {
   CredentialSummary,
   CredentialUpdateInput
 } from './credentials'
+import type {
+  OpenTabInput as BrowserOpenTabInput,
+  SetSlotBoundsInput as BrowserSetSlotBoundsInput,
+  TabId as BrowserTabId,
+  TabState as BrowserTabState
+} from './browser'
 
 export type AgentId = 'dave' | 'sammy' | 'kev' | 'bren'
 
@@ -614,6 +620,18 @@ export interface MuckaApi {
   watchDir(path: string): Promise<void>
   unwatchDir(path: string): Promise<void>
   onFsChange(handler: (event: { path: string }) => void): () => void
+
+  /* Tabbed browser (WebContentsView per tab, two slots) */
+  listBrowserTabs(): Promise<BrowserTabState[]>
+  openBrowserTab(input: BrowserOpenTabInput): Promise<BrowserTabId | null>
+  closeBrowserTab(tabId: BrowserTabId): Promise<void>
+  switchBrowserTab(tabId: BrowserTabId): Promise<void>
+  navigateBrowserTab(tabId: BrowserTabId, url: string): Promise<void>
+  browserBack(tabId: BrowserTabId): Promise<void>
+  browserForward(tabId: BrowserTabId): Promise<void>
+  browserReload(tabId: BrowserTabId): Promise<void>
+  setBrowserBounds(input: BrowserSetSlotBoundsInput): Promise<void>
+  onBrowserState(handler: (tabs: BrowserTabState[]) => void): () => void
 }
 
 /* ─── Vercel integration ─────────────────────────────────────────────── */

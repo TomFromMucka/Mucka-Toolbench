@@ -123,6 +123,24 @@ import {
   unwatchPath as fsUnwatch,
   watchPath as fsWatch
 } from './fs/Watcher'
+import {
+  bindBrowserManager,
+  closeTab as browserCloseTab,
+  goBack as browserGoBack,
+  goForward as browserGoForward,
+  listTabs as browserListTabs,
+  navigateTab as browserNavigate,
+  openTab as browserOpenTab,
+  reloadTab as browserReload,
+  setSlotBounds as browserSetBounds,
+  switchTab as browserSwitch,
+  unbindBrowserManager
+} from './browser/BrowserManager'
+import type {
+  OpenTabInput as BrowserOpenTabInput,
+  SetSlotBoundsInput as BrowserSetSlotBoundsInput,
+  TabId as BrowserTabId
+} from '@shared/browser'
 import type {
   MemoryListQuery,
   MemoryWriteInput,
@@ -214,6 +232,7 @@ function createWindow(): void {
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
   bindFsWatcherBroadcaster(mainWindow.webContents)
+  bindBrowserManager(mainWindow)
   gitService = new GitService({
     webContents: mainWindow.webContents,
     getAgents: () => getAgentConfigs()
@@ -246,6 +265,7 @@ function createWindow(): void {
     unbindUpdaterBroadcaster()
     unbindFsWatcherBroadcaster()
     void shutdownAllWatchers()
+    unbindBrowserManager()
     ptyManager?.killAll()
     ptyManager = null
     mainWindowRef = null
@@ -780,6 +800,32 @@ function registerIpc(): void {
 
   ipcMain.handle('fs:watch', (_event, path: string) => fsWatch(path))
   ipcMain.handle('fs:unwatch', (_event, path: string) => fsUnwatch(path))
+
+  ipcMain.handle('browser:list', () => browserListTabs())
+  ipcMain.handle('browser:open', (_event, input: BrowserOpenTabInput) =>
+    browserOpenTab(input)
+  )
+  ipcMain.handle('browser:close', (_event, tabId: BrowserTabId) =>
+    browserCloseTab(tabId)
+  )
+  ipcMain.handle('browser:switch', (_event, tabId: BrowserTabId) =>
+    browserSwitch(tabId)
+  )
+  ipcMain.handle('browser:navigate', (_event, tabId: BrowserTabId, url: string) =>
+    browserNavigate(tabId, url)
+  )
+  ipcMain.handle('browser:back', (_event, tabId: BrowserTabId) =>
+    browserGoBack(tabId)
+  )
+  ipcMain.handle('browser:forward', (_event, tabId: BrowserTabId) =>
+    browserGoForward(tabId)
+  )
+  ipcMain.handle('browser:reload', (_event, tabId: BrowserTabId) =>
+    browserReload(tabId)
+  )
+  ipcMain.handle('browser:set-bounds', (_event, input: BrowserSetSlotBoundsInput) =>
+    browserSetBounds(input)
+  )
 }
 
 function configureMediaPermissions(): void {

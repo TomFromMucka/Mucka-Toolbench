@@ -184,6 +184,27 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-18** — Preview panes become a real tabbed browser.
+  Each of the two slots in the right column now hosts its own stack of
+  tabs, each tab a main-process `WebContentsView` — real browser
+  semantics (back/forward history, cookies persisting via
+  `persist:browser` partition, cross-origin without CSP gymnastics).
+  Tab strip + URL bar in the renderer; main positions the views by
+  bounds reservation. `+` opens a new tab, click to switch, middle-
+  click or `×` to close, `window.open` from inside a tab spawns
+  another tab in the same slot. The agent-bound auto-bootstrap
+  behaviour is preserved: a slot with an agent that has a previewUrl
+  auto-opens that URL as the first tab. ⌘-click on a URL in an agent
+  terminal now opens it as a new tab in that agent's slot (preferred)
+  or any available slot. The old iframe-based BrowserPreview component
+  is removed. New main module:
+  `src/main/browser/BrowserManager.ts`. New shared types in
+  `src/shared/browser.ts`.
+
+  *Trade-off accepted*: the device-viewport presets (iPhone, iPad,
+  Desktop · 1440) are gone in this slice — the iframe portal trick
+  doesn't translate to WebContentsView. A follow-up can add fixed-
+  width "responsive" mode via slot bounds if useful.
 - **2026-05-17** — Explorer goes live. Each open folder is now watched
   non-recursively in the main process via `chokidar` (sub-100ms updates,
   near-zero steady-state CPU). When an agent's terminal writes a file
