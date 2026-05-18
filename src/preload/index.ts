@@ -52,6 +52,12 @@ import type {
   CredentialSummary,
   CredentialUpdateInput
 } from '@shared/credentials'
+import type {
+  OpenTabInput as BrowserOpenTabInput,
+  SetSlotBoundsInput as BrowserSetSlotBoundsInput,
+  TabId as BrowserTabId,
+  TabState as BrowserTabState
+} from '@shared/browser'
 
 const muckaApi: MuckaApi = {
   listAgents: () => ipcRenderer.invoke('agents:list') as Promise<AgentConfig[]>,
@@ -301,6 +307,32 @@ const muckaApi: MuckaApi = {
     ): void => handler(payload)
     ipcRenderer.on('fs:changed', listener)
     return () => ipcRenderer.off('fs:changed', listener)
+  },
+  listBrowserTabs: () =>
+    ipcRenderer.invoke('browser:list') as Promise<BrowserTabState[]>,
+  openBrowserTab: (input: BrowserOpenTabInput) =>
+    ipcRenderer.invoke('browser:open', input) as Promise<BrowserTabId | null>,
+  closeBrowserTab: (tabId: BrowserTabId) =>
+    ipcRenderer.invoke('browser:close', tabId) as Promise<void>,
+  switchBrowserTab: (tabId: BrowserTabId) =>
+    ipcRenderer.invoke('browser:switch', tabId) as Promise<void>,
+  navigateBrowserTab: (tabId: BrowserTabId, url: string) =>
+    ipcRenderer.invoke('browser:navigate', tabId, url) as Promise<void>,
+  browserBack: (tabId: BrowserTabId) =>
+    ipcRenderer.invoke('browser:back', tabId) as Promise<void>,
+  browserForward: (tabId: BrowserTabId) =>
+    ipcRenderer.invoke('browser:forward', tabId) as Promise<void>,
+  browserReload: (tabId: BrowserTabId) =>
+    ipcRenderer.invoke('browser:reload', tabId) as Promise<void>,
+  setBrowserBounds: (input: BrowserSetSlotBoundsInput) =>
+    ipcRenderer.invoke('browser:set-bounds', input) as Promise<void>,
+  onBrowserState: (handler: (tabs: BrowserTabState[]) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      tabs: BrowserTabState[]
+    ): void => handler(tabs)
+    ipcRenderer.on('browser:state', listener)
+    return () => ipcRenderer.off('browser:state', listener)
   }
 }
 

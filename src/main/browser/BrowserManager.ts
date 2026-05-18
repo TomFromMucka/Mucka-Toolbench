@@ -1,0 +1,285 @@
+import { randomUUID } from 'node:crypto'
+import { BrowserWindow, WebContentsView, type WebContents } from 'electron'
+import type {
+  BrowserSlotId,
+  OpenTabInput,
+  SetSlotBoundsInput,
+  TabId,
+  TabState
+} from '@shared/browser'
+
+/**
+ * Main-process owner of every tab across both preview slots.
+ *
+ * Each tab is a `WebContentsView` attached to the cockpit window's
+ * `contentView`. Only one tab per slot is positioned over its
+ * placeholder rectangle at a time (the active tab); inactive tabs are
+ * hidden via `setVisible(false)` so they don't fight for paint cycles
+ * but their `webContents` keeps running (scroll, JS, video, etc. stay
+ * alive).
+ *
+ * The renderer sends bounds via `browser:set-bounds` whenever its tab
+ * pane resizes; main positions the active view to match. State (titles,
+ * favicons, loading, history) is broadcast on `browser:state` for the
+ * renderer's tab strip to render off.
+ */
+
+const SLOT_IDS: BrowserSlotId[] = ['left', 'right']
+
+interface Bounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface Tab {
+  id: TabId
+  view: WebContentsView
+  slotId: BrowserSlotId
+  url: string
+  title: string
+  faviconUrl: string | null
+  loading: boolean
+}
+
+interface SlotState {
+  tabs: Tab[]
+  activeTabId: TabId | null
+  bounds: Bounds | null
+}
+
+const slots: Record<BrowserSlotId, SlotState> = {
+  left: { tabs: [], activeTabId: null, bounds: null },
+  right: { tabs: [], activeTabId: null, bounds: null }
+}
+
+let parentWindow: BrowserWindow | null = null
+let broadcaster: WebContents | null = null
+
+export function bindBrowserManager(window: BrowserWindow): void {
+  parentWindow = window
+  broadcaster = window.webContents
+}
+
+export function unbindBrowserManager(): void {
+  for (const slotId of SLOT_IDS) closeAllTabsInSlot(slotId)
+  parentWindow = null
+  broadcaster = null
+}
+
+function snapshot(): TabState[] {
+  const states: TabState[] = []
+  for (const slotId of SLOT_IDS) {
+    const slot = slots[slotId]
+    slot.tabs.forEach((tab, idx) => {
+      const history = tab.view.webContents.navigationHistory
+      states.push({
+        id: tab.id,
+        slotId,
+        position: idx,
+        url: tab.url,
+        title: tab.title,
+        faviconUrl: tab.faviconUrl,
+        loading: tab.loading,
+        canGoBack: history.canGoBack(),
+        canGoForward: history.canGoForward(),
+        active: slot.activeTabId === tab.id
+      })
+    })
+  }
+  return states
+}
+
+function emit(): void {
+  if (!broadcaster || broadcaster.isDestroyed()) return
+  broadcaster.send('browser:state', snapshot())
+}
+
+function applyBounds(slotId: BrowserSlotId): void {
+  const slot = slots[slotId]
+  for (const tab of slot.tabs) {
+    if (tab.id === slot.activeTabId && slot.bounds) {
+      tab.view.setBounds(slot.bounds)
+      tab.view.setVisible(true)
+    } else {
+      tab.view.setVisible(false)
+    }
+  }
+}
+
+function wireEvents(tab: Tab): void {
+  const wc = tab.view.webContents
+  wc.on('page-title-updated', (_e, title) => {
+    tab.title = title
+    emit()
+  })
+  wc.on('page-favicon-updated', (_e, favicons) => {
+    tab.faviconUrl = favicons[0] ?? null
+    emit()
+  })
+  wc.on('did-start-loading', () => {
+    tab.loading = true
+    emit()
+  })
+  wc.on('did-stop-loading', () => {
+    tab.loading = false
+    emit()
+  })
+  wc.on('did-navigate', (_e, url) => {
+    tab.url = url
+    emit()
+  })
+  wc.on('did-navigate-in-page', (_e, url) => {
+    tab.url = url
+    emit()
+  })
+  wc.on('did-fail-load', (_e, _errorCode, _errorDescription, validatedURL) => {
+    tab.loading = false
+    tab.url = validatedURL || tab.url
+    emit()
+  })
+  // window.open / target=_blank / Cmd-click on a link → spawn another
+  // tab in the SAME slot so the user stays inside the cockpit.
+  wc.setWindowOpenHandler((details) => {
+    openTab({ slotId: tab.slotId, url: details.url, activate: true })
+    return { action: 'deny' }
+  })
+}
+
+export function openTab(input: OpenTabInput): TabId | null {
+  if (!parentWindow) return null
+  const view = new WebContentsView({
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      // Default persistent session — cookies + localStorage survive
+      // cockpit restarts, same as the iframe approach had.
+      partition: 'persist:browser'
+    }
+  })
+  const tab: Tab = {
+    id: randomUUID(),
+    view,
+    slotId: input.slotId,
+    url: input.url,
+    title: input.url,
+    faviconUrl: null,
+    loading: true
+  }
+  wireEvents(tab)
+  parentWindow.contentView.addChildView(view)
+  view.webContents
+    .loadURL(input.url)
+    .catch(() => { /* did-fail-load handles surface */ })
+
+  const slot = slots[input.slotId]
+  slot.tabs.push(tab)
+  if (input.activate !== false || slot.tabs.length === 1) {
+    slot.activeTabId = tab.id
+  }
+  applyBounds(input.slotId)
+  emit()
+  return tab.id
+}
+
+export function closeTab(tabId: TabId): void {
+  for (const slotId of SLOT_IDS) {
+    const slot = slots[slotId]
+    const idx = slot.tabs.findIndex((t) => t.id === tabId)
+    if (idx < 0) continue
+    const [removed] = slot.tabs.splice(idx, 1)
+    if (parentWindow) parentWindow.contentView.removeChildView(removed.view)
+    try {
+      removed.view.webContents.close()
+    } catch {
+      /* already closed */
+    }
+    if (slot.activeTabId === tabId) {
+      // Activate the neighbour to the left, falling back to right.
+      const next = slot.tabs[Math.max(0, idx - 1)] ?? null
+      slot.activeTabId = next?.id ?? null
+    }
+    applyBounds(slotId)
+    emit()
+    return
+  }
+}
+
+function closeAllTabsInSlot(slotId: BrowserSlotId): void {
+  const slot = slots[slotId]
+  for (const tab of slot.tabs) {
+    if (parentWindow) parentWindow.contentView.removeChildView(tab.view)
+    try {
+      tab.view.webContents.close()
+    } catch {
+      /* already closed */
+    }
+  }
+  slot.tabs = []
+  slot.activeTabId = null
+}
+
+export function switchTab(tabId: TabId): void {
+  for (const slotId of SLOT_IDS) {
+    const slot = slots[slotId]
+    if (slot.tabs.some((t) => t.id === tabId)) {
+      if (slot.activeTabId !== tabId) {
+        slot.activeTabId = tabId
+        applyBounds(slotId)
+        emit()
+      }
+      return
+    }
+  }
+}
+
+function findTab(tabId: TabId): { tab: Tab; slotId: BrowserSlotId } | null {
+  for (const slotId of SLOT_IDS) {
+    const tab = slots[slotId].tabs.find((t) => t.id === tabId)
+    if (tab) return { tab, slotId }
+  }
+  return null
+}
+
+export function navigateTab(tabId: TabId, url: string): void {
+  const found = findTab(tabId)
+  if (!found) return
+  found.tab.view.webContents.loadURL(url).catch(() => { /* did-fail-load handles */ })
+}
+
+export function goBack(tabId: TabId): void {
+  const found = findTab(tabId)
+  if (!found) return
+  const history = found.tab.view.webContents.navigationHistory
+  if (history.canGoBack()) history.goBack()
+}
+
+export function goForward(tabId: TabId): void {
+  const found = findTab(tabId)
+  if (!found) return
+  const history = found.tab.view.webContents.navigationHistory
+  if (history.canGoForward()) history.goForward()
+}
+
+export function reloadTab(tabId: TabId): void {
+  const found = findTab(tabId)
+  if (!found) return
+  found.tab.view.webContents.reload()
+}
+
+export function setSlotBounds(input: SetSlotBoundsInput): void {
+  const slot = slots[input.slotId]
+  slot.bounds = {
+    x: Math.round(input.x),
+    y: Math.round(input.y),
+    width: Math.max(0, Math.round(input.width)),
+    height: Math.max(0, Math.round(input.height))
+  }
+  applyBounds(input.slotId)
+}
+
+export function listTabs(): TabState[] {
+  return snapshot()
+}
