@@ -232,20 +232,6 @@ export function closeTab(tabId: TabId): void {
   }
 }
 
-function closeAllTabsInSlot(slotId: BrowserSlotId): void {
-  const slot = slots[slotId]
-  for (const tab of slot.tabs) {
-    if (parentWindow) parentWindow.contentView.removeChildView(tab.view)
-    try {
-      tab.view.webContents.close()
-    } catch {
-      /* already closed */
-    }
-  }
-  slot.tabs = []
-  slot.activeTabId = null
-}
-
 export function switchTab(tabId: TabId): void {
   for (const slotId of SLOT_IDS) {
     const slot = slots[slotId]
