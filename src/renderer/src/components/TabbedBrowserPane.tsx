@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ChevronLeft,
   ChevronRight,
@@ -127,25 +128,30 @@ export function TabbedBrowserPane({
   const deviceH = preset ? (landscape ? preset.width : preset.height) : 0
 
   // Bounds reservation: the placeholder div's position drives where
-  // main positions the active WebContentsView. We re-measure on every
-  // layout change and ship the new rect to main. Three regimes:
+  // main positions the active WebContentsView.
   //
-  //   1. Fit (no preset): bounds = slot rect, zoom = 1.
-  //   2. Device fits inside the slot: centered, native pixels, zoom = 1.
-  //      Phones (≤430) usually land here in any reasonably-sized slot.
-  //   3. Device wider than slot but fits in the cockpit window: POP OUT
-  //      to centred-in-window at native pixels — the view paints over
-  //      the rest of the cockpit. This is what "preview at 1440" really
-  //      means. Zoom = 1 so CSS reads the actual device width.
-  //   4. Device wider than the cockpit window itself: fall back to slot
-  //      bounds + zoom scaling. Only triggers on a very small cockpit.
+  //   - Fit (no preset): bounds = slot rect, zoom = 1.
+  //   - Any device preset: POP OUT. Anchored at the slot's top-left and
+  //     shifted left/up to fit the window. Even phones pop out — the
+  //     "popping out of the slot" feel is the point, the slot itself
+  //     shows a device-info placeholder during the popout.
+  //   - Device bigger than the window itself: last-resort scaling via
+  //     setZoomFactor, painted into the slot rect.
+  const POPOUT_MARGIN = 12
   const placeholderRef = useRef<HTMLDivElement | null>(null)
+  const [popoutBounds, setPopoutBounds] = useState<{
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null>(null)
   useLayoutEffect(() => {
     const el = placeholderRef.current
     if (!el) return
     const push = (): void => {
       const rect = el.getBoundingClientRect()
       if (!preset) {
+        setPopoutBounds(null)
         void window.mucka.setBrowserBounds({
           slotId,
           x: rect.left,
@@ -160,10 +166,13 @@ export function TabbedBrowserPane({
       const h = deviceH
       const winW = window.innerWidth
       const winH = window.innerHeight
+      const maxW = winW - 2 * POPOUT_MARGIN
+      const maxH = winH - 2 * POPOUT_MARGIN
 
-      if (w > winW || h > winH) {
-        // Device bigger than the cockpit window — last-resort scaling.
-        const scale = Math.min(winW / w, winH / h, 1)
+      if (w > maxW || h > maxH) {
+        // Device exceeds the window — scale into the slot rect.
+        const scale = Math.min(maxW / w, maxH / h, 1)
+        setPopoutBounds(null)
         void window.mucka.setBrowserBounds({
           slotId,
           x: rect.left,
@@ -175,21 +184,18 @@ export function TabbedBrowserPane({
         return
       }
 
-      if (w <= rect.width && h <= rect.height) {
-        // Fits inside the slot — keep it tidy and centered there.
-        const x = rect.left + (rect.width - w) / 2
-        const y = rect.top + (rect.height - h) / 2
-        void window.mucka.setBrowserBounds({ slotId, x, y, width: w, height: h })
-        void window.mucka.setBrowserZoom(slotId, 1)
-        return
-      }
-
-      // Pop out: native pixels, centred horizontally in the window,
-      // top-aligned with the slot's content area so the URL bar +
-      // viewport dropdown stay visible (the only way to dismiss).
-      const x = Math.max(0, Math.round((winW - w) / 2))
-      const y = Math.max(0, Math.min(Math.round(rect.top), winH - h))
-      void window.mucka.setBrowserBounds({ slotId, x, y, width: w, height: h })
+      // Pop out: anchor at slot's top-left, shift left/up if the device
+      // would otherwise spill off-screen. Matches the original
+      // BrowserPreview portal positioning.
+      let x = Math.round(rect.left)
+      let y = Math.round(rect.top)
+      const rightEdge = winW - POPOUT_MARGIN
+      const bottomEdge = winH - POPOUT_MARGIN
+      if (x + w > rightEdge) x = Math.max(POPOUT_MARGIN, rightEdge - w)
+      if (y + h > bottomEdge) y = Math.max(POPOUT_MARGIN, bottomEdge - h)
+      const bounds = { x, y, width: w, height: h }
+      setPopoutBounds(bounds)
+      void window.mucka.setBrowserBounds({ slotId, ...bounds })
       void window.mucka.setBrowserZoom(slotId, 1)
     }
     push()
@@ -243,10 +249,91 @@ export function TabbedBrowserPane({
           />
         ) : null}
         <div ref={placeholderRef} className="relative min-h-0 flex-1 bg-paper-cream">
-          {tabs.length === 0 ? <EmptyState slotId={slotId} agent={agent} /> : null}
+          {tabs.length === 0 ? (
+            <EmptyState slotId={slotId} agent={agent} />
+          ) : popoutBounds && preset ? (
+            <DevicePlaceholder preset={preset} w={deviceW} h={deviceH} />
+          ) : null}
         </div>
       </div>
+      {popoutBounds ? (
+        <PopoutCloseButton
+          bounds={popoutBounds}
+          onClose={() => setPresetId('fit')}
+        />
+      ) : null}
     </Clipboard>
+  )
+}
+
+function DevicePlaceholder({
+  preset,
+  w,
+  h
+}: {
+  preset: Preset
+  w: number
+  h: number
+}): React.JSX.Element {
+  const DeviceIcon: LucideIcon =
+    preset.device === 'phone'
+      ? Smartphone
+      : preset.device === 'tablet'
+        ? Tablet
+        : Monitor
+  return (
+    <div
+      className="grid h-full place-items-center px-4"
+      style={{ background: 'var(--surface-2, transparent)' }}
+    >
+      <div className="flex flex-col items-center gap-1 text-center text-ink-soft">
+        <Icon
+          icon={DeviceIcon}
+          size={20}
+          strokeWidth={2}
+          className="opacity-60"
+        />
+        <p className="text-[0.78rem] uppercase tracking-[0.16em]">
+          {preset.label}
+        </p>
+        <p className="font-mono text-[0.74rem] text-ink-faint">
+          {w} × {h}
+        </p>
+        <p className="mt-1 text-[0.66rem] text-ink-faint">
+          Esc to return to Fit
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function PopoutCloseButton({
+  bounds,
+  onClose
+}: {
+  bounds: { x: number; y: number; width: number; height: number }
+  onClose: () => void
+}): React.JSX.Element {
+  // Centred on the popped-out view's top-right corner. The lower-left
+  // quadrant of the button overlaps the view (and is covered by it), but
+  // the upper-right ¾ stays outside the bounds and is clickable.
+  return createPortal(
+    <button
+      type="button"
+      onClick={onClose}
+      title="Close device preview (Esc)"
+      aria-label="Close device preview"
+      style={{
+        position: 'fixed',
+        left: bounds.x + bounds.width - 14,
+        top: bounds.y - 14,
+        zIndex: 80
+      }}
+      className="grid size-7 place-items-center rounded-full bg-wood-deep text-van-white shadow-[0_2px_8px_rgba(0,0,0,0.5)] hover:bg-charcoal"
+    >
+      <Icon icon={X} size={14} strokeWidth={2.5} />
+    </button>,
+    document.body
   )
 }
 
