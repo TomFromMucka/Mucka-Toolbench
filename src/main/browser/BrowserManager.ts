@@ -65,9 +65,17 @@ export function bindBrowserManager(window: BrowserWindow): void {
 }
 
 export function unbindBrowserManager(): void {
-  for (const slotId of SLOT_IDS) closeAllTabsInSlot(slotId)
+  // The 'closed' event fires AFTER the native window is destroyed, so
+  // anything that touches parentWindow.contentView here will throw
+  // "Object has been destroyed". Just drop our references and let GC
+  // collect the views — the underlying BrowserWindow's contentView
+  // tree is already being torn down.
   parentWindow = null
   broadcaster = null
+  for (const slotId of SLOT_IDS) {
+    slots[slotId].tabs = []
+    slots[slotId].activeTabId = null
+  }
 }
 
 function snapshot(): TabState[] {
