@@ -53,6 +53,7 @@ import type {
   CredentialUpdateInput
 } from '@shared/credentials'
 import type {
+  BrowserSlotId,
   OpenTabInput as BrowserOpenTabInput,
   SetSlotBoundsInput as BrowserSetSlotBoundsInput,
   TabId as BrowserTabId,
@@ -326,6 +327,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('browser:reload', tabId) as Promise<void>,
   setBrowserBounds: (input: BrowserSetSlotBoundsInput) =>
     ipcRenderer.invoke('browser:set-bounds', input) as Promise<void>,
+  setBrowserZoom: (slotId: BrowserSlotId, factor: number) =>
+    ipcRenderer.invoke('browser:set-zoom', slotId, factor) as Promise<void>,
   onBrowserState: (handler: (tabs: BrowserTabState[]) => void) => {
     const listener = (
       _e: Electron.IpcRendererEvent,

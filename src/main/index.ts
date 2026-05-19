@@ -133,10 +133,12 @@ import {
   openTab as browserOpenTab,
   reloadTab as browserReload,
   setSlotBounds as browserSetBounds,
+  setSlotZoom as browserSetZoom,
   switchTab as browserSwitch,
   unbindBrowserManager
 } from './browser/BrowserManager'
 import type {
+  BrowserSlotId,
   OpenTabInput as BrowserOpenTabInput,
   SetSlotBoundsInput as BrowserSetSlotBoundsInput,
   TabId as BrowserTabId
@@ -825,6 +827,10 @@ function registerIpc(): void {
   )
   ipcMain.handle('browser:set-bounds', (_event, input: BrowserSetSlotBoundsInput) =>
     browserSetBounds(input)
+  )
+  ipcMain.handle(
+    'browser:set-zoom',
+    (_event, slotId: BrowserSlotId, factor: number) => browserSetZoom(slotId, factor)
   )
 }
 

@@ -10,6 +10,7 @@ import type {
   CredentialUpdateInput
 } from './credentials'
 import type {
+  BrowserSlotId,
   OpenTabInput as BrowserOpenTabInput,
   SetSlotBoundsInput as BrowserSetSlotBoundsInput,
   TabId as BrowserTabId,
@@ -631,6 +632,7 @@ export interface MuckaApi {
   browserForward(tabId: BrowserTabId): Promise<void>
   browserReload(tabId: BrowserTabId): Promise<void>
   setBrowserBounds(input: BrowserSetSlotBoundsInput): Promise<void>
+  setBrowserZoom(slotId: BrowserSlotId, factor: number): Promise<void>
   onBrowserState(handler: (tabs: BrowserTabState[]) => void): () => void
 }
 
