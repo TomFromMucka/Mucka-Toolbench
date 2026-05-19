@@ -167,11 +167,13 @@ export function TabbedBrowserPane({
       const winW = window.innerWidth
       const winH = window.innerHeight
       const maxW = winW - 2 * POPOUT_MARGIN
-      const maxH = winH - 2 * POPOUT_MARGIN
 
-      if (w > maxW || h > maxH) {
-        // Device exceeds the window — scale into the slot rect.
-        const scale = Math.min(maxW / w, maxH / h, 1)
+      if (w > maxW) {
+        // Device wider than the cockpit window — only width triggers the
+        // scale-into-slot fallback. Vertical overflow is fine; we'd
+        // rather clip the bottom of an iPad portrait than scale it down,
+        // because scaling kills the whole point of the preset.
+        const scale = maxW / w
         setPopoutBounds(null)
         void window.mucka.setBrowserBounds({
           slotId,
