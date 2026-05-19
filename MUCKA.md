@@ -184,6 +184,17 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-19** — Tabbed browser polish: right-click + viewport
+  presets. Each tab's `WebContentsView` now gets the same context-menu
+  treatment as the main window (Cut/Copy/Paste/Select All plus the
+  Credentials library's Insert username/password submenu) — so
+  right-clicking inside a login form on a real site now offers your
+  saved credentials. Viewport preset selector is back in the URL bar
+  with phones/tablets/desktops + a portrait/landscape toggle. Phones
+  and tablets that fit inside the slot get centered with native pixel
+  width; desktop sizes wider than the slot scale via per-slot
+  `setZoomFactor`, so a 1440-wide page renders to fit while CSS still
+  queries at 1440.
 - **2026-05-18** — Preview panes become a real tabbed browser.
   Each of the two slots in the right column now hosts its own stack of
   tabs, each tab a main-process `WebContentsView` — real browser

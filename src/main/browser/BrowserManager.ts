@@ -7,6 +7,7 @@ import type {
   TabId,
   TabState
 } from '@shared/browser'
+import { installInputContextMenu } from '../contextMenu/InputMenu'
 
 /**
  * Main-process owner of every tab across both preview slots.
@@ -47,11 +48,12 @@ interface SlotState {
   tabs: Tab[]
   activeTabId: TabId | null
   bounds: Bounds | null
+  zoomFactor: number
 }
 
 const slots: Record<BrowserSlotId, SlotState> = {
-  left: { tabs: [], activeTabId: null, bounds: null },
-  right: { tabs: [], activeTabId: null, bounds: null }
+  left: { tabs: [], activeTabId: null, bounds: null, zoomFactor: 1 },
+  right: { tabs: [], activeTabId: null, bounds: null, zoomFactor: 1 }
 }
 
 let parentWindow: BrowserWindow | null = null
@@ -169,7 +171,22 @@ export function openTab(input: OpenTabInput): TabId | null {
     loading: true
   }
   wireEvents(tab)
+  // Each tab's webContents gets the same context-menu treatment as the
+  // main window — Cut/Copy/Paste/Select All plus the Credentials
+  // library's Insert username/password submenu when right-clicking
+  // inside an input. Without this, right-click in a tab does nothing.
+  installInputContextMenu(view.webContents)
   parentWindow.contentView.addChildView(view)
+  // Inherit the slot's current viewport zoom (so opening a new tab
+  // while in a Desktop · 1440 viewport doesn't reset to 1.0). Apply
+  // after the first commit so the zoom sticks past loadURL's reset.
+  view.webContents.once('did-finish-load', () => {
+    try {
+      view.webContents.setZoomFactor(slots[input.slotId].zoomFactor)
+    } catch {
+      /* tab gone */
+    }
+  })
   view.webContents
     .loadURL(input.url)
     .catch(() => { /* did-fail-load handles surface */ })
@@ -267,6 +284,21 @@ export function reloadTab(tabId: TabId): void {
   const found = findTab(tabId)
   if (!found) return
   found.tab.view.webContents.reload()
+}
+
+export function setSlotZoom(slotId: BrowserSlotId, factor: number): void {
+  // Per-slot zoom — applied to every tab in the slot so switching tabs
+  // doesn't reset the viewport mode. Clamp to Electron's accepted
+  // range (roughly 0.25–5).
+  const safe = Math.max(0.25, Math.min(5, factor))
+  slots[slotId].zoomFactor = safe
+  for (const tab of slots[slotId].tabs) {
+    try {
+      tab.view.webContents.setZoomFactor(safe)
+    } catch {
+      /* tab being destroyed */
+    }
+  }
 }
 
 export function setSlotBounds(input: SetSlotBoundsInput): void {
