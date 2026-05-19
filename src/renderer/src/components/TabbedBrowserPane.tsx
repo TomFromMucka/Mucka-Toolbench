@@ -111,19 +111,34 @@ export function TabbedBrowserPane({
   const [presetId, setPresetId] = useState<PresetId>('fit')
   const [landscape, setLandscape] = useState(false)
   const preset = findPreset(presetId)
+
+  // ESC dismisses device mode — match the muscle memory of the old
+  // portal-based device overlay. Only fires when this slot is in a
+  // non-fit preset; harmless otherwise.
+  useEffect(() => {
+    if (presetId === 'fit') return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setPresetId('fit')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [presetId])
   const deviceW = preset ? (landscape ? preset.height : preset.width) : 0
   const deviceH = preset ? (landscape ? preset.width : preset.height) : 0
 
   // Bounds reservation: the placeholder div's position drives where
   // main positions the active WebContentsView. We re-measure on every
-  // layout change and ship the new rect to main. When a device preset
-  // is selected:
-  //   - phones/tablets that fit inside the slot → bounds is the
-  //     centered preset rect, zoom stays at 1.0 so CSS sees the
-  //     device's actual viewport width
-  //   - desktop sizes wider than the slot → bounds is the full slot
-  //     rect, zoom is `slotWidth / preset.width` so a 1440-wide site
-  //     scales down visually while CSS still queries against 1440
+  // layout change and ship the new rect to main. Three regimes:
+  //
+  //   1. Fit (no preset): bounds = slot rect, zoom = 1.
+  //   2. Device fits inside the slot: centered, native pixels, zoom = 1.
+  //      Phones (≤430) usually land here in any reasonably-sized slot.
+  //   3. Device wider than slot but fits in the cockpit window: POP OUT
+  //      to centred-in-window at native pixels — the view paints over
+  //      the rest of the cockpit. This is what "preview at 1440" really
+  //      means. Zoom = 1 so CSS reads the actual device width.
+  //   4. Device wider than the cockpit window itself: fall back to slot
+  //      bounds + zoom scaling. Only triggers on a very small cockpit.
   const placeholderRef = useRef<HTMLDivElement | null>(null)
   useLayoutEffect(() => {
     const el = placeholderRef.current
@@ -143,17 +158,12 @@ export function TabbedBrowserPane({
       }
       const w = deviceW
       const h = deviceH
-      if (w <= rect.width) {
-        // Centered device-sized rect with backdrop margins on either side.
-        const x = rect.left + (rect.width - w) / 2
-        const y = rect.top + Math.max(0, (rect.height - h) / 2)
-        const usableH = Math.min(h, rect.height)
-        void window.mucka.setBrowserBounds({ slotId, x, y, width: w, height: usableH })
-        void window.mucka.setBrowserZoom(slotId, 1)
-      } else {
-        // Wider than the slot — scale via zoom so the layout viewport
-        // matches the preset.
-        const scale = rect.width / w
+      const winW = window.innerWidth
+      const winH = window.innerHeight
+
+      if (w > winW || h > winH) {
+        // Device bigger than the cockpit window — last-resort scaling.
+        const scale = Math.min(winW / w, winH / h, 1)
         void window.mucka.setBrowserBounds({
           slotId,
           x: rect.left,
@@ -162,7 +172,25 @@ export function TabbedBrowserPane({
           height: rect.height
         })
         void window.mucka.setBrowserZoom(slotId, scale)
+        return
       }
+
+      if (w <= rect.width && h <= rect.height) {
+        // Fits inside the slot — keep it tidy and centered there.
+        const x = rect.left + (rect.width - w) / 2
+        const y = rect.top + (rect.height - h) / 2
+        void window.mucka.setBrowserBounds({ slotId, x, y, width: w, height: h })
+        void window.mucka.setBrowserZoom(slotId, 1)
+        return
+      }
+
+      // Pop out: native pixels, centred horizontally in the window,
+      // top-aligned with the slot's content area so the URL bar +
+      // viewport dropdown stay visible (the only way to dismiss).
+      const x = Math.max(0, Math.round((winW - w) / 2))
+      const y = Math.max(0, Math.min(Math.round(rect.top), winH - h))
+      void window.mucka.setBrowserBounds({ slotId, x, y, width: w, height: h })
+      void window.mucka.setBrowserZoom(slotId, 1)
     }
     push()
     const ro = new ResizeObserver(push)
