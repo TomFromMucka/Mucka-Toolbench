@@ -20,6 +20,14 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # zip-only by default. The auto-updater (electron-updater) only reads
+  # the zip + latest-mac.yml, so the DMG was purely a fresh-install
+  # nicety — and dmgbuild's "hdiutil couldn't unmount, Resource busy"
+  # flake was costing a release every other ship. Re-add DMG before
+  # the repo goes public so external users get the drag-to-Applications
+  # window.
+  target:
+    - zip
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -27,8 +35,6 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
-dmg:
-  artifactName: ${name}-${version}.${ext}
 linux:
   target:
     - AppImage
