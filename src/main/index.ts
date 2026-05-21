@@ -38,6 +38,7 @@ import {
   deletePath as fsDelete,
   listDir as fsListDir,
   openPathInOs,
+  readFilePreview as fsReadFilePreview,
   renamePath as fsRename,
   revealInOs
 } from './fs/index'
@@ -718,6 +719,8 @@ function registerIpc(): void {
   ipcMain.handle('fs:reveal', (_event, path: string) => revealInOs(path))
 
   ipcMain.handle('fs:openPath', (_event, path: string) => openPathInOs(path))
+
+  ipcMain.handle('fs:readFile', (_event, path: string) => fsReadFilePreview(path))
 
   ipcMain.handle(
     'fs:createFile',

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { app, shell } from 'electron'
-import type { FsEntry, FsEntryKind, FsListing } from '@shared/types'
+import type { FilePreview, FsEntry, FsEntryKind, FsListing } from '@shared/types'
 
 function classify(d: { isDirectory(): boolean; isFile(): boolean; isSymbolicLink(): boolean }): FsEntryKind {
   if (d.isSymbolicLink()) return 'symlink'
@@ -62,6 +62,59 @@ export async function openPathInOs(path: string): Promise<void> {
   if (typeof path !== 'string' || path.trim().length === 0) return
   const err = await shell.openPath(resolve(path))
   if (err) throw new Error(err)
+}
+
+/**
+ * Read a file for the in-app preview modal. The renderer never sees
+ * binary blobs — main classifies up front:
+ *
+ *   - over 2 MB → `too-large` (Tom can still open in default app)
+ *   - first 8 KB contains a NUL byte → `binary`
+ *   - otherwise → utf-8 decoded text, truncated at 2 MB if needed
+ *
+ * Allowed anywhere — the preview is read-only, and the explorer lets
+ * Tom navigate outside the worktree (e.g. into ~/.mucka-toolbench/)
+ * so a home-only gate would block legitimate viewing.
+ */
+const PREVIEW_CAP_BYTES = 2 * 1024 * 1024
+const BINARY_SNIFF_BYTES = 8 * 1024
+
+export async function readFilePreview(input: string): Promise<FilePreview> {
+  if (typeof input !== 'string' || input.trim().length === 0) {
+    return { kind: 'error', path: input ?? '', message: 'no path' }
+  }
+  const path = resolve(input)
+  try {
+    const stat = await fs.stat(path)
+    if (!stat.isFile()) {
+      return { kind: 'error', path, message: 'not a file' }
+    }
+    if (stat.size > PREVIEW_CAP_BYTES) {
+      return { kind: 'too-large', path, bytes: stat.size, cap: PREVIEW_CAP_BYTES }
+    }
+    const buf = await fs.readFile(path)
+    const sniffLen = Math.min(buf.length, BINARY_SNIFF_BYTES)
+    for (let i = 0; i < sniffLen; i++) {
+      if (buf[i] === 0) {
+        return { kind: 'binary', path, bytes: stat.size }
+      }
+    }
+    const text = buf.toString('utf8')
+    return {
+      kind: 'ok',
+      path,
+      text,
+      bytes: stat.size,
+      truncated: false
+    }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      return { kind: 'missing', path }
+    }
+    const message = err instanceof Error ? err.message : String(err)
+    return { kind: 'error', path, message }
+  }
 }
 
 /**
