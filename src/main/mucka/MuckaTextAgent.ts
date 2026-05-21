@@ -198,9 +198,14 @@ export async function sendMessage(text: string): Promise<void> {
     // ~/.claude/ regardless. Tom's local `~/.local/bin/claude` wrapper
     // resolves to ENOTDIR when spawned directly by Node, so the
     // override was actively breaking text chat.
+    //
+    // cwd must be a real on-disk directory: in packaged builds
+    // `app.getAppPath()` resolves to `…/Resources/app.asar` (a FILE),
+    // and `child_process.spawn` cannot chdir into it — that path was
+    // the second ENOTDIR. userData is always a real, writable dir.
     const options: Options = {
       systemPrompt: loadPrompt(),
-      cwd: app.getAppPath(),
+      cwd: app.getPath('userData'),
       includePartialMessages: true,
       mcpServers: { mucka: mcpServer },
       // Resume the SDK's session log from prior turns this boot so it
