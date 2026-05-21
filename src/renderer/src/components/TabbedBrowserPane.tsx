@@ -230,9 +230,18 @@ export function TabbedBrowserPane({
 
   const subtitle = agent ? `${agent.displayName.toLowerCase()} · browser` : 'browser'
 
+  // Bring this slot's WebContentsView to the top of the z-order on any
+  // interaction with its chrome. Critical when one slot is popped out
+  // to a desktop viewport that overlaps the other slot's area —
+  // without raising, clicking the obscured slot leaves it hidden under
+  // the other one.
+  const raise = (): void => {
+    void window.mucka.raiseBrowserSlot(slotId)
+  }
+
   return (
     <Clipboard title="Browser" subtitle={subtitle} paper="plain">
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 flex-col" onMouseDownCapture={raise}>
         <TabStrip
           slotId={slotId}
           tabs={tabs}
