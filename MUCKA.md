@@ -191,6 +191,16 @@ shared primitives in `components/ui/`:
   the chdir. Switched to `app.getPath('userData')` which is always a
   real on-disk dir. Voice mode was unaffected.
 
+- **2026-05-21** — Explorer file preview modal. Clicking a file in the
+  explorer no longer hands off to macOS, which was sending `.md` to an
+  external IDE and `.env` to the dead-end "no application set" dialog.
+  Instead the cockpit opens an in-app paper-and-ink modal with line
+  numbers, byte size in the footer, Esc to close, and "Open in default
+  app" / "Reveal in Finder" buttons when Tom does want the OS handler.
+  Main classifies the file (binary, too-large >2 MB, missing) before
+  sending so the renderer never sees a binary blob. Right-click → Open
+  with default app is still there for muscle memory.
+
 - **2026-05-21** — Browser slot z-order: whichever pane you interact
   with comes to the top. `WebContentsView` children render in
   insertion order, so a desktop-viewport popout in the top slot was
