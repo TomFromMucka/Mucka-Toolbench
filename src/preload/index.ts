@@ -329,6 +329,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('browser:set-bounds', input) as Promise<void>,
   setBrowserZoom: (slotId: BrowserSlotId, factor: number) =>
     ipcRenderer.invoke('browser:set-zoom', slotId, factor) as Promise<void>,
+  raiseBrowserSlot: (slotId: BrowserSlotId) =>
+    ipcRenderer.invoke('browser:raise', slotId) as Promise<void>,
   onBrowserState: (handler: (tabs: BrowserTabState[]) => void) => {
     const listener = (
       _e: Electron.IpcRendererEvent,

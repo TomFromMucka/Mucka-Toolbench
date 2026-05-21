@@ -131,6 +131,7 @@ import {
   listTabs as browserListTabs,
   navigateTab as browserNavigate,
   openTab as browserOpenTab,
+  raiseSlot as browserRaiseSlot,
   reloadTab as browserReload,
   setSlotBounds as browserSetBounds,
   setSlotZoom as browserSetZoom,
@@ -831,6 +832,9 @@ function registerIpc(): void {
   ipcMain.handle(
     'browser:set-zoom',
     (_event, slotId: BrowserSlotId, factor: number) => browserSetZoom(slotId, factor)
+  )
+  ipcMain.handle('browser:raise', (_event, slotId: BrowserSlotId) =>
+    browserRaiseSlot(slotId)
   )
 }
 
