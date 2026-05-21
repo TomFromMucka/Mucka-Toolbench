@@ -390,6 +390,19 @@ export interface FsListing {
   error: string | null
 }
 
+/**
+ * Result of reading a file for in-app preview. We never want to dump a
+ * binary blob into the renderer, so main classifies before sending: a
+ * file is `binary` if it contains a NUL byte in the first read window,
+ * `too-large` if its size exceeds the cap, and `ok` otherwise.
+ */
+export type FilePreview =
+  | { kind: 'ok'; path: string; text: string; bytes: number; truncated: boolean }
+  | { kind: 'binary'; path: string; bytes: number }
+  | { kind: 'too-large'; path: string; bytes: number; cap: number }
+  | { kind: 'missing'; path: string }
+  | { kind: 'error'; path: string; message: string }
+
 /* ─── Long-term memory ───────────────────────────────────────────────── */
 
 /**
@@ -546,6 +559,9 @@ export interface MuckaApi {
 
   /* Filesystem — used by the Explorer sidebar */
   listDir(path: string): Promise<FsListing>
+  /** Read a file for in-app preview. Returns a tagged result so the
+   * renderer can render text vs. show a binary/too-large placeholder. */
+  readFilePreview(path: string): Promise<FilePreview>
   /** Type a string into multiple agents' terminals in parallel, then press Enter. */
   broadcastToAgents(input: {
     text: string

@@ -4,6 +4,7 @@ import type { FsEntry } from '@shared/types'
 import { Icon } from './ui/Icon'
 import { joinPath, type FileTreeApi } from '../hooks/useFileTree'
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu'
+import { FileViewerModal } from './FileViewerModal'
 
 interface FileTreeProps {
   api: FileTreeApi
@@ -46,6 +47,7 @@ interface MenuTarget {
 
 export function FileTree({ api }: FileTreeProps): React.JSX.Element {
   const [menu, setMenu] = useState<MenuTarget | null>(null)
+  const [viewerPath, setViewerPath] = useState<string | null>(null)
 
   if (!api.root) {
     return (
@@ -89,6 +91,7 @@ export function FileTree({ api }: FileTreeProps): React.JSX.Element {
         depth={0}
         api={api}
         onContextMenu={openMenuFor}
+        onOpenFile={setViewerPath}
       />
       {menu ? (
         <ContextMenu
@@ -98,6 +101,7 @@ export function FileTree({ api }: FileTreeProps): React.JSX.Element {
           onClose={() => setMenu(null)}
         />
       ) : null}
+      <FileViewerModal path={viewerPath} onClose={() => setViewerPath(null)} />
     </div>
   )
 }
@@ -108,12 +112,14 @@ function FolderBody({
   path,
   depth,
   api,
-  onContextMenu
+  onContextMenu,
+  onOpenFile
 }: {
   path: string
   depth: number
   api: FileTreeApi
   onContextMenu: (e: React.MouseEvent, path: string, isDir: boolean) => void
+  onOpenFile: (path: string) => void
 }): React.JSX.Element | null {
   const state = api.nodes.get(path)
   if (!state) return null
@@ -139,6 +145,7 @@ function FolderBody({
           depth={depth + 1}
           api={api}
           onContextMenu={onContextMenu}
+          onOpenFile={onOpenFile}
         />
       ))}
     </>
@@ -150,13 +157,15 @@ function TreeRow({
   entry,
   depth,
   api,
-  onContextMenu
+  onContextMenu,
+  onOpenFile
 }: {
   parent: string
   entry: FsEntry
   depth: number
   api: FileTreeApi
   onContextMenu: (e: React.MouseEvent, path: string, isDir: boolean) => void
+  onOpenFile: (path: string) => void
 }): React.JSX.Element {
   const path = joinPath(parent, entry.name)
   const isDir = entry.kind === 'dir' || entry.kind === 'symlink'
@@ -167,7 +176,7 @@ function TreeRow({
     if (isDir) {
       api.toggle(path)
     } else {
-      void window.mucka.openPathInOs(path)
+      onOpenFile(path)
     }
   }
 
@@ -222,6 +231,7 @@ function TreeRow({
           depth={depth}
           api={api}
           onContextMenu={onContextMenu}
+          onOpenFile={onOpenFile}
         />
       ) : null}
     </>

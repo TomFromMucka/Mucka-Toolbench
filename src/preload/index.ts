@@ -11,6 +11,7 @@ import type {
   BroadcastResult,
   MemoryListQuery,
   MemoryWriteInput,
+  FilePreview,
   FsListing,
   RoadmapAttachment,
   RoadmapCard,
@@ -172,6 +173,8 @@ const muckaApi: MuckaApi = {
 
   listDir: (path: string) =>
     ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,
+  readFilePreview: (path: string) =>
+    ipcRenderer.invoke('fs:readFile', path) as Promise<FilePreview>,
   revealInOs: (path: string) =>
     ipcRenderer.invoke('fs:reveal', path) as Promise<void>,
   openPathInOs: (path: string) =>
