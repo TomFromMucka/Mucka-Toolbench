@@ -633,6 +633,7 @@ export interface MuckaApi {
   browserReload(tabId: BrowserTabId): Promise<void>
   setBrowserBounds(input: BrowserSetSlotBoundsInput): Promise<void>
   setBrowserZoom(slotId: BrowserSlotId, factor: number): Promise<void>
+  raiseBrowserSlot(slotId: BrowserSlotId): Promise<void>
   onBrowserState(handler: (tabs: BrowserTabState[]) => void): () => void
 }
 

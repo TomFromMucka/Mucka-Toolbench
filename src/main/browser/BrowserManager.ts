@@ -118,6 +118,29 @@ function applyBounds(slotId: BrowserSlotId): void {
   }
 }
 
+/**
+ * Pull a slot's active view to the top of the cockpit window's
+ * `contentView` z-order. Used when a slot pops out beyond its
+ * placeholder rect (a desktop preset rendered larger than the slot can
+ * overlap the other slot), and on user interaction so whatever the
+ * operator clicks comes forward.
+ *
+ * Electron's contentView has no `raise` API — children render in
+ * insertion order, so we remove and re-add to put the view last.
+ */
+export function raiseSlot(slotId: BrowserSlotId): void {
+  if (!parentWindow) return
+  const slot = slots[slotId]
+  const active = slot.tabs.find((t) => t.id === slot.activeTabId)
+  if (!active) return
+  try {
+    parentWindow.contentView.removeChildView(active.view)
+    parentWindow.contentView.addChildView(active.view)
+  } catch {
+    /* view already detached */
+  }
+}
+
 function wireEvents(tab: Tab): void {
   const wc = tab.view.webContents
   wc.on('page-title-updated', (_e, title) => {
@@ -205,6 +228,7 @@ export function openTab(input: OpenTabInput): TabId | null {
     slot.activeTabId = tab.id
   }
   applyBounds(input.slotId)
+  raiseSlot(input.slotId)
   emit()
   return tab.id
 }
@@ -241,6 +265,7 @@ export function switchTab(tabId: TabId): void {
         applyBounds(slotId)
         emit()
       }
+      raiseSlot(slotId)
       return
     }
   }
@@ -304,6 +329,10 @@ export function setSlotBounds(input: SetSlotBoundsInput): void {
     height: Math.max(0, Math.round(input.height))
   }
   applyBounds(input.slotId)
+  // Bounds changes are the popout trigger — auto-raise so a popped-out
+  // desktop viewport in one slot covers the other slot's body rather
+  // than being clipped under it.
+  raiseSlot(input.slotId)
 }
 
 export function listTabs(): TabState[] {
