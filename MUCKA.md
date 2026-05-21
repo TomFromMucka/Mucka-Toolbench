@@ -184,6 +184,21 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-05-21** — Mucka text mode: fix `spawn ENOTDIR` in packaged
+  builds. The Agent SDK's spawned `claude` was inheriting
+  `cwd: app.getAppPath()`, which in production resolves to
+  `…/Resources/app.asar` — a file, not a directory, so the OS rejected
+  the chdir. Switched to `app.getPath('userData')` which is always a
+  real on-disk dir. Voice mode was unaffected.
+
+- **2026-05-21** — Browser slot z-order: whichever pane you interact
+  with comes to the top. `WebContentsView` children render in
+  insertion order, so a desktop-viewport popout in the top slot was
+  being clipped under the bottom slot's view whenever they overlapped.
+  Added `raiseSlot(slotId)` (remove + re-add the active view) and call
+  it on open / switch / set-bounds, plus a `browser:raise` IPC that
+  the renderer fires on `mousedown` anywhere in the pane chrome.
+
 - **2026-05-19** — Tabbed browser polish: right-click + viewport
   presets. Each tab's `WebContentsView` now gets the same context-menu
   treatment as the main window (Cut/Copy/Paste/Select All plus the
