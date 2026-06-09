@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, type WebContents } from 'electron'
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -115,6 +115,33 @@ export function appendVoiceMessage(
   emitMessage(msg)
 }
 
+let claudeBinaryCache: string | null | undefined
+
+/**
+ * In packaged builds the SDK resolves its native `claude` binary via
+ * createRequire(import.meta.url) — which lands on the path INSIDE
+ * app.asar. Electron's patched fs makes that path look real, but
+ * child_process.spawn can't traverse an asar (it's a file, not a
+ * directory) → `spawn ENOTDIR`. Point the SDK at the app.asar.unpacked
+ * copy instead. In dev (no asar) the SDK's own resolution works.
+ */
+function packagedClaudeBinary(): string | null {
+  if (claudeBinaryCache !== undefined) return claudeBinaryCache
+  if (!app.isPackaged) {
+    claudeBinaryCache = null
+    return claudeBinaryCache
+  }
+  const binary = process.platform === 'win32' ? 'claude.exe' : 'claude'
+  const candidate = join(
+    app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'),
+    'node_modules',
+    `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`,
+    binary
+  )
+  claudeBinaryCache = existsSync(candidate) ? candidate : null
+  return claudeBinaryCache
+}
+
 function loadPrompt(): string {
   if (promptCache !== null) return promptCache
   // Operator override first — `~/.mucka-toolbench/prompts/pm.md` lets the
@@ -192,20 +219,15 @@ export async function sendMessage(text: string): Promise<void> {
     const userMessage = appendChat('user', [{ kind: 'text', text: trimmed }])
     emitMessage(userMessage)
 
-    // We deliberately don't pass `pathToClaudeCodeExecutable`. The Agent
-    // SDK bundles its own `claude` runner inside its package (unpacked
-    // from asar in the production build) and reads the user's auth from
-    // ~/.claude/ regardless. Tom's local `~/.local/bin/claude` wrapper
-    // resolves to ENOTDIR when spawned directly by Node, so the
-    // override was actively breaking text chat.
-    //
     // cwd must be a real on-disk directory: in packaged builds
     // `app.getAppPath()` resolves to `…/Resources/app.asar` (a FILE),
-    // and `child_process.spawn` cannot chdir into it — that path was
-    // the second ENOTDIR. userData is always a real, writable dir.
+    // and `child_process.spawn` cannot chdir into it — that was one of
+    // the ENOTDIR failures. userData is always a real, writable dir.
+    const claudeBinary = packagedClaudeBinary()
     const options: Options = {
       systemPrompt: loadPrompt(),
       cwd: app.getPath('userData'),
+      ...(claudeBinary ? { pathToClaudeCodeExecutable: claudeBinary } : {}),
       includePartialMessages: true,
       mcpServers: { mucka: mcpServer },
       // Resume the SDK's session log from prior turns this boot so it
