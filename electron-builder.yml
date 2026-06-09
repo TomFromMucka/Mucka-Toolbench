@@ -12,6 +12,9 @@ files:
 asarUnpack:
   - resources/**
   - 'node_modules/@anthropic-ai/claude-agent-sdk/**'
+  # The per-platform native `claude` binary the SDK spawns — must live
+  # outside the asar or spawn fails with ENOTDIR.
+  - 'node_modules/@anthropic-ai/claude-agent-sdk-*/**'
 win:
   executableName: Mucka Toolbench
 nsis:

@@ -184,6 +184,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-06-10** — Mucka text mode: fix the *remaining* `spawn ENOTDIR`
+  in packaged builds. The SDK resolves its native `claude` binary via
+  `createRequire(import.meta.url)`, which lands on the path inside
+  `app.asar`; Electron's patched `fs` makes it look real but `spawn`
+  can't traverse an asar. Now pass `pathToClaudeCodeExecutable`
+  pointing at the `app.asar.unpacked` copy when packaged, and unpack
+  the `claude-agent-sdk-*` platform packages explicitly.
+
 - **2026-05-21** — Mucka text mode: fix `spawn ENOTDIR` in packaged
   builds. The Agent SDK's spawned `claude` was inheriting
   `cwd: app.getAppPath()`, which in production resolves to
