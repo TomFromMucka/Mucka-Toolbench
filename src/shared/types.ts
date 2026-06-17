@@ -541,7 +541,7 @@ export interface MuckaApi {
   rememberMemory(input: MemoryWriteInput): Promise<Memory>
   forgetMemory(topic: string): Promise<boolean>
 
-  /* Roadmap kanban — sqlite-backed cards, mirrored to MUCKA.md ## Roadmap */
+  /* Roadmap kanban — sqlite-backed cards, mirrored to the git-ignored ROADMAP.local.md (private) */
   listRoadmap(): Promise<RoadmapCard[]>
   createRoadmapCard(input: RoadmapCreateInput): Promise<RoadmapCard>
   updateRoadmapCard(input: RoadmapUpdateInput): Promise<RoadmapCard>

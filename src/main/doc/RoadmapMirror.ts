@@ -5,12 +5,17 @@ import type { RoadmapCard, RoadmapColumn } from '@shared/types'
 import { COLUMNS } from '../db/roadmap'
 
 /**
- * Mirrors the kanban state into MUCKA.md's `## Roadmap` section so the
- * markdown spec stays in sync with sqlite. The kanban is the source of
- * truth; this writes a derived view that git can see.
+ * Mirrors the kanban state into a readable markdown view.
+ *
+ * The repo is public but all roadmap content is private, so the mirror
+ * writes to a git-ignored local file (`ROADMAP.local.md`) — never into
+ * the tracked, public MUCKA.md. The sqlite kanban is the source of
+ * truth; this is a convenience view for reading the board outside the
+ * app. Nothing here reaches git.
  */
 
 const DOC_FILENAME = 'MUCKA.md'
+const LOCAL_FILENAME = 'ROADMAP.local.md'
 
 const COLUMN_HEADING: Record<RoadmapColumn, string> = {
   backlog: 'Backlog',
@@ -22,6 +27,10 @@ const COLUMN_HEADING: Record<RoadmapColumn, string> = {
 
 function docPath(): string {
   return join(app.getAppPath(), DOC_FILENAME)
+}
+
+function localPath(): string {
+  return join(app.getAppPath(), LOCAL_FILENAME)
 }
 
 function renderSection(cards: RoadmapCard[]): string {
@@ -77,49 +86,18 @@ function wrap(text: string, width: number): string[] {
 }
 
 export function mirrorToMarkdown(cards: RoadmapCard[]): void {
-  const path = docPath()
-  if (!existsSync(path)) return
-  let text: string
+  const path = localPath()
+  const header =
+    '<!-- Private, generated mirror of the cockpit kanban (sqlite).\n' +
+    '     git-ignored — do NOT commit. Edit cards in the app, not here. -->\n\n'
+  const next = header + renderSection(cards) + '\n'
+  let prev = ''
   try {
-    text = readFileSync(path, 'utf8')
+    if (existsSync(path)) prev = readFileSync(path, 'utf8')
   } catch {
-    return
+    prev = ''
   }
-  const lines = text.split(/\r?\n/)
-  let startIdx = -1
-  for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Roadmap\s*$/i.test(lines[i])) {
-      startIdx = i
-      break
-    }
-  }
-  const newBlock = renderSection(cards).split(/\r?\n/)
-
-  if (startIdx < 0) {
-    // No existing section — append at end with a leading blank line.
-    const next = [...lines]
-    while (next.length > 0 && next[next.length - 1].trim() === '') next.pop()
-    next.push('', ...newBlock)
-    writeBackIfChanged(path, text, next.join('\n'))
-    return
-  }
-
-  let endIdx = lines.length
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    if (/^##\s+/.test(lines[i])) {
-      endIdx = i
-      break
-    }
-  }
-
-  // Drop trailing blank lines inside the old section so the spacing
-  // before the next `## ` heading stays consistent.
-  while (endIdx > startIdx + 1 && lines[endIdx - 1].trim() === '') endIdx--
-
-  const before = lines.slice(0, startIdx)
-  const after = lines.slice(endIdx)
-  const next = [...before, ...newBlock, ...after].join('\n')
-  writeBackIfChanged(path, text, next)
+  writeBackIfChanged(path, prev, next)
 }
 
 function writeBackIfChanged(path: string, prev: string, next: string): void {
