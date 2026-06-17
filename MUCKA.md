@@ -436,40 +436,9 @@ shared primitives in `components/ui/`:
 
 ## Roadmap
 
-### Backlog
-
-_(empty)_
-
-### Next up
-
-- **Cross-agent broadcast. One Mucka tool + a ⌘⏎ shortcut in**
-  the chat input to fan the same prompt to all four (or a subset of)
-  terminals. Workflow win when parallelising similar work.
-- **Keyboard shortcuts. ⌘1-4 focus an agent's primary terminal,**
-  ⌘K command palette, ⌘J jump to job sheet, ⌘N focus notes.
-
-### Doing
-
-_(empty)_
-
-### Shipped
-
-_(empty)_
-
-### Parked
-
-- **Mucka Pro worktree folder layout (parked 2026-05-14). Tom is**
-  considering an umbrella Mucka Pro/ folder with a sibling main/ clone +
-  four worktree subdirs (dave/, sammy/, kev/, bren/). The cockpit
-  doesn't care about layout — each agent's worktreePath is an absolute
-  path. Pick up when Tom has the worker agents actively running on Mucka
-  Pro branches.
-- **Worktree management UI (create / delete / rename from the cockpit).**
-- **CI rerun shortcut (button per failed check via gh CLI).**
-- **Agent presets (quickly swap an agent between projects/branches).**
-- **Per-agent Mucka write tool — let Mucka edit MUCKA.md herself**
-  rather than only reading it.
-- **Proactive voice nudges (Tom explicitly skipped this — don't**
-  re-propose without checking).
+The roadmap lives in the cockpit's kanban (sqlite) and is **private**.
+This repo is public, so roadmap card content is deliberately kept out of
+this tracked doc. A readable mirror is generated locally to the
+git-ignored `ROADMAP.local.md`. Edit the board in the app.
 
 
