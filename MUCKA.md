@@ -434,3 +434,10 @@ shared primitives in `components/ui/`:
 - **2026-05-13** — Visual shell (paper-and-ink workstation layout).
 - **2026-05-13** — electron-vite + React + TS baseline.
 
+## Roadmap
+
+The roadmap lives in the cockpit's kanban (sqlite) and is **private**.
+This repo is public, so roadmap card content is deliberately kept out of
+this tracked doc. A readable mirror is generated locally to the
+git-ignored `ROADMAP.local.md`. Edit the board in the app.
+
