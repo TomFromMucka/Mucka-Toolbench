@@ -12,3 +12,6 @@ out
 .env
 .env.local
 .env.*.local
+
+# Private, generated roadmap mirror — kanban content stays out of the public repo
+*.local.md
