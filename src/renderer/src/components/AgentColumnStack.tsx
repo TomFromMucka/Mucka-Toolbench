@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import type {
   Agent,
   AgentConfig,
@@ -6,21 +6,17 @@ import type {
   GitStatus,
   JobEvent
 } from '@shared/types'
-import { AgentClipboard, type AgentExpansion } from './AgentClipboard'
+import { AgentClipboard } from './AgentClipboard'
+import { rowForSize, type PanelSize } from './panelSize'
 
 /**
  * One column of the agent grid (two stacked AgentClipboards).
  *
- * Owns the column's height layout:
- *   - 'equal'   — 1fr / 1fr (the default)
- *   - 'top'     — top panel maximised, bottom collapsed to header-only
- *   - 'bottom'  — bottom maximised, top collapsed
- *
- * Maximise via the Maximize2 button on either panel; the collapsed
- * panel's whole header is also clickable to restore equal.
+ * Each panel carries its own min/mid/max size (set from the header
+ * control); the two tracks reflow against each other via grid weights.
+ * Panels stay mounted at every size, so a minimised terminal keeps
+ * running.
  */
-
-type ColumnLayout = 'equal' | 'top' | 'bottom'
 
 interface AgentSlot {
   agent: Agent
@@ -40,34 +36,17 @@ export function AgentColumnStack({
   top,
   bottom
 }: AgentColumnStackProps): React.JSX.Element {
-  const [layout, setLayout] = useState<ColumnLayout>('equal')
+  const [sizes, setSizes] = useState<[PanelSize, PanelSize]>(['mid', 'mid'])
 
-  const toggleTop = useCallback(() => {
-    setLayout((prev) => (prev === 'top' ? 'equal' : 'top'))
-  }, [])
-  const toggleBottom = useCallback(() => {
-    setLayout((prev) => (prev === 'bottom' ? 'equal' : 'bottom'))
-  }, [])
+  const setTop = (s: PanelSize): void => setSizes(([, b]) => [s, b])
+  const setBottom = (s: PanelSize): void => setSizes(([t]) => [t, s])
 
-  const rows =
-    layout === 'top'
-      ? '1fr auto'
-      : layout === 'bottom'
-        ? 'auto 1fr'
-        : '1fr 1fr'
-
-  const topExpansion: AgentExpansion =
-    layout === 'top' ? 'expanded' : layout === 'bottom' ? 'collapsed' : 'normal'
-  const bottomExpansion: AgentExpansion =
-    layout === 'bottom' ? 'expanded' : layout === 'top' ? 'collapsed' : 'normal'
+  const rows = `${rowForSize(sizes[0])} ${rowForSize(sizes[1])}`
 
   return (
     <div
       className="grid min-h-0 gap-3"
-      style={{
-        gridTemplateRows: rows,
-        transition: 'grid-template-rows 180ms ease'
-      }}
+      style={{ gridTemplateRows: rows, transition: 'grid-template-rows 180ms ease' }}
     >
       {top ? (
         <AgentClipboard
@@ -76,8 +55,8 @@ export function AgentColumnStack({
           config={top.config}
           gitStatus={top.gitStatus}
           contextPercent={top.contextPercent}
-          expansion={topExpansion}
-          onToggleExpand={toggleTop}
+          size={sizes[0]}
+          onResize={setTop}
         />
       ) : (
         <EmptySlot />
@@ -89,8 +68,8 @@ export function AgentColumnStack({
           config={bottom.config}
           gitStatus={bottom.gitStatus}
           contextPercent={bottom.contextPercent}
-          expansion={bottomExpansion}
-          onToggleExpand={toggleBottom}
+          size={sizes[1]}
+          onResize={setBottom}
         />
       ) : (
         <EmptySlot />
@@ -105,5 +84,4 @@ function EmptySlot(): React.JSX.Element {
 
 // Re-exports kept for callers that imported these types alongside the
 // column-stack component.
-export type { AgentExpansion }
 export type { Agent, AgentConfig, AgentId, GitStatus, JobEvent }

@@ -28,6 +28,7 @@ import type {
 import { useAgentsState } from '../state/AgentsContext'
 import { useEventsState } from '../state/EventsContext'
 import { Clipboard } from './Clipboard'
+import type { PanelSizeProps } from './panelSize'
 import { Icon } from './ui/Icon'
 import { RoadmapCardModal } from './RoadmapCardModal'
 
@@ -65,7 +66,7 @@ function fmtDayBreak(prev: number | null, current: number): string | null {
   return null
 }
 
-export function JobSheet(): React.JSX.Element {
+export function JobSheet({ size, onResize }: PanelSizeProps): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('jobs')
 
   const title = tab === 'jobs' ? 'Job Sheet' : 'Roadmap'
@@ -77,6 +78,8 @@ export function JobSheet(): React.JSX.Element {
       subtitle={subtitle}
       className="min-h-0"
       rightSlot={<TabSwitcher value={tab} onChange={setTab} />}
+      size={size}
+      onResize={onResize}
     >
       {tab === 'jobs' ? <JobsView /> : <RoadmapView />}
     </Clipboard>
