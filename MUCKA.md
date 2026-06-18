@@ -184,6 +184,15 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-06-18** — Mucka text agent: unblock tools. The Agent SDK had no
+  permission gate, so every `mcp__mucka__*` call stalled on "you haven't
+  granted it yet" with no UI to approve. Now auto-allow cockpit tools at
+  the SDK level (confirm-writes still gated by the renderer ConfirmStrip);
+  inject a passive cockpit snapshot (agents + recent events) on the first
+  turn of each boot; add a `self_test` diagnostic tool; and de-hardcode
+  the worker names in the PM prompt (pull the lineup from `list_agents`).
+- **2026-06-18** — Roadmap content is private: mirror writes to the
+  git-ignored `ROADMAP.local.md`, not the tracked `MUCKA.md`.
 - **2026-06-10** — Mucka text mode: fix the *remaining* `spawn ENOTDIR`
   in packaged builds. The SDK resolves its native `claude` binary via
   `createRequire(import.meta.url)`, which lands on the path inside
