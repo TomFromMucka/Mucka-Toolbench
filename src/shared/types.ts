@@ -515,6 +515,8 @@ export interface MuckaApi {
   listChatHistory(): Promise<MuckaTextMessage[]>
   sendChatMessage(text: string): Promise<void>
   clearChatHistory(): Promise<void>
+  /** Keyword recall across past conversation (transcript + summaries). */
+  searchHistory(query: string, limit?: number): Promise<string>
   sendChatToolResult(result: MuckaTextToolResult): void
   onChatStream(handler: (event: MuckaTextStreamEvent) => void): () => void
   onChatToolCall(handler: (call: MuckaTextToolCall) => void): () => void

@@ -184,6 +184,15 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-06-18** — Persistent memory for the Mucka text agent. (1)
+  Session resume: the SDK `session_id` is persisted and resumed on boot,
+  so Mucka continues the actual prior conversation with full
+  (auto-compacted) context instead of starting cold; falls back to a
+  fresh session if the log is gone. (2) `recall` tool: keyword search
+  across the stored transcript + older session summaries. (3)
+  Auto-summaries: once enough new messages pile up, a background
+  summarizer rolls them into a dated `conversation_summaries` row;
+  recent summaries also load into the boot snapshot.
 - **2026-06-18** — Panel resize overhaul + confirm UX. Every panel
   (agent terminals + chat/jobs/notes) now has a min/mid/max segmented
   control in its header; siblings reflow via grid weights. Minimised

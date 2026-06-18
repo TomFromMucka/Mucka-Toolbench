@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, type WebContents } from 'electron'
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -11,10 +11,29 @@ import type {
   MuckaTextToolResult
 } from '@shared/types'
 import { TOOL_DEFINITIONS } from '@shared/mucka-tools'
-import { appendChat, clearChat, listChat } from '../db/chat'
+import { appendChat, clearChat, listChat, listChatSince, searchChat } from '../db/chat'
 import { listAgents } from '../db/agents'
 import { listEvents } from '../events/Events'
+import { getValue, setValue } from '../db/kv'
+import {
+  insertSummary,
+  lastSummarizedTs,
+  listRecentSummaries,
+  searchSummaries
+} from '../db/summaries'
 import { buildMuckaMcpServer } from './agentTools'
+
+/**
+ * Persisted SDK session id. Resuming it on boot makes Mucka continue the
+ * actual prior conversation with full (auto-compacted) native context,
+ * instead of starting cold every launch.
+ */
+const SESSION_KEY = 'mucka.text.sessionId'
+let currentSessionId: string | null = null
+
+/** Roll a durable summary once this many un-summarized messages pile up. */
+const SUMMARY_THRESHOLD = 40
+let summarizing = false
 
 /**
  * Text-mode Mucka backed by the Claude Agent SDK — uses Tom's Claude
@@ -94,10 +113,39 @@ export function listHistory(): MuckaTextMessage[] {
   return listChat()
 }
 
+function formatWhen(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 16).replace('T', ' ')
+}
+
+/**
+ * Keyword recall across past conversation — the rolling transcript plus
+ * older session summaries. Returns a compact, dated digest for Mucka to
+ * read back from.
+ */
+export function searchHistory(queryStr: string, limit = 20): string {
+  const q = queryStr.trim()
+  if (!q) return 'Give me something to search for.'
+  const summaries = searchSummaries(q, 5).map(
+    (s) => `[${formatWhen(s.periodStart)}–${formatWhen(s.periodEnd)}] summary: ${s.summary}`
+  )
+  const hits = searchChat(q, limit).map((h) => {
+    const who = h.role === 'user' ? 'Tom' : 'Mucka'
+    const text = h.text.length > 280 ? h.text.slice(0, 280) + '…' : h.text
+    return `[${formatWhen(h.ts)}] ${who}: ${text}`
+  })
+  const parts: string[] = []
+  if (summaries.length > 0) parts.push('Older summaries:\n' + summaries.join('\n'))
+  if (hits.length > 0) parts.push('Recent messages:\n' + hits.join('\n'))
+  return parts.length > 0 ? parts.join('\n\n') : `Nothing in memory mentions "${q}".`
+}
+
 export function clearHistory(): void {
   clearChat()
-  // After a wipe we should not try to resume the prior SDK session.
+  // After a wipe, forget the SDK session too — otherwise the next turn
+  // would resume and revive the conversation Tom just cleared.
   hasPriorTurnThisBoot = false
+  currentSessionId = null
+  setValue(SESSION_KEY, '')
 }
 
 const VOICE_DEDUPE_MS = 4_000
@@ -182,6 +230,13 @@ function buildBootSnapshot(): string {
       lines.push(`- [${e.source}] ${e.message}`)
     }
   }
+  const summaries = listRecentSummaries(2)
+  if (summaries.length > 0) {
+    lines.push('Earlier context (summaries of past sessions):')
+    for (const s of summaries) {
+      lines.push(`- ${s.summary.replace(/\s*\n\s*/g, ' ')}`)
+    }
+  }
   return lines.join('\n')
 }
 
@@ -249,6 +304,117 @@ function blocksToSegments(blocks: AssistantBlock[]): MuckaTextSegment[] {
   return segments
 }
 
+/**
+ * Run one query turn: stream text deltas to the renderer, collect the
+ * final segments, and capture the SDK session id (for resume across
+ * turns + restarts). Pulled out so sendMessage can retry without resume
+ * if a stale session log fails to load.
+ */
+async function streamTurn(
+  prompt: string,
+  options: Options,
+  streamMessageId: string
+): Promise<MuckaTextSegment[]> {
+  let collected: MuckaTextSegment[] = []
+  const q = query({ prompt, options })
+  for await (const msg of q as AsyncIterable<SDKMessage>) {
+    if (msg.type === 'stream_event') {
+      const event = msg.event
+      if (
+        event.type === 'content_block_delta' &&
+        'delta' in event &&
+        event.delta &&
+        (event.delta as { type?: string }).type === 'text_delta' &&
+        typeof (event.delta as { text?: string }).text === 'string'
+      ) {
+        const delta = (event.delta as { text: string }).text
+        if (delta.length > 0) {
+          emitStream({ messageId: streamMessageId, appendText: delta })
+        }
+      }
+    } else if (msg.type === 'assistant') {
+      const blocks = (msg.message.content ?? []) as AssistantBlock[]
+      const segs = blocksToSegments(blocks)
+      if (segs.length > 0) collected = collected.concat(segs)
+    } else if (msg.type === 'result') {
+      if ('session_id' in msg && typeof msg.session_id === 'string' && msg.session_id) {
+        currentSessionId = msg.session_id
+        setValue(SESSION_KEY, msg.session_id)
+      }
+      break
+    }
+  }
+  return collected
+}
+
+async function runSummary(transcript: string): Promise<string> {
+  const claudeBinary = packagedClaudeBinary()
+  // Separate cwd so the summarizer's throwaway sessions never become the
+  // chat's "most recent" session (we resume the chat by explicit id, but
+  // keeping them apart is tidy and avoids any cross-talk).
+  const cwd = join(app.getPath('userData'), '.mucka-summarizer')
+  try {
+    mkdirSync(cwd, { recursive: true })
+  } catch {
+    /* non-fatal */
+  }
+  const options: Options = {
+    systemPrompt:
+      'You compress conversation logs into durable memory. Given an excerpt of a chat between Tom (the operator) and Mucka (his PM agent), output 3-6 terse bullet points capturing decisions made, Tom’s stated preferences, durable facts about him or his projects, and any unresolved threads. No preamble, no headings — just the bullets.',
+    cwd,
+    ...(claudeBinary ? { pathToClaudeCodeExecutable: claudeBinary } : {}),
+    allowedTools: [],
+    canUseTool: async () => ({ behavior: 'deny', message: 'summarizer uses no tools' }),
+    ...(MODEL ? { model: MODEL } : {})
+  }
+  let out = ''
+  const q = query({ prompt: transcript, options })
+  for await (const msg of q as AsyncIterable<SDKMessage>) {
+    if (msg.type === 'assistant') {
+      const blocks = (msg.message.content ?? []) as AssistantBlock[]
+      for (const b of blocks) {
+        if (b.type === 'text') out += b.text
+      }
+    } else if (msg.type === 'result') {
+      break
+    }
+  }
+  return out.trim()
+}
+
+/**
+ * When enough new messages pile up since the last summary, roll them into
+ * one durable summary. Fire-and-forget after a turn so it never blocks
+ * Mucka's reply; a no-op when under threshold or already running.
+ */
+async function maybeSummarize(): Promise<void> {
+  if (summarizing) return
+  const pending = listChatSince(lastSummarizedTs())
+  if (pending.length < SUMMARY_THRESHOLD) return
+  summarizing = true
+  try {
+    const transcript = pending
+      .map(
+        (m) =>
+          `${m.role === 'user' ? 'Tom' : 'Mucka'}: ${m.segments.map((s) => s.text).join(' ')}`
+      )
+      .join('\n')
+    const summary = await runSummary(transcript)
+    if (summary) {
+      insertSummary({
+        periodStart: pending[0].ts,
+        periodEnd: pending[pending.length - 1].ts,
+        summary,
+        messageCount: pending.length
+      })
+    }
+  } catch {
+    /* non-fatal — summaries are best-effort */
+  } finally {
+    summarizing = false
+  }
+}
+
 export async function sendMessage(text: string): Promise<void> {
   const trimmed = text.trim()
   if (!trimmed) return
@@ -267,7 +433,7 @@ export async function sendMessage(text: string): Promise<void> {
     // and `child_process.spawn` cannot chdir into it — that was one of
     // the ENOTDIR failures. userData is always a real, writable dir.
     const claudeBinary = packagedClaudeBinary()
-    const options: Options = {
+    const baseOptions: Options = {
       systemPrompt: loadPrompt(),
       cwd: app.getPath('userData'),
       ...(claudeBinary ? { pathToClaudeCodeExecutable: claudeBinary } : {}),
@@ -286,43 +452,33 @@ export async function sendMessage(text: string): Promise<void> {
           message: `Mucka can only use cockpit tools, not ${toolName}.`
         }
       },
-      // Resume the SDK's session log from prior turns this boot so it
-      // sees the running conversation. The first turn of a fresh cockpit
-      // boot starts a new session.
-      ...(hasPriorTurnThisBoot ? { continue: true } : {}),
       ...(MODEL ? { model: MODEL } : {})
     }
 
-    // First turn of the boot carries a passive snapshot so Mucka is
-    // grounded before she calls a tool; later turns resume the session.
-    const prompt = hasPriorTurnThisBoot
-      ? trimmed
-      : `${buildBootSnapshot()}\n\n---\n\nOperator: ${trimmed}`
-    const q = query({ prompt, options })
+    // First turn of the boot resumes the persisted session (full prior
+    // context) and carries a fresh state snapshot; later turns resume the
+    // live session id. The snapshot is framed so Mucka knows it's ambient
+    // context, not something she fetched.
+    const isFirstTurn = !hasPriorTurnThisBoot
+    const resumeId = isFirstTurn ? getValue(SESSION_KEY) : currentSessionId
+    const prompt = isFirstTurn
+      ? `${buildBootSnapshot()}\n\n---\n\nOperator: ${trimmed}`
+      : trimmed
 
-    for await (const msg of q as AsyncIterable<SDKMessage>) {
-      if (msg.type === 'stream_event') {
-        const event = msg.event
-        if (
-          event.type === 'content_block_delta' &&
-          'delta' in event &&
-          event.delta &&
-          (event.delta as { type?: string }).type === 'text_delta' &&
-          typeof (event.delta as { text?: string }).text === 'string'
-        ) {
-          const delta = (event.delta as { text: string }).text
-          if (delta.length > 0) {
-            emitStream({ messageId: streamMessageId, appendText: delta })
-          }
-        }
-      } else if (msg.type === 'assistant') {
-        // Final assistant turn — pull out content blocks.
-        const blocks = (msg.message.content ?? []) as AssistantBlock[]
-        const segs = blocksToSegments(blocks)
-        if (segs.length > 0) collected = collected.concat(segs)
-      } else if (msg.type === 'result') {
-        // Done with this turn — break out of the loop.
-        break
+    try {
+      collected = await streamTurn(
+        prompt,
+        resumeId ? { ...baseOptions, resume: resumeId } : baseOptions,
+        streamMessageId
+      )
+    } catch (err) {
+      // A resumed session log can be missing/corrupt — retry once fresh
+      // so the chat never bricks just because the prior session is gone.
+      if (resumeId) {
+        currentSessionId = null
+        collected = await streamTurn(prompt, baseOptions, streamMessageId)
+      } else {
+        throw err
       }
     }
 
@@ -334,6 +490,9 @@ export async function sendMessage(text: string): Promise<void> {
     emitMessage(persisted)
     emitStream({ messageId: streamMessageId, done: true })
     hasPriorTurnThisBoot = true
+    // Fire-and-forget: roll older turns into a durable summary if enough
+    // have piled up. Never blocks the reply.
+    void maybeSummarize()
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     const persisted = appendChat('assistant', [

@@ -88,6 +88,12 @@ without re-asking.
 - `self_test` — diagnostic. Confirms your tools are wired up and lists
   what's reachable. Call it as a first move if a tool ever fails or you
   doubt your wiring; a clean result means everything below is callable.
+- `recall` — search your own memory of past conversations (recent
+  transcript + older session summaries) by keyword. Use when Tom refers
+  back to something earlier or you need context you don't currently
+  hold. You resume your last session on launch, so recent context is
+  already with you — reach for `recall` for older or half-remembered
+  things.
 - `list_agents` — who's around, branch label, cwd, command.
 - `get_git_status` — live branch + ahead/behind + dirty/staged counts.
 - `get_recent_output` — trailing N lines of one agent's terminal.
