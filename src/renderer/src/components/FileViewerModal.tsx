@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ExternalLink, FolderSearch, X } from 'lucide-react'
+import { ExternalLink, FolderSearch, Pencil, Save, X } from 'lucide-react'
 import type { FilePreview } from '@shared/types'
 import { Icon } from './ui/Icon'
 
@@ -10,12 +10,13 @@ interface FileViewerModalProps {
 }
 
 /**
- * In-app file preview. Opens whenever Tom clicks a file in the explorer
- * so .md docs don't get hijacked by an external IDE and .env files
- * don't fall into the macOS "no application set" dialog.
+ * In-app file preview/editor. Opens whenever Tom clicks a file in the
+ * explorer so .md docs don't get hijacked by an external IDE and .env
+ * files don't fall into the macOS "no application set" dialog.
  *
- * Read-only — Tom keeps his IDE for editing. The "Open in default app"
- * button is one click away if he wants the OS handler after all.
+ * Text/code files can be edited in place (Edit → save writes back via
+ * `fs:writeFile`, gated to the home dir). Images render an inline
+ * preview. The "Open in default app" button is still one click away.
  */
 export function FileViewerModal({ path, onClose }: FileViewerModalProps): React.ReactPortal | null {
   // Track which path the current `preview`/`loading` belong to. When
@@ -23,12 +24,18 @@ export function FileViewerModal({ path, onClose }: FileViewerModalProps): React.
   // stale content from the previous open.
   const [preview, setPreview] = useState<FilePreview | null>(null)
   const [loadingPath, setLoadingPath] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!path) return undefined
     let cancelled = false
     setLoadingPath(path)
     setPreview(null)
+    setEditing(false)
+    setSaveError(null)
     void window.mucka
       .readFilePreview(path)
       .then((result) => {
@@ -48,15 +55,48 @@ export function FileViewerModal({ path, onClose }: FileViewerModalProps): React.
   }, [path])
 
   const loading = path !== null && loadingPath === path
+  const canEdit = preview?.kind === 'ok' && !preview.truncated
+
+  const startEdit = useCallback(() => {
+    if (preview?.kind !== 'ok') return
+    setDraft(preview.text)
+    setSaveError(null)
+    setEditing(true)
+  }, [preview])
+
+  const handleSave = useCallback(async () => {
+    if (!path) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await window.mucka.writeFile(path, draft)
+      setPreview({
+        kind: 'ok',
+        path,
+        text: draft,
+        bytes: new TextEncoder().encode(draft).length,
+        truncated: false
+      })
+      setEditing(false)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSaving(false)
+    }
+  }, [path, draft])
 
   useEffect(() => {
     if (!path) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && !editing) onClose()
+      if (editing && (e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        void handleSave()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [path, onClose])
+  }, [path, onClose, editing, handleSave])
 
   if (!path) return null
 
@@ -66,22 +106,52 @@ export function FileViewerModal({ path, onClose }: FileViewerModalProps): React.
       style={{ background: 'rgba(0, 0, 0, 0.55)' }}
       onMouseDown={(e) => {
         // Backdrop-only click closes; ignore drag-releases that started
-        // inside the modal body.
-        if (e.target === e.currentTarget) onClose()
+        // inside the modal body. Don't close out from under an edit.
+        if (e.target === e.currentTarget && !editing) onClose()
       }}
     >
       <div
         className="chamfer-lg flex max-h-[85vh] w-[min(92vw,980px)] min-h-0 flex-col overflow-hidden shadow-2xl"
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)'
-        }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       >
         <ModalHeader path={path} onClose={onClose} />
         <div className="min-h-0 flex-1 overflow-auto" style={{ background: 'var(--surface2)' }}>
-          {loading ? <LoadingBody /> : preview ? <Body preview={preview} /> : null}
+          {loading ? (
+            <LoadingBody />
+          ) : editing ? (
+            <EditView draft={draft} onChange={setDraft} />
+          ) : preview ? (
+            <Body preview={preview} />
+          ) : null}
         </div>
-        <ModalFooter path={path} preview={preview} onClose={onClose} />
+        {saveError ? (
+          <div
+            className="border-t px-4 py-1.5"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'rgba(255, 90, 74, 0.15)',
+              color: 'var(--van-white)',
+              fontFamily: 'var(--font-soehne)',
+              fontSize: '11px'
+            }}
+          >
+            Save failed: {saveError}
+          </div>
+        ) : null}
+        <ModalFooter
+          path={path}
+          preview={preview}
+          editing={editing}
+          canEdit={canEdit}
+          saving={saving}
+          onEdit={startEdit}
+          onSave={() => void handleSave()}
+          onCancelEdit={() => {
+            setEditing(false)
+            setSaveError(null)
+          }}
+          onClose={onClose}
+        />
       </div>
     </div>,
     document.body
@@ -166,6 +236,7 @@ function LoadingBody(): React.JSX.Element {
 
 function Body({ preview }: { preview: FilePreview }): React.JSX.Element {
   if (preview.kind === 'ok') return <TextView text={preview.text} />
+  if (preview.kind === 'image') return <ImageView dataUrl={preview.dataUrl} path={preview.path} />
   if (preview.kind === 'binary') {
     return (
       <Placeholder
@@ -186,6 +257,47 @@ function Body({ preview }: { preview: FilePreview }): React.JSX.Element {
     return <Placeholder title="File missing" detail="The path no longer exists on disk." />
   }
   return <Placeholder title="Couldn't read" detail={preview.message} />
+}
+
+function ImageView({ dataUrl, path }: { dataUrl: string; path: string }): React.JSX.Element {
+  return (
+    <div className="grid min-h-full place-items-center p-4">
+      <img
+        src={dataUrl}
+        alt={basename(path)}
+        className="max-h-[70vh] max-w-full object-contain"
+        style={{ background: 'var(--surface)' }}
+      />
+    </div>
+  )
+}
+
+function EditView({
+  draft,
+  onChange
+}: {
+  draft: string
+  onChange: (v: string) => void
+}): React.JSX.Element {
+  return (
+    <textarea
+      value={draft}
+      onChange={(e) => onChange(e.target.value)}
+      spellCheck={false}
+      autoFocus
+      className="block h-full w-full resize-none border-0 px-4 py-3 focus:outline-none"
+      style={{
+        fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
+        fontSize: '12px',
+        lineHeight: 1.55,
+        color: 'var(--van-white)',
+        background: 'transparent',
+        tabSize: 2,
+        MozTabSize: 2,
+        minHeight: '50vh'
+      }}
+    />
+  )
 }
 
 function TextView({ text }: { text: string }): React.JSX.Element {
@@ -266,10 +378,22 @@ function Placeholder({
 function ModalFooter({
   path,
   preview,
+  editing,
+  canEdit,
+  saving,
+  onEdit,
+  onSave,
+  onCancelEdit,
   onClose
 }: {
   path: string
   preview: FilePreview | null
+  editing: boolean
+  canEdit: boolean
+  saving: boolean
+  onEdit: () => void
+  onSave: () => void
+  onCancelEdit: () => void
   onClose: () => void
 }): React.JSX.Element {
   const bytes = preview && 'bytes' in preview ? preview.bytes : null
@@ -285,19 +409,34 @@ function ModalFooter({
       }}
     >
       <span className="flex-1">{bytes !== null ? formatBytes(bytes) : ''}</span>
-      <FooterButton
-        icon={FolderSearch}
-        label="Reveal"
-        onClick={() => void window.mucka.revealInOs(path)}
-      />
-      <FooterButton
-        icon={ExternalLink}
-        label="Open in default app"
-        onClick={() => {
-          void window.mucka.openPathInOs(path)
-          onClose()
-        }}
-      />
+      {editing ? (
+        <>
+          <FooterButton icon={X} label="Cancel" onClick={onCancelEdit} />
+          <FooterButton
+            icon={Save}
+            label={saving ? 'Saving…' : 'Save (⌘S)'}
+            onClick={onSave}
+            primary
+          />
+        </>
+      ) : (
+        <>
+          {canEdit ? <FooterButton icon={Pencil} label="Edit" onClick={onEdit} /> : null}
+          <FooterButton
+            icon={FolderSearch}
+            label="Reveal"
+            onClick={() => void window.mucka.revealInOs(path)}
+          />
+          <FooterButton
+            icon={ExternalLink}
+            label="Open in default app"
+            onClick={() => {
+              void window.mucka.openPathInOs(path)
+              onClose()
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
@@ -305,11 +444,13 @@ function ModalFooter({
 function FooterButton({
   icon,
   label,
-  onClick
+  onClick,
+  primary = false
 }: {
   icon: typeof X
   label: string
   onClick: () => void
+  primary?: boolean
 }): React.JSX.Element {
   return (
     <button
@@ -318,10 +459,10 @@ function FooterButton({
       className="chamfer-sm flex items-center gap-1.5 px-2.5 py-1 transition-colors hover:bg-van-white/10"
       style={{
         border: '1px solid var(--border)',
-        color: 'var(--van-white)',
+        color: primary ? 'var(--charcoal)' : 'var(--van-white)',
         fontFamily: 'var(--font-soehne)',
         fontSize: '11px',
-        background: 'rgba(234, 233, 232, 0.04)'
+        background: primary ? 'var(--orange)' : 'rgba(234, 233, 232, 0.04)'
       }}
     >
       <Icon icon={icon} size={12} strokeWidth={2.25} />

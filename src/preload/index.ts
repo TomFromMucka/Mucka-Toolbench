@@ -177,6 +177,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,
   readFilePreview: (path: string) =>
     ipcRenderer.invoke('fs:readFile', path) as Promise<FilePreview>,
+  writeFile: (path: string, content: string) =>
+    ipcRenderer.invoke('fs:writeFile', path, content) as Promise<void>,
   revealInOs: (path: string) =>
     ipcRenderer.invoke('fs:reveal', path) as Promise<void>,
   openPathInOs: (path: string) =>

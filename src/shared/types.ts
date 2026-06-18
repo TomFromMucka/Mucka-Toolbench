@@ -398,6 +398,7 @@ export interface FsListing {
  */
 export type FilePreview =
   | { kind: 'ok'; path: string; text: string; bytes: number; truncated: boolean }
+  | { kind: 'image'; path: string; dataUrl: string; bytes: number }
   | { kind: 'binary'; path: string; bytes: number }
   | { kind: 'too-large'; path: string; bytes: number; cap: number }
   | { kind: 'missing'; path: string }
@@ -564,6 +565,8 @@ export interface MuckaApi {
   /** Read a file for in-app preview. Returns a tagged result so the
    * renderer can render text vs. show a binary/too-large placeholder. */
   readFilePreview(path: string): Promise<FilePreview>
+  /** Overwrite a text file's contents (gated to within the home dir). */
+  writeFile(path: string, content: string): Promise<void>
   /** Type a string into multiple agents' terminals in parallel, then press Enter. */
   broadcastToAgents(input: {
     text: string
