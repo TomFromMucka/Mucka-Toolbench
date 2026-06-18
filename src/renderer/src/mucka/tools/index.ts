@@ -55,6 +55,20 @@ function parseAgentId(params: Record<string, unknown>): AgentId {
   return raw as AgentId
 }
 
+/**
+ * Resolve an agent's human display name for user-facing copy (confirm
+ * strips, etc.). Agents are renamed per machine, so we must never show
+ * the raw id ("bren") to Tom. Falls back to the id if the lookup fails.
+ */
+async function agentLabel(agentId: AgentId): Promise<string> {
+  try {
+    const agents = await window.mucka.listAgents()
+    return agents.find((a) => a.id === agentId)?.displayName || agentId
+  } catch {
+    return agentId
+  }
+}
+
 function parseString(params: Record<string, unknown>, key: string): string {
   const v = params[key]
   if (typeof v !== 'string') {
@@ -488,9 +502,10 @@ function makeSetAgentWorktree(deps: ToolDeps) {
     const agentId = parseAgentId(params)
     const path = parseString(params, 'path').trim()
     if (!path) throw new Error('path must not be empty')
+    const label = await agentLabel(agentId)
     const ok = await deps.requestConfirm({
-      summary: `Switch ${agentId} to ${path}`,
-      note: `Restarts ${agentId}'s shell at the new path.`
+      summary: `Switch ${label} to ${path}`,
+      note: `Restarts ${label}'s shell at the new path.`
     })
     if (!ok) return `Tom said no. ${agentId}'s worktree is unchanged.`
     await window.mucka.updateAgent({ id: agentId, worktreePath: path })
@@ -510,9 +525,10 @@ function makeSetAgentCommand(deps: ToolDeps) {
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
     const argsStr = args.length > 0 ? ` ${args.join(' ')}` : ''
+    const label = await agentLabel(agentId)
     const ok = await deps.requestConfirm({
-      summary: `Switch ${agentId} to run "${command}${argsStr}"`,
-      note: `Restarts ${agentId}'s shell.`
+      summary: `Switch ${label} to run "${command}${argsStr}"`,
+      note: `Restarts ${label}'s shell.`
     })
     if (!ok) return `Tom said no. ${agentId}'s command is unchanged.`
     await window.mucka.updateAgent({ id: agentId, command, args })
@@ -533,9 +549,10 @@ function makeStartAgent(deps: ToolDeps) {
 function makeStopAgent(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
+    const label = await agentLabel(agentId)
     const ok = await deps.requestConfirm({
-      summary: `Stop ${agentId}`,
-      note: `Kills the primary shell and every sub-terminal for ${agentId}. Any unsaved work is lost.`
+      summary: `Stop ${label}`,
+      note: `Kills the primary shell and every sub-terminal for ${label}. Any unsaved work is lost.`
     })
     if (!ok) return `Tom said no. ${agentId} kept running.`
     await window.mucka.stopAgent(agentId)
@@ -547,8 +564,9 @@ function makeStopAgent(deps: ToolDeps) {
 function makeRestartAgent(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
+    const label = await agentLabel(agentId)
     const ok = await deps.requestConfirm({
-      summary: `Restart ${agentId}'s shell`,
+      summary: `Restart ${label}'s shell`,
       note: `Kills the current process and starts a fresh one with the same config.`
     })
     if (!ok) return `Tom said no. ${agentId}'s shell wasn't restarted.`
@@ -564,8 +582,9 @@ function makeOpenPr(deps: ToolDeps) {
     const draft = draftRaw === true || draftRaw === 'true'
     const command = draft ? 'gh pr create --fill --draft' : 'gh pr create --fill'
 
+    const label = await agentLabel(agentId)
     const ok = await deps.requestConfirm({
-      summary: `Run \`${command}\` in ${agentId}'s terminal`,
+      summary: `Run \`${command}\` in ${label}'s terminal`,
       note:
         draft
           ? "Creates a DRAFT pull request from this agent's branch using the gh CLI."
@@ -584,8 +603,9 @@ function makeDeployToVercel(deps: ToolDeps) {
     const target = targetRaw === 'production' || targetRaw === 'prod' ? 'production' : 'preview'
     const command = target === 'production' ? 'vercel --prod' : 'vercel'
 
+    const label = await agentLabel(agentId)
     const ok = await deps.requestConfirm({
-      summary: `Run \`${command}\` in ${agentId}'s terminal`,
+      summary: `Run \`${command}\` in ${label}'s terminal`,
       note:
         target === 'production'
           ? 'Triggers a PRODUCTION deploy from this agent\'s worktree.'
@@ -774,8 +794,9 @@ function makePostPrReview(deps: ToolDeps) {
         : verdictRaw === 'request-changes'
           ? 'REQUEST CHANGES'
           : 'COMMENT'
+    const label = await agentLabel(agentId)
     const approved = await deps.requestEditConfirm({
-      summary: `${verdictLabel} on ${agentId}'s PR`,
+      summary: `${verdictLabel} on ${label}'s PR`,
       note:
         'Mucka has read the diff and drafted this review. Tweak the wording if you want — it submits to GitHub on approve.',
       editable: { text: body, multiline: true }
@@ -821,7 +842,7 @@ function makeBroadcastToAgents(deps: ToolDeps) {
     }
 
     const targetLabel = targetIds
-      ? targetIds.join(', ')
+      ? (await Promise.all(targetIds.map(agentLabel))).join(', ')
       : 'every running agent'
     const approved = await deps.requestEditConfirm({
       summary: `Broadcast to ${targetLabel}`,
@@ -854,8 +875,9 @@ function makeSendToAgent(deps: ToolDeps) {
     const agentId = parseAgentId(params)
     const text = parseString(params, 'text')
     if (!text.trim()) throw new Error('text must not be empty')
+    const label = await agentLabel(agentId)
     const approved = await deps.requestEditConfirm({
-      summary: `Send a message to ${agentId}'s terminal`,
+      summary: `Send a message to ${label}'s terminal`,
       note: "Will type this and press Enter inside the agent's shell.",
       editable: { text, multiline: true }
     })

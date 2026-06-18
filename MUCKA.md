@@ -184,6 +184,13 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-06-18** — Panel resize overhaul + confirm UX. Every panel
+  (agent terminals + chat/jobs/notes) now has a min/mid/max segmented
+  control in its header; siblings reflow via grid weights. Minimised
+  panels stay mounted (hidden via CSS) so terminals keep running and
+  preserve their tabs/preview. Confirm strip moved inline into the chat
+  (compact, no longer shoves the grid down); confirms now show the
+  agent's display name, not the raw id.
 - **2026-06-18** — Mucka text agent: unblock tools. The Agent SDK had no
   permission gate, so every `mcp__mucka__*` call stalled on "you haven't
   granted it yet" with no UI to approve. Now auto-allow cockpit tools at

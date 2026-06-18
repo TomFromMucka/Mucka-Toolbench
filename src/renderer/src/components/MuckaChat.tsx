@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { MuckaTextMessage, MuckaTextSegment } from '@shared/types'
 import { Clipboard } from './Clipboard'
+import type { PanelSizeProps } from './panelSize'
+import { ConfirmStrip } from './ConfirmStrip'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { useMuckaText } from '../mucka/MuckaTextContext'
 import { useAgentsState } from '../state/AgentsContext'
@@ -72,7 +74,7 @@ function ChatMessage({ message }: { message: MuckaTextMessage }): React.JSX.Elem
   )
 }
 
-export function MuckaChat(): React.JSX.Element {
+export function MuckaChat({ size, onResize }: PanelSizeProps): React.JSX.Element {
   const { state, isSpeaking, credentialStatus } = useMuckaSession()
   const { status, messages, streaming, error, send } = useMuckaText()
   const { agents } = useAgentsState()
@@ -175,6 +177,8 @@ export function MuckaChat(): React.JSX.Element {
       subtitle="text via Claude · voice via ElevenLabs"
       rightSlot={<span>{indicator}</span>}
       className="min-h-0"
+      size={size}
+      onResize={onResize}
     >
       <div className="flex h-full min-h-0 flex-col" style={{ background: 'var(--surface)' }}>
         <div
@@ -243,6 +247,7 @@ export function MuckaChat(): React.JSX.Element {
             {flash}
           </div>
         ) : null}
+        <ConfirmStrip />
         <div
           className="flex items-center gap-2 border-t px-3 py-2"
           style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}

@@ -58,8 +58,11 @@ export function ConfirmStrip(): React.JSX.Element | null {
 
   return (
     <div
-      className="chamfer-card attention-glow mx-auto mt-2 flex w-[min(960px,92vw)] flex-col gap-2 px-4 py-2.5"
-      style={{ background: 'var(--surface)' }}
+      className="chamfer-sm mx-3 mb-2 flex flex-col gap-1.5 px-3 py-2"
+      style={{
+        background: 'var(--surface2)',
+        boxShadow: 'inset 0 0 0 1px var(--orange)'
+      }}
     >
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="t-label-sm text-orange">Mucka wants to —</span>
@@ -68,7 +71,7 @@ export function ConfirmStrip(): React.JSX.Element | null {
           style={{
             fontFamily: 'var(--font-soehne-breit)',
             fontWeight: 500,
-            fontSize: '17px',
+            fontSize: '15px',
             color: 'var(--van-white)'
           }}
         >

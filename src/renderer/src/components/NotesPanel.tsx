@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useNotesState } from '../state/NotesContext'
 import { Clipboard } from './Clipboard'
+import type { PanelSizeProps } from './panelSize'
 
 const PLACEHOLDER = `Type whatever you want here — todos, ideas, links, scratch.
 Saves automatically. Mucka can append lines with the note tool.`
 
-export function NotesPanel(): React.JSX.Element {
+export function NotesPanel({ size, onResize }: PanelSizeProps): React.JSX.Element {
   const { text, setText, flush } = useNotesState()
   const taRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -37,6 +38,8 @@ export function NotesPanel(): React.JSX.Element {
       title="Notes"
       subtitle="scratchpad · autosaves"
       className="min-h-0"
+      size={size}
+      onResize={onResize}
     >
       <textarea
         ref={taRef}

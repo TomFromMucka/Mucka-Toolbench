@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AgentId, AgentUpdate } from '@shared/types'
 import { MuckaTopBanner } from '../components/MuckaTopBanner'
 import { AgentGrid } from '../components/AgentGrid'
-import { ConfirmStrip } from '../components/ConfirmStrip'
 import {
   ExplorerPanel,
   EXPLORER_WIDTH_COLLAPSED,
@@ -105,7 +104,6 @@ export function Workstation(): React.JSX.Element {
       style={{ background: 'var(--surface2)' }}
     >
       <MuckaTopBanner onOpenSettings={() => setSettingsOpen(true)} />
-      <ConfirmStrip />
 
       <main
         className="grid min-h-0 flex-1 gap-3 px-3 pb-3 pt-2"
