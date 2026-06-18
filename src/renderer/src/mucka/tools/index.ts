@@ -12,7 +12,7 @@ import type {
   VercelAgentSummary,
   VercelDeployment
 } from '@shared/types'
-import { MUCKA_AGENT_IDS } from '@shared/mucka-tools'
+import { MUCKA_AGENT_IDS, TOOL_DEFINITIONS } from '@shared/mucka-tools'
 import type { ConfirmRequest, EditConfirmRequest } from '../MuckaSessionContext'
 
 const MEMORY_TYPES: readonly MemoryType[] = [
@@ -873,6 +873,9 @@ function makeSendToAgent(deps: ToolDeps) {
 
 export function buildClientTools(deps: ToolDeps): ClientTools {
   return {
+    self_test: () =>
+      `Tool dispatch OK — ${TOOL_DEFINITIONS.length} cockpit tools reachable: ` +
+      TOOL_DEFINITIONS.map((t) => t.name).join(', '),
     list_agents: () => listAgents(),
     get_git_status: (params) => getGitStatus(params),
     get_recent_output: (params) => getRecentOutput(params),

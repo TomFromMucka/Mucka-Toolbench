@@ -10,7 +10,10 @@ import type {
   MuckaTextToolCall,
   MuckaTextToolResult
 } from '@shared/types'
+import { TOOL_DEFINITIONS } from '@shared/mucka-tools'
 import { appendChat, clearChat, listChat } from '../db/chat'
+import { listAgents } from '../db/agents'
+import { listEvents } from '../events/Events'
 import { buildMuckaMcpServer } from './agentTools'
 
 /**
@@ -42,6 +45,16 @@ let callCounter = 0
 const mcpServer = buildMuckaMcpServer({
   dispatch: (name, params) => dispatchTool(name, params)
 })
+
+/**
+ * Every cockpit tool is exposed through the in-process `mucka` MCP
+ * server, so the SDK names them `mcp__mucka__<tool>`. We auto-allow
+ * exactly these — there is no interactive permission UI in the banner
+ * chat, so without this the SDK stalls every call with "you haven't
+ * granted it yet". Confirm-gated writes are still gated downstream by the
+ * renderer's ConfirmStrip; this only lifts the SDK-level block.
+ */
+const ALLOWED_MUCKA_TOOLS = TOOL_DEFINITIONS.map((d) => `mcp__mucka__${d.name}`)
 
 function dispatchTool(
   name: string,
@@ -142,6 +155,36 @@ function packagedClaudeBinary(): string | null {
   return claudeBinaryCache
 }
 
+/**
+ * A compact, tool-free snapshot injected into the first message of each
+ * boot so Mucka has grounding even before she calls anything — and a
+ * fallback if a tool ever fails mid-session. Pulled straight from
+ * main-process state: the agent lineup + the recent job-sheet feed.
+ */
+function buildBootSnapshot(): string {
+  const lines: string[] = [
+    '[cockpit snapshot — auto-injected context, not a tool result]'
+  ]
+  const agents = listAgents()
+  if (agents.length > 0) {
+    lines.push('Agents:')
+    for (const a of agents) {
+      const flags = [a.running ? 'running' : 'idle', a.needsAttention ? 'NEEDS ATTENTION' : null]
+        .filter(Boolean)
+        .join(', ')
+      lines.push(`- ${a.id} ("${a.displayName}") — branch ${a.branch} — ${flags}`)
+    }
+  }
+  const events = listEvents(10)
+  if (events.length > 0) {
+    lines.push('Recent events (newest first):')
+    for (const e of events) {
+      lines.push(`- [${e.source}] ${e.message}`)
+    }
+  }
+  return lines.join('\n')
+}
+
 function loadPrompt(): string {
   if (promptCache !== null) return promptCache
   // Operator override first — `~/.mucka-toolbench/prompts/pm.md` lets the
@@ -230,6 +273,19 @@ export async function sendMessage(text: string): Promise<void> {
       ...(claudeBinary ? { pathToClaudeCodeExecutable: claudeBinary } : {}),
       includePartialMessages: true,
       mcpServers: { mucka: mcpServer },
+      allowedTools: ALLOWED_MUCKA_TOOLS,
+      // Belt-and-braces: auto-allow cockpit tools, and deny anything else
+      // (built-in Read/Bash/etc.) so a stray call can never hang on a
+      // permission prompt this surface can't show.
+      canUseTool: async (toolName, input) => {
+        if (toolName.startsWith('mcp__mucka__')) {
+          return { behavior: 'allow', updatedInput: input }
+        }
+        return {
+          behavior: 'deny',
+          message: `Mucka can only use cockpit tools, not ${toolName}.`
+        }
+      },
       // Resume the SDK's session log from prior turns this boot so it
       // sees the running conversation. The first turn of a fresh cockpit
       // boot starts a new session.
@@ -237,7 +293,12 @@ export async function sendMessage(text: string): Promise<void> {
       ...(MODEL ? { model: MODEL } : {})
     }
 
-    const q = query({ prompt: trimmed, options })
+    // First turn of the boot carries a passive snapshot so Mucka is
+    // grounded before she calls a tool; later turns resume the session.
+    const prompt = hasPriorTurnThisBoot
+      ? trimmed
+      : `${buildBootSnapshot()}\n\n---\n\nOperator: ${trimmed}`
+    const q = query({ prompt, options })
 
     for await (const msg of q as AsyncIterable<SDKMessage>) {
       if (msg.type === 'stream_event') {

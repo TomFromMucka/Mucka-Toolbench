@@ -40,6 +40,12 @@ export interface MuckaToolDefinition {
 
 export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
+    name: 'self_test',
+    description:
+      'Diagnostic. Confirms your tool-dispatch path is wired up end-to-end and returns the list of cockpit tools reachable in this session. Use as a first move if you are unsure whether your tools work — a clean result means every tool below is callable. Auto-executes — no confirmation needed.',
+    parameters: { type: 'object', properties: {}, required: [] }
+  },
+  {
     name: 'list_agents',
     description:
       "Returns a summary of the four agents currently configured in Tom's cockpit — their names, the branch label each is working on, the worktree path, and the command running inside (zsh or claude). Call this when Tom asks who's around or wants to know the lineup.",
