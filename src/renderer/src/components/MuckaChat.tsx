@@ -250,7 +250,7 @@ export function MuckaChat({ size, onResize }: PanelSizeProps): React.JSX.Element
         <ConfirmStrip />
         <div
           className="flex items-center gap-2 border-t px-3 py-2"
-          style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}
+          style={{ borderColor: 'var(--border)', background: 'var(--charcoal)' }}
         >
           <input
             type="text"

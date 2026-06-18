@@ -40,7 +40,8 @@ import {
   openPathInOs,
   readFilePreview as fsReadFilePreview,
   renamePath as fsRename,
-  revealInOs
+  revealInOs,
+  writeTextFile as fsWriteTextFile
 } from './fs/index'
 import {
   bindEventsBroadcaster,
@@ -725,6 +726,9 @@ function registerIpc(): void {
   ipcMain.handle('fs:openPath', (_event, path: string) => openPathInOs(path))
 
   ipcMain.handle('fs:readFile', (_event, path: string) => fsReadFilePreview(path))
+  ipcMain.handle('fs:writeFile', (_event, path: string, content: string) =>
+    fsWriteTextFile(path, typeof content === 'string' ? content : '')
+  )
 
   ipcMain.handle(
     'fs:createFile',

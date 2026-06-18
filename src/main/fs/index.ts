@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, extname, join, resolve } from 'node:path'
 import { app, shell } from 'electron'
 import type { FilePreview, FsEntry, FsEntryKind, FsListing } from '@shared/types'
 
@@ -78,6 +78,19 @@ export async function openPathInOs(path: string): Promise<void> {
  */
 const PREVIEW_CAP_BYTES = 2 * 1024 * 1024
 const BINARY_SNIFF_BYTES = 8 * 1024
+const IMAGE_CAP_BYTES = 16 * 1024 * 1024
+
+const IMAGE_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+  '.avif': 'image/avif',
+  '.svg': 'image/svg+xml'
+}
 
 export async function readFilePreview(input: string): Promise<FilePreview> {
   if (typeof input !== 'string' || input.trim().length === 0) {
@@ -88,6 +101,21 @@ export async function readFilePreview(input: string): Promise<FilePreview> {
     const stat = await fs.stat(path)
     if (!stat.isFile()) {
       return { kind: 'error', path, message: 'not a file' }
+    }
+    // Images get a real preview (data URL) — handled before the text caps
+    // and the NUL-byte sniff, since image bytes look "binary".
+    const mime = IMAGE_MIME[extname(path).toLowerCase()]
+    if (mime) {
+      if (stat.size > IMAGE_CAP_BYTES) {
+        return { kind: 'too-large', path, bytes: stat.size, cap: IMAGE_CAP_BYTES }
+      }
+      const imgBuf = await fs.readFile(path)
+      return {
+        kind: 'image',
+        path,
+        dataUrl: `data:${mime};base64,${imgBuf.toString('base64')}`,
+        bytes: stat.size
+      }
     }
     if (stat.size > PREVIEW_CAP_BYTES) {
       return { kind: 'too-large', path, bytes: stat.size, cap: PREVIEW_CAP_BYTES }
@@ -140,6 +168,16 @@ function validateName(name: string): string {
   if (trimmed.includes('/')) throw new Error('name must not contain `/`')
   if (trimmed.includes('\0')) throw new Error('name must not contain null byte')
   return trimmed
+}
+
+/**
+ * Overwrite a file's text contents. Gated to within the home dir like
+ * the other write ops. Used by the in-app editor in the file viewer.
+ */
+export async function writeTextFile(input: string, content: string): Promise<void> {
+  const path = resolve(input)
+  ensureWithinHome(path)
+  await fs.writeFile(path, content, 'utf8')
 }
 
 export async function createFile(parentPath: string, name: string): Promise<string> {
