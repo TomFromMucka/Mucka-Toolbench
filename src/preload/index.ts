@@ -132,6 +132,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('mucka:text-send', text) as Promise<void>,
   clearChatHistory: () =>
     ipcRenderer.invoke('mucka:text-clear') as Promise<void>,
+  searchHistory: (query: string, limit?: number) =>
+    ipcRenderer.invoke('mucka:text-search', query, limit) as Promise<string>,
   sendChatToolResult: (result: MuckaTextToolResult) =>
     ipcRenderer.send('mucka:text-tool-result', result),
   appendVoiceTranscript: (input: VoiceTranscriptInput) =>

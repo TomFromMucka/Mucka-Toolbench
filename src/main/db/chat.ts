@@ -78,3 +78,44 @@ export function appendChat(
 export function clearChat(): void {
   getDb().exec(`DELETE FROM chat_messages`)
 }
+
+/** Messages newer than `sinceTs`, oldest first — the summarizer's input. */
+export function listChatSince(sinceTs: number): MuckaTextMessage[] {
+  const rows = getDb()
+    .prepare<[number], ChatRow>(
+      `SELECT * FROM chat_messages WHERE ts > ? ORDER BY ts ASC, id ASC`
+    )
+    .all(sinceTs)
+  return rows.map(rowToMessage)
+}
+
+export interface ChatSearchHit {
+  ts: number
+  role: 'user' | 'assistant'
+  text: string
+}
+
+/**
+ * Keyword search across the stored transcript (most recent first).
+ * Covers the rolling window kept in chat_messages; older context lives
+ * in conversation summaries.
+ */
+export function searchChat(queryStr: string, limit = 20): ChatSearchHit[] {
+  const q = queryStr.trim()
+  if (!q) return []
+  const like = '%' + q.replace(/[\\%_]/g, (m) => '\\' + m) + '%'
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)))
+  const rows = getDb()
+    .prepare<[string, number], ChatRow>(
+      `SELECT * FROM chat_messages WHERE segments_json LIKE ? ESCAPE '\\' ORDER BY ts DESC, id DESC LIMIT ?`
+    )
+    .all(like, safeLimit)
+  return rows.map((r) => ({
+    ts: r.ts,
+    role: r.role === 'user' ? 'user' : 'assistant',
+    text: parseSegments(r.segments_json)
+      .map((s) => s.text)
+      .join(' ')
+      .trim()
+  }))
+}

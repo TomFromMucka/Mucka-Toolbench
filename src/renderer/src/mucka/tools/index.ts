@@ -898,6 +898,11 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     self_test: () =>
       `Tool dispatch OK — ${TOOL_DEFINITIONS.length} cockpit tools reachable: ` +
       TOOL_DEFINITIONS.map((t) => t.name).join(', '),
+    recall: (params) =>
+      window.mucka.searchHistory(
+        typeof params.query === 'string' ? params.query : '',
+        typeof params.limit === 'number' ? params.limit : undefined
+      ),
     list_agents: () => listAgents(),
     get_git_status: (params) => getGitStatus(params),
     get_recent_output: (params) => getRecentOutput(params),

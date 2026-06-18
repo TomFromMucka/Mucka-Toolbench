@@ -40,6 +40,25 @@ export interface MuckaToolDefinition {
 
 export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
+    name: 'recall',
+    description:
+      "Search your own memory of past conversations with Tom — both the recent transcript and older session summaries — by keyword. Use when Tom refers to something from before ('what did we decide about X?', 'the thing I mentioned last week') or when you need context you don't currently hold. Returns dated, attributed snippets. Pass a focused keyword or short phrase. Auto-executes.",
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Keyword or short phrase to search for across past conversation.'
+        },
+        limit: {
+          type: 'number',
+          description: 'Max recent messages to return (default 20).'
+        }
+      },
+      required: ['query']
+    }
+  },
+  {
     name: 'self_test',
     description:
       'Diagnostic. Confirms your tool-dispatch path is wired up end-to-end and returns the list of cockpit tools reachable in this session. Use as a first move if you are unsure whether your tools work — a clean result means every tool below is callable. Auto-executes — no confirmation needed.',

@@ -89,6 +89,15 @@ function migrate(d: DatabaseType): void {
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS roadmap_col_idx ON roadmap_cards(kanban_column, sort_order);
+    CREATE TABLE IF NOT EXISTS conversation_summaries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER NOT NULL,
+      period_start INTEGER NOT NULL,
+      period_end INTEGER NOT NULL,
+      summary TEXT NOT NULL,
+      message_count INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS conv_sum_ts_idx ON conversation_summaries(ts DESC);
   `)
 
   // Idempotent column additions for older databases.

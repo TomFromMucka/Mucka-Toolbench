@@ -76,6 +76,7 @@ import {
   clearHistory as muckaTextClearHistory,
   getStatus as muckaTextStatus,
   listHistory as muckaTextListHistory,
+  searchHistory as muckaTextSearchHistory,
   sendMessage as muckaTextSendMessage,
   unbindMuckaTextBroadcaster
 } from './mucka/MuckaTextAgent'
@@ -609,6 +610,9 @@ function registerIpc(): void {
   ipcMain.handle('mucka:text-status', () => muckaTextStatus())
   ipcMain.handle('mucka:text-history', () => muckaTextListHistory())
   ipcMain.handle('mucka:text-clear', () => muckaTextClearHistory())
+  ipcMain.handle('mucka:text-search', (_event, query: string, limit?: number) =>
+    muckaTextSearchHistory(typeof query === 'string' ? query : '', limit ?? 20)
+  )
   ipcMain.handle('mucka:text-send', async (_event, text: string) => {
     await muckaTextSendMessage(text)
   })
