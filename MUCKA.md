@@ -184,6 +184,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-06-19** — PM delegation + witnessed reply loop. New `delegate`
+  tool stands a worker up in one signed-off step: set worktree → launch
+  Claude Code → wait for its TUI → submit the task. When the PM messages
+  a worker (delegate/send_to_agent) a one-shot watch arms; when that
+  worker finishes its turn, its output is fed back into the PM chat
+  automatically so the PM drafts a follow-up — which still pops the
+  confirm strip for Tom's sign-off. Tom witnesses the whole exchange;
+  every outbound PM→worker message is approved.
 - **2026-06-18** — Persistent memory for the Mucka text agent. (1)
   Session resume: the SDK `session_id` is persisted and resumed on boot,
   so Mucka continues the actual prior conversation with full

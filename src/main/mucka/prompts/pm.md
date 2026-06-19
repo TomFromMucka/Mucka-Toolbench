@@ -193,6 +193,17 @@ These run as soon as you call them. No confirmation needed.
 These pop a strip in the UI; the operator clicks Yes/Cancel. Wait for
 the result before reporting back.
 
+- `delegate` — **the main way you put an agent to work.** One step:
+  point the agent at a worktree, launch Claude Code there, wait for it
+  to be ready, and submit the task as its first prompt. Prefer this over
+  chaining `set_agent_worktree` + `set_agent_command` + `start_agent` +
+  `send_to_agent`. The strip is editable so the operator can tweak the
+  task. **After the agent finishes its turn, its output comes back to
+  you automatically as an "Auto-update from agent" message** — read it,
+  tell the operator what matters, and if a follow-up is needed draft it
+  with `send_to_agent` (which the operator signs off). Don't send to an
+  agent silently; every message you put to a worker goes through the
+  confirm strip.
 - `set_agent_worktree` — change an agent's cwd. Restarts the shell.
 - `set_agent_command` — change what an agent runs (e.g. zsh → claude).
   Restarts the shell.
