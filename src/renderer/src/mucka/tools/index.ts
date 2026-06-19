@@ -30,6 +30,9 @@ interface ToolDeps {
   requestEditConfirm: (req: EditConfirmRequest) => Promise<string | null>
   /** Pull a fresh agents list from the DB (after a write tool changes one). */
   reloadAgents: () => Promise<void>
+  /** Arm a one-shot watch: when this agent next finishes replying, feed
+   *  its output back into the PM chat. Set by the reply-loop wiring. */
+  armReplyWatch?: (agent: AgentId) => void
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────────── */
@@ -870,6 +873,81 @@ function makeBroadcastToAgents(deps: ToolDeps) {
   }
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Heuristics that Claude Code's TUI is up and waiting for input.
+const CLAUDE_READY = /│\s*>|\? for shortcuts|esc to interrupt|Welcome to Claude|Try ["“]/i
+
+/**
+ * Poll an agent's scrollback until Claude Code looks ready for a prompt:
+ * either a known TUI marker shows up, or output goes quiet for a beat.
+ * Bounded by a timeout so delegation never hangs forever.
+ */
+async function waitForClaudeReady(terminalId: string, timeoutMs = 20000): Promise<void> {
+  await delay(1500) // let the PTY spawn + Claude start booting
+  const start = Date.now()
+  let lastLen = -1
+  let stable = 0
+  while (Date.now() - start < timeoutMs) {
+    let sb = ''
+    try {
+      sb = await window.mucka.getScrollback(terminalId)
+    } catch {
+      sb = ''
+    }
+    if (CLAUDE_READY.test(sb)) return
+    if (sb.length > 0 && sb.length === lastLen) {
+      stable += 1
+      if (stable >= 3) return // ~2s of quiet — assume the prompt is ready
+    } else {
+      stable = 0
+      lastLen = sb.length
+    }
+    await delay(700)
+  }
+}
+
+function makeDelegate(deps: ToolDeps) {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const agentId = parseAgentId(params)
+    const task = parseString(params, 'task').trim()
+    if (!task) throw new Error('task must not be empty')
+    const worktree =
+      typeof params['worktree'] === 'string' ? (params['worktree'] as string).trim() : ''
+    const label = await agentLabel(agentId)
+    const where = worktree || '(current worktree)'
+
+    const approved = await deps.requestEditConfirm({
+      summary: `Delegate to ${label}: claude in ${where}`,
+      note: 'Sets the worktree, launches Claude Code there, and submits this as the first task. Edit the wording if you like.',
+      editable: { text: task, multiline: true }
+    })
+    if (approved === null) return `Tom said no. Nothing delegated to ${label}.`
+    const finalTask = approved.trim()
+    if (!finalTask) return `Tom blanked the task. Nothing delegated to ${label}.`
+
+    // 1. Point at the worktree and switch the agent to Claude Code.
+    await window.mucka.updateAgent({
+      id: agentId,
+      command: 'claude',
+      args: [],
+      ...(worktree ? { worktreePath: worktree } : {})
+    })
+    // 2. (Re)start so Claude boots fresh in that worktree.
+    await window.mucka.startAgent(agentId)
+    await deps.reloadAgents()
+    deps.bumpRestart(agentId)
+    // 3. Wait for the TUI, then submit the task as the first prompt.
+    await waitForClaudeReady(agentId)
+    window.mucka.writePty({ terminalId: agentId, data: finalTask + '\r' })
+    // 4. Bring the agent's reply back to the PM when it finishes.
+    deps.armReplyWatch?.(agentId)
+    return `Delegated to ${label} — Claude is running in ${where} and the task is in. I'll bring back its reply when it's done.`
+  }
+}
+
 function makeSendToAgent(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
@@ -887,6 +965,7 @@ function makeSendToAgent(deps: ToolDeps) {
     // Mucka writes to the agent's primary terminal (terminalId === agentId).
     // \r is what terminals receive when you press Enter.
     window.mucka.writePty({ terminalId: agentId, data: trimmed + '\r' })
+    deps.armReplyWatch?.(agentId)
     return `Sent to ${agentId}: ${trimmed.slice(0, 200)}${trimmed.length > 200 ? '…' : ''}`
   }
 }
@@ -923,6 +1002,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     clear_attention: makeClearAttention(deps),
     set_agent_preview: makeSetAgentPreview(deps),
 
+    delegate: makeDelegate(deps),
     start_agent: makeStartAgent(deps),
     stop_agent: makeStopAgent(deps),
     set_agent_worktree: makeSetAgentWorktree(deps),

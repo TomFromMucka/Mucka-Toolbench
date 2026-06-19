@@ -375,6 +375,32 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
 
   /* ─── Confirm-gated write tools ─────────────────────────────────── */
   {
+    name: 'delegate',
+    description:
+      "Hand a task to a worker agent in one go: point it at a worktree, launch Claude Code there, wait for it to be ready, and submit the task as its first prompt. This is the main way you put an agent to work — prefer it over chaining set_agent_worktree/set_agent_command/start_agent/send_to_agent. REQUIRES Tom's confirmation via an editable strip (he can tweak the task wording before it goes). After it lands, the agent's reply comes back to you automatically so you can follow up.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Which agent — dave, sammy, kev, or bren.',
+          enum: MUCKA_AGENT_IDS
+        },
+        task: {
+          type: 'string',
+          description:
+            "The task to give the agent, phrased as a prompt for Claude Code. Be specific and action-shaped."
+        },
+        worktree: {
+          type: 'string',
+          description:
+            "Absolute path to the git worktree the agent should work in. Omit to use the agent's currently configured worktree."
+        }
+      },
+      required: ['agent', 'task']
+    }
+  },
+  {
     name: 'set_agent_worktree',
     description:
       "Change an agent's working directory (and restart its shell). REQUIRES Tom's confirmation via the confirm strip — call only when Tom explicitly asks to switch an agent to a different worktree.",

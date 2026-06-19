@@ -23,6 +23,29 @@ import { useAgentsState } from '../state/AgentsContext'
 import { buildClientTools } from './tools/index'
 import { playConnectionChime } from './chime'
 
+const REPLY_ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
+
+/**
+ * Feed a worker agent's freshly-finished output back into the PM chat as
+ * a turn, so the PM reacts (reports to Tom / drafts a follow-up that
+ * needs his sign-off). Retries if the PM is mid-reply.
+ */
+async function deliverAgentReply(agentId: AgentId, body: string): Promise<void> {
+  const msg =
+    `⟢ Auto-update from agent "${agentId}" — it finished its turn. Latest from its terminal:\n\n` +
+    `${body}\n\n` +
+    '(Summarise anything Tom needs to know. If a follow-up is warranted, draft it with send_to_agent for his sign-off — don\'t send silently.)'
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      await window.mucka.sendChatMessage(msg)
+      return
+    } catch {
+      // PM busy mid-reply — wait and retry.
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+  }
+}
+
 export interface ConfirmRequest {
   summary: string
   note?: string
@@ -128,12 +151,57 @@ function InnerProvider({
   const cancelOnConnect = useRef(false)
   const pendingRef = useRef<PendingConfirm | null>(null)
   const pendingTextRef = useRef<string | null>(null)
+  // One-shot reply watches: agentId → scrollback length at arm time +
+  // whether we've since seen it go busy. When a watched agent finishes
+  // (busy → idle/awaiting), its new output is fed back to the PM.
+  const replyWatchRef = useRef<Map<AgentId, { baselineLen: number; sawBusy: boolean }>>(
+    new Map()
+  )
 
   const { reload: reloadAgents } = useAgentsState()
 
   useEffect(() => {
     pendingRef.current = pendingConfirm
   }, [pendingConfirm])
+
+  const armReplyWatch = useCallback((agent: AgentId): void => {
+    void window.mucka
+      .getScrollback(agent)
+      .then((sb) => {
+        replyWatchRef.current.set(agent, { baselineLen: sb.length, sawBusy: false })
+      })
+      .catch(() => {
+        replyWatchRef.current.set(agent, { baselineLen: 0, sawBusy: false })
+      })
+  }, [])
+
+  // Reply loop: when a watched worker transitions busy → finished, grab
+  // the output it produced since arming and hand it back to the PM.
+  useEffect(() => {
+    const BUSY = new Set<string>(['thinking', 'editing', 'running'])
+    const FINISHED = new Set<string>(['idle', 'awaiting-input', 'done'])
+    return window.mucka.onAgentStatus((event) => {
+      const watch = replyWatchRef.current.get(event.agentId)
+      if (!watch) return
+      if (BUSY.has(event.status)) {
+        watch.sawBusy = true
+        return
+      }
+      if (!watch.sawBusy || !FINISHED.has(event.status)) return
+      replyWatchRef.current.delete(event.agentId)
+      const agentId = event.agentId
+      void window.mucka
+        .getScrollback(agentId)
+        .then((sb) => {
+          const fresh = sb.slice(watch.baselineLen).replace(REPLY_ANSI_RE, '').trim()
+          const tail = fresh.split(/\r?\n/).slice(-60).join('\n').slice(-2500)
+          void deliverAgentReply(agentId, tail.length > 0 ? tail : '(no new output captured)')
+        })
+        .catch(() => {
+          /* best-effort */
+        })
+    })
+  }, [])
 
   const conversation = useConversation({
     onConnect: () => {
@@ -297,9 +365,10 @@ function InnerProvider({
         bumpRestart,
         requestConfirm,
         requestEditConfirm,
-        reloadAgents
+        reloadAgents,
+        armReplyWatch
       }),
-    [setAmbientStatus, bumpRestart, requestConfirm, requestEditConfirm, reloadAgents]
+    [setAmbientStatus, bumpRestart, requestConfirm, requestEditConfirm, reloadAgents, armReplyWatch]
   )
 
   // ── Session lifecycle ──────────────────────────────────────────────
