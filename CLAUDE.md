@@ -189,6 +189,15 @@ in sync with reality without anyone having to remember to "tell" her.
   `src/main` and reach the renderer only through preload-exposed,
   contextBridge-typed APIs. The renderer process is sandbox-adjacent and
   must stay simple.
+- **`spawnPty` is attach-or-create, and restarting is explicit.**
+  `PtyManager.spawn` compares the request against the live proc's
+  signature (command + args + cwd): same shell → reattach and resize;
+  different shell (a config edit) → kill and respawn. So mounting a
+  terminal is always safe, and anything that genuinely wants a fresh
+  process calls `restartAgent` (kills the agent's shells, leaves it
+  running) and *then* bumps the restart version to force the remount.
+  Don't reintroduce "remount means restart" — a layout change or an HMR
+  reload would silently kill live Claude sessions.
 
 ## Scripts
 

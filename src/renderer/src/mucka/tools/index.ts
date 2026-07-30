@@ -573,6 +573,9 @@ function makeRestartAgent(deps: ToolDeps) {
       note: `Kills the current process and starts a fresh one with the same config.`
     })
     if (!ok) return `Tom said no. ${agentId}'s shell wasn't restarted.`
+    // Kill first, then remount — a remount on its own reattaches.
+    await window.mucka.restartAgent(agentId)
+    await deps.reloadAgents()
     deps.bumpRestart(agentId)
     return `Restarted ${agentId}.`
   }
@@ -935,8 +938,11 @@ function makeDelegate(deps: ToolDeps) {
       args: [],
       ...(worktree ? { worktreePath: worktree } : {})
     })
-    // 2. (Re)start so Claude boots fresh in that worktree.
-    await window.mucka.startAgent(agentId)
+    // 2. (Re)start so Claude boots fresh in that worktree. Must be the
+    //    explicit restart — if the agent was already running claude there,
+    //    a plain remount would reattach and the task would land in the
+    //    middle of the old session.
+    await window.mucka.restartAgent(agentId)
     await deps.reloadAgents()
     deps.bumpRestart(agentId)
     // 3. Wait for the TUI, then submit the task as the first prompt.

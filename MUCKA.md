@@ -106,7 +106,11 @@ filesystem directly — everything flows through preload-exposed
 so older Mucka tools that target an `agent` still hit the right
 buffer. Split terminals get distinct ids like `dave:t2`. PtyManager
 proxies data + exit events through IPC; scrollback persists to disk
-for the primary terminals only.
+for the primary terminals only. Spawn is attach-or-create: it compares
+the request against the live proc's command + args + cwd, reattaching
+when they match so a remount can't restart a live session, and
+respawning when a config edit changed them. A genuinely fresh process
+comes from the explicit `restartAgent` IPC.
 
 **StatusDetector (`src/main/pty/StatusDetector.ts`).** Sliding
 4KB ANSI-stripped buffer per primary terminal. Heuristic state
