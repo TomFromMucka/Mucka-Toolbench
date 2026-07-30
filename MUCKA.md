@@ -189,6 +189,29 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-07-30** — Terminals reattach instead of restarting. `spawnPty`
+  used to kill whatever it found and start a fresh shell, so every
+  renderer remount — layout change, tab reshuffle, dev HMR — silently
+  restarted the agent and killed any running Claude session. Spawn now
+  compares command + args + cwd against the live proc: same shell →
+  reattach and resize; config edit → respawn as before. Restarting is
+  explicit via a new `restartAgent` IPC, used by the `restart_agent`
+  and `delegate` tools (which do want a fresh process).
+- **2026-07-30** — Stray mouse-report input at the shell prompt fixed.
+  Claude Code exits with mouse motion tracking still on
+  (`?1000/1002/1003/1006h`), so replaying raw scrollback into a fresh
+  xterm re-armed it and pointer movement typed `\x1b[<35;…M` garbage
+  into the bare zsh prompt until you Ctrl-C'd. Terminals now switch
+  every input-reporting mode back off after a scrollback replay, and
+  again when a shell exits mid-TUI.
+- **2026-07-30** — Optional six-terminal layout. Settings → Agents →
+  *Layout* picks 4 (2×2 grid + right column) or 6 (3×2 grid, right
+  column hidden). Existing agents keep their seats across a switch —
+  six-up appends a third column rather than reflowing — so no clipboard
+  is remounted and no terminal view is disturbed. Two
+  agents added to the lineup (`marlene`, `albert`), seeded per-id so
+  existing databases pick them up without losing configured rows.
+  Hidden agents drop out of the explorer, Vercel and git panels too.
 - **2026-06-19** — PM delegation + witnessed reply loop. New `delegate`
   tool stands a worker up in one signed-off step: set worktree → launch
   Claude Code → wait for its TUI → submit the task. When the PM messages
