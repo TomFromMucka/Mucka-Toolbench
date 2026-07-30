@@ -31,6 +31,14 @@ mac:
   # window.
   target:
     - zip
+  # Space-free, like nsis/appImage below. The default
+  # `${productName}-…` pattern puts a space in the filename; GitHub
+  # rewrites spaces to dots on upload, so electron-builder's
+  # "already uploaded?" check compares `Mucka Toolbench-….blockmap`
+  # against the stored `Mucka.Toolbench-….blockmap`, never matches, and
+  # a retried publish dies with 422 already_exists — leaving a release
+  # with assets missing. Cost us a botched publish on 0.4.0.
+  artifactName: ${name}-${version}-${arch}-mac.${ext}
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
