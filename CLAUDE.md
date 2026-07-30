@@ -1,11 +1,11 @@
 # Mucka Toolbench — agent guide
 
-Personal dev cockpit. One Electron window that runs four Claude Code agents
-in parallel git worktrees on the same project, plus a fifth "Mucka" agent
+Personal dev cockpit. One Electron window that runs four or six Claude Code
+agents in parallel git worktrees on the same project, plus a fifth "Mucka" agent
 acting as PM. Optimised for a 3840×1200 ultrawide.
 
 This document is for whichever agent is editing the toolbench itself
-(not the four agents *inside* the toolbench — they have their own
+(not the worker agents *inside* the toolbench — they have their own
 context).
 
 ## What is here today vs. what is coming
@@ -48,7 +48,7 @@ src/
       App.tsx           Mounts <Workstation/>.
       main.tsx          Bootstrap + global stylesheet import.
       layout/
-        Workstation.tsx  Top-level grid (2fr / 1.1fr / 1.2fr).
+        Workstation.tsx  Top-level grid (columns depend on terminal count).
       components/        UI primitives + panels.
         Clipboard.tsx    Shared paper-and-ink primitive (wooden clip head
                          + cream paper body). Every panel uses it.
@@ -122,9 +122,34 @@ Fonts:
 └───────────────────────┴─────────────────┴────────────────────────────┘
 ```
 
+In six-terminal mode (Settings → Agents → *Layout*) the agent grid goes
+3×2 and the right column drops out entirely:
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ Mucka top banner                                                     │
+├──────────────────────────────────────────────┬───────────────────────┤
+│ Dave    │ Sammy   │ Marlene                  │ Mucka chat            │
+├─────────┼─────────┼──────────────────────────┤ Job sheet             │
+│ Kev     │ Bren    │ Albert                   │ Notes                 │
+│  3.2 fr                                      │  1.1 fr               │
+└──────────────────────────────────────────────┴───────────────────────┘
+```
+
+Seats are a fixed table (`AGENT_SEATS` in `AgentGrid.tsx`), not derived
+from the column count: the first two columns keep the 2×2 pairing and
+six-up only appends a third column. Don't "simplify" this into an index
+calculation — a clipboard that changes position remounts, and a remount
+discards the xterm (scrollback replay, "reconnected" banner, split tabs
+collapsing back to one).
+
 The grid is set in `Workstation.tsx` with literal `fr` units to match the
 brief. Vertical proportions inside each column live in `MiddleColumn` and
-`RightColumn`.
+`RightColumn`. The count lives in `state/LayoutContext.tsx`
+(localStorage-backed) — `useLayout()` for the shape, `useVisibleAgents()`
+for the agents the current layout has room for. Any panel that lists
+agents must use `useVisibleAgents()`, not `useAgentsState().agents`,
+or it will show agents whose terminals aren't on screen.
 
 ## Living spec — `MUCKA.md`
 

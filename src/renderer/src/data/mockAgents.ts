@@ -74,5 +74,34 @@ export const mockAgents: Agent[] = [
       { kind: 'stdout', text: '   - axis: { x, y, format? }' },
       { kind: 'prompt', text: '◇ thinking through legend placement…' }
     ]
+  },
+  {
+    id: 'marlene',
+    displayName: 'Marlene',
+    branch: 'chore/e2e-flake-hunt',
+    worktreePath: '~/work/mucka-pro-marlene',
+    status: 'running',
+    needsAttention: false,
+    headline: 'Re-running the checkout suite for flakes',
+    terminalLines: [
+      { kind: 'system', text: '─ marlene on chore/e2e-flake-hunt ─' },
+      { kind: 'stdout', text: '> playwright test --repeat-each=5 checkout' },
+      { kind: 'stdout', text: '  ✓ 18 passed' },
+      { kind: 'stdout', text: '  ✗ 1 flaked — cart badge race' },
+      { kind: 'prompt', text: '⠼ retrying to confirm…' }
+    ]
+  },
+  {
+    id: 'albert',
+    displayName: 'Albert',
+    branch: 'docs/api-reference',
+    worktreePath: '~/work/mucka-pro-albert',
+    status: 'idle',
+    needsAttention: false,
+    headline: 'Waiting on a brief',
+    terminalLines: [
+      { kind: 'system', text: '─ albert on docs/api-reference ─' },
+      { kind: 'prompt', text: '◇ idle — nothing queued' }
+    ]
   }
 ]

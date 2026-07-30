@@ -1,10 +1,11 @@
 import os from 'node:os'
 import type { AgentConfig, AgentId } from '@shared/types'
-import { getAgent, listAgents, seedIfEmpty } from '../db/agents'
+import { getAgent, listAgents, seedMissing } from '../db/agents'
 
 /**
- * Default agent set used only on first launch (seeded into sqlite once,
- * then user edits via the Settings sheet).
+ * Default agent set. Rows are seeded per-id, so a database created before
+ * an id was added to this list picks it up on next launch without
+ * disturbing the rows the user has already configured.
  */
 const HOME = os.homedir()
 const SHELL = process.env.SHELL?.includes('zsh') ? process.env.SHELL : '/bin/zsh'
@@ -61,6 +62,32 @@ const DEFAULTS: AgentConfig[] = [
     previewUrl: 'http://localhost:3002',
     vercelProjectId: null,
     running: false
+  },
+  {
+    id: 'marlene',
+    displayName: 'Marlene',
+    branch: 'main',
+    worktreePath: HOME,
+    command: SHELL,
+    args: ['-l'],
+    needsAttention: false,
+    attentionReason: null,
+    previewUrl: null,
+    vercelProjectId: null,
+    running: false
+  },
+  {
+    id: 'albert',
+    displayName: 'Albert',
+    branch: 'main',
+    worktreePath: HOME,
+    command: SHELL,
+    args: ['-l'],
+    needsAttention: false,
+    attentionReason: null,
+    previewUrl: null,
+    vercelProjectId: null,
+    running: false
   }
 ]
 
@@ -68,7 +95,7 @@ let seeded = false
 
 export function ensureSeeded(): void {
   if (seeded) return
-  seedIfEmpty(DEFAULTS)
+  seedMissing(DEFAULTS)
   seeded = true
 }
 

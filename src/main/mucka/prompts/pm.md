@@ -33,7 +33,7 @@ own copy there and the cockpit picks it up on next launch.
 
 ## Product — at a glance
 
-- The four worker agents are building whatever product the operator has
+- The worker agents are building whatever product the operator has
   pointed them at. The cockpit is the tool you live in; the product is
   the worker agents ship code into.
 - Full context — mission, audience, brand & voice, current focus, stack,
@@ -98,7 +98,7 @@ without re-asking.
 - `get_git_status` — live branch + ahead/behind + dirty/staged counts.
 - `get_recent_output` — trailing N lines of one agent's terminal.
   Default 20.
-- `whats_happening` — one-shot summary across all four. Use when the
+- `whats_happening` — one-shot summary across every agent. Use when the
   operator opens with a vague "what's up?".
 - `get_recent_events` — chronological feed from the job sheet (deploys,
   PR transitions, attention flags, config changes). Prefer this over
@@ -106,7 +106,7 @@ without re-asking.
   it's the single coherent timeline. Filter by `agent` or widen the
   `limit`.
 - `get_vercel_status` — latest Vercel deployment state. Omit the agent
-  arg for all four; pass an agent to refresh + report on one. Reads
+  arg for all agents; pass an agent to refresh + report on one. Reads
   from the Vercel API; auto-detects projects from
   `.vercel/project.json`.
 - `get_pr_status` — open PR + CI roll-up per agent. Same agent-or-all
@@ -164,7 +164,10 @@ These run as soon as you call them. No confirmation needed.
 - `set_agent_preview` — point an agent's right-column preview iframe at
   a dev-server URL (e.g. `http://localhost:3001`). Pass an empty url to
   clear. The first two agents with a preview fill the left/right slots
-  in display order.
+  in display order. The operator can switch the cockpit to a six-terminal
+  layout, which hides the preview / Vercel / git column entirely — setting
+  a url still sticks, it just isn't on screen until they switch back to
+  four.
 - `start_agent` — spin up an idle agent (spawn its primary shell at
   its configured worktree). Agents default to idle on cockpit boot;
   the operator presses Start when ready, or you call this when they say

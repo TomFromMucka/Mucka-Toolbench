@@ -12,11 +12,25 @@ import { spawnKey } from '../hooks/useAgents'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useEventsState } from '../state/EventsContext'
 import { useAgentStatuses } from '../state/AgentStatusContext'
+import { useLayout } from '../state/LayoutContext'
 
 interface AgentGridProps {
   agents: AgentConfig[]
   gitStatus: GitStatusMap
   restartVersion: Partial<Record<Agent['id'], number>>
+}
+
+/** [top, bottom] agent index per column, keyed by column count. */
+const AGENT_SEATS: Record<2 | 3, readonly [number, number][]> = {
+  2: [
+    [0, 2],
+    [1, 3]
+  ],
+  3: [
+    [0, 2],
+    [1, 3],
+    [4, 5]
+  ]
 }
 
 function relativeShort(ms: number): string {
@@ -78,6 +92,7 @@ export function AgentGrid({
 }: AgentGridProps): React.JSX.Element {
   const { events } = useEventsState()
   const { statusFor, contextPercentFor } = useAgentStatuses()
+  const { agentColumns } = useLayout()
   const list: AgentConfig[] =
     agents.length > 0
       ? agents
@@ -115,18 +130,25 @@ export function AgentGrid({
     }
   }
 
-  // Visual layout is a 2x2 grid: indexes 0 & 1 across the top row,
-  // 2 & 3 across the bottom. Reshape into two column stacks so each
-  // column can own its own expand/collapse state independently.
-  const leftTop = slotFor(list[0])
-  const leftBottom = slotFor(list[2])
-  const rightTop = slotFor(list[1])
-  const rightBottom = slotFor(list[3])
+  // Seats are fixed rather than derived, so switching between four and six
+  // never moves an agent: the first two columns keep the 2x2 pairing
+  // exactly, and six-up only adds a third column. A repositioned clipboard
+  // remounts, and while that no longer restarts the shell (PtyManager
+  // reattaches), it still throws the xterm away — scrollback replay,
+  // "reconnected" banner, split tabs collapsing back to one.
+  const columns = AGENT_SEATS[agentColumns].map(([top, bottom]) => ({
+    top: slotFor(list[top]),
+    bottom: slotFor(list[bottom])
+  }))
 
   return (
-    <div className="grid min-h-0 grid-cols-2 gap-3">
-      <AgentColumnStack top={leftTop} bottom={leftBottom} />
-      <AgentColumnStack top={rightTop} bottom={rightBottom} />
+    <div
+      className="grid min-h-0 gap-3"
+      style={{ gridTemplateColumns: `repeat(${agentColumns}, minmax(0, 1fr))` }}
+    >
+      {columns.map((column, i) => (
+        <AgentColumnStack key={i} top={column.top} bottom={column.bottom} />
+      ))}
     </div>
   )
 }

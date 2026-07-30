@@ -90,13 +90,19 @@ export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
     })
 }
 
-export function seedIfEmpty(defaults: AgentConfig[]): void {
-  const row = getDb()
-    .prepare<[], { n: number }>(`SELECT COUNT(*) AS n FROM agents`)
-    .get()
-  if (row && row.n > 0) return
+/**
+ * Insert any default agent the database doesn't have yet, leaving rows the
+ * user has already edited untouched. Runs on every launch so extending the
+ * default lineup doesn't need a hand-written migration.
+ */
+export function seedMissing(defaults: AgentConfig[]): void {
+  const existing = new Set(listAgents().map((a) => a.id))
+  const missing = defaults.filter((a) => !existing.has(a.id))
+  if (missing.length === 0) return
   const insertAll = getDb().transaction((agents: AgentConfig[]) => {
-    agents.forEach((agent, idx) => upsertAgent(agent, idx))
+    for (const agent of agents) {
+      upsertAgent(agent, defaults.findIndex((d) => d.id === agent.id))
+    }
   })
-  insertAll(defaults)
+  insertAll(missing)
 }

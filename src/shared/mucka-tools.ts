@@ -15,8 +15,16 @@ export const MUCKA_AGENT_IDS: readonly AgentId[] = [
   'dave',
   'sammy',
   'kev',
-  'bren'
+  'bren',
+  'marlene',
+  'albert'
 ] as const
+
+/**
+ * Prose form of the id list for tool-parameter descriptions. Kept derived
+ * so adding an agent id above can't leave the descriptions lying to the LLM.
+ */
+const AGENT_LIST = MUCKA_AGENT_IDS.join(', ')
 
 /** JSON-Schema-ish shape ElevenLabs accepts for client-tool parameters. */
 export interface ToolParamSchema {
@@ -67,7 +75,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'list_agents',
     description:
-      "Returns a summary of the four agents currently configured in Tom's cockpit — their names, the branch label each is working on, the worktree path, and the command running inside (zsh or claude). Call this when Tom asks who's around or wants to know the lineup.",
+      "Returns a summary of the agents currently configured in Tom's cockpit — their names, the branch label each is working on, the worktree path, and the command running inside (zsh or claude). Call this when Tom asks who's around or wants to know the lineup.",
     parameters: { type: 'object', properties: {}, required: [] }
   },
   {
@@ -79,7 +87,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -95,7 +103,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         lines: {
@@ -109,7 +117,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'whats_happening',
     description:
-      "Returns a one-shot summary across all four agents: each one's branch, git status, and last few terminal lines. Use this when Tom opens a session with a vague 'what's up?' so you don't have to chain three other tools.",
+      "Returns a one-shot summary across all agents: each one's branch, git status, and last few terminal lines. Use this when Tom opens a session with a vague 'what's up?' so you don't have to chain three other tools.",
     parameters: { type: 'object', properties: {}, required: [] }
   },
   {
@@ -122,7 +130,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         agent: {
           type: 'string',
           description:
-            'Optional — one of dave, sammy, kev, or bren. Omit for all sources (including mucka and system events).',
+            `Optional — one of ${AGENT_LIST}. Omit for all sources (including mucka and system events).`,
           enum: MUCKA_AGENT_IDS
         },
         limit: {
@@ -259,7 +267,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Optional — one of dave, sammy, kev, or bren. Omit for all.',
+          description: `Optional — one of ${AGENT_LIST}. Omit for all.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -275,7 +283,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Optional — one of dave, sammy, kev, or bren. Omit for all.',
+          description: `Optional — one of ${AGENT_LIST}. Omit for all.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -324,7 +332,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         reason: {
@@ -344,7 +352,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         url: {
@@ -365,7 +373,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -383,7 +391,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         task: {
@@ -409,7 +417,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         path: { type: 'string', description: 'Absolute path to the worktree.' }
@@ -426,7 +434,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         command: {
@@ -450,7 +458,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -466,7 +474,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -482,7 +490,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -498,7 +506,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent\'s branch — dave, sammy, kev, or bren.',
+          description: `Which agent's branch — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         draft: {
@@ -518,7 +526,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent\'s worktree to deploy — dave, sammy, kev, or bren.',
+          description: `Which agent's worktree to deploy — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         target: {
@@ -539,7 +547,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         text: {
@@ -560,7 +568,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         }
       },
@@ -576,7 +584,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
       properties: {
         agent: {
           type: 'string',
-          description: 'Which agent — dave, sammy, kev, or bren.',
+          description: `Which agent — one of ${AGENT_LIST}.`,
           enum: MUCKA_AGENT_IDS
         },
         verdict: {
@@ -609,7 +617,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         agents: {
           type: 'string',
           description:
-            'Optional comma-separated subset of dave,sammy,kev,bren. Omit to fan to every running agent.'
+            `Optional comma-separated subset of ${MUCKA_AGENT_IDS.join(',')}. Omit to fan to every running agent.`
         }
       },
       required: ['text']
