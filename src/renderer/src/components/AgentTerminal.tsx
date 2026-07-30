@@ -54,6 +54,21 @@ const THEME = {
   brightWhite: '#f5f0e6'
 } as const
 
+/**
+ * Turns off every input-reporting mode a TUI might have switched on.
+ *
+ * These modes live in xterm's parser state, not the PTY's, and Claude Code
+ * exits with mouse tracking still enabled (`?1000h ?1002h ?1003h ?1006h` —
+ * `1003` reports *any* pointer motion). Replaying raw scrollback re-arms
+ * them in the fresh xterm, so moving the mouse over a bare zsh prompt types
+ * `\x1b[<35;…M` garbage into it until you Ctrl-C. Leading ESC aborts any
+ * sequence left half-written by the scrollback byte-truncation.
+ */
+const RESET_INPUT_REPORTING =
+  '\x1b\\' +
+  '\x1b[?1000l\x1b[?1001l\x1b[?1002l\x1b[?1003l' +
+  '\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l'
+
 function separator(): string {
   const now = new Date()
   const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -164,6 +179,8 @@ export function AgentTerminal({
 
     const offExit = window.mucka.onPtyExit((event) => {
       if (event.terminalId !== terminalId) return
+      // A shell killed mid-TUI never got to switch reporting back off.
+      term.write(RESET_INPUT_REPORTING)
       term.write(
         `\r\n\x1b[38;5;208m[mucka] shell exited (code ${event.exitCode})\x1b[0m\r\n`
       )
@@ -200,6 +217,7 @@ export function AgentTerminal({
       if (cancelled) return
       if (prior.length > 0) {
         term.write(prior)
+        term.write(RESET_INPUT_REPORTING)
         term.write(separator())
       }
       await window.mucka.spawnPty({
