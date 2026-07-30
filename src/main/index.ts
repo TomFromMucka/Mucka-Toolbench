@@ -381,6 +381,9 @@ function registerIpc(): void {
   ipcMain.handle('agents:start', async (_event, agentId: AgentId) => {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)
+    // A previous session's last state ("waiting on Tom") would otherwise
+    // hang over the fresh shell until Claude writes its own.
+    claudeStateWatcher?.clear(agentId)
     if (!current.running) {
       const ordered = listAgentsFromDb()
       const sortOrder = ordered.findIndex((a) => a.id === agentId)
@@ -408,6 +411,7 @@ function registerIpc(): void {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)
     ptyManager?.killByAgent(agentId)
+    claudeStateWatcher?.clear(agentId)
     const ordered = listAgentsFromDb()
     const sortOrder = ordered.findIndex((a) => a.id === agentId)
     upsertAgent(
