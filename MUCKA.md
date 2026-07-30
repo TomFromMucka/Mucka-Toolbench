@@ -23,8 +23,13 @@ or "Tom, eyes here".
 ## Capabilities (what works today)
 
 **Agent grid (left).**
-- Four agent clipboards (Dave, Sammy, Kev, Bren) — each a real
-  node-pty + xterm.js terminal at its worktree.
+- Four or six agent clipboards — each a real node-pty + xterm.js
+  terminal at its worktree. Settings → Agents → *Layout* switches
+  between them: four sits in a 2×2 grid with the right-hand column
+  (previews, Vercel, git) alongside; six goes 3×2 and hides that column
+  to buy the width. Existing agents hold their seats across a switch, so
+  running shells aren't disturbed. Names are editable per agent; ids are fixed
+  (`dave`, `sammy`, `kev`, `bren`, `marlene`, `albert`).
 - Tab strip per agent: `+` to split, `▶ preview` to kill any prior
   preview tab and spawn a fresh one that auto-types `npm run dev` and
   binds the detected `http://localhost:N` URL to the preview iframe.

@@ -6,7 +6,7 @@ import type {
   GitHubAgentSummary,
   PullRequest
 } from '@shared/types'
-import { useAgentsState } from '../state/AgentsContext'
+import { useVisibleAgents } from '../state/LayoutContext'
 import { useGitHubState } from '../state/GitHubContext'
 import { Clipboard } from './Clipboard'
 import { StatusPill, type StatusVariant } from './ui/StatusPill'
@@ -273,7 +273,7 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
 }
 
 export function GitPanel(): React.JSX.Element {
-  const { agents } = useAgentsState()
+  const agents = useVisibleAgents()
   const { status, summaries, refresh } = useGitHubState()
 
   const tokenMissing = status?.kind === 'missing-token'

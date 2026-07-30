@@ -1,10 +1,10 @@
-import { useAgentsState } from '../state/AgentsContext'
+import { useVisibleAgents } from '../state/LayoutContext'
 import { TabbedBrowserPane, useBrowserTabs } from './TabbedBrowserPane'
 import { VercelPanel } from './VercelPanel'
 import { GitPanel } from './GitPanel'
 
 export function RightColumn(): React.JSX.Element {
-  const { agents } = useAgentsState()
+  const agents = useVisibleAgents()
   const withPreview = agents.filter((a) => a.previewUrl && a.previewUrl.trim() !== '')
   const leftAgent = withPreview[0] ?? null
   const rightAgent = withPreview[1] ?? null

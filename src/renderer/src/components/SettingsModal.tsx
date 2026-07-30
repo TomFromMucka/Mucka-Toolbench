@@ -17,6 +17,7 @@ import {
   type SecretTestResult
 } from '@shared/secrets'
 import type { CredentialSummary } from '@shared/credentials'
+import { useLayout, type TerminalCount } from '../state/LayoutContext'
 import { Clipboard } from './Clipboard'
 
 interface SettingsModalProps {
@@ -65,7 +66,7 @@ export function SettingsModal({
           title="Settings"
           subtitle={
             tab === 'agents'
-              ? 'agent worktrees & commands'
+              ? 'layout, agent worktrees & commands'
               : tab === 'keys'
                 ? 'api keys & tokens (encrypted at rest)'
                 : tab === 'credentials'
@@ -626,6 +627,78 @@ function CredentialForm({
 
 /* ─── Agents tab ─────────────────────────────────────────────────────── */
 
+const LAYOUT_CHOICES: {
+  count: TerminalCount
+  title: string
+  note: string
+  shape: string
+}[] = [
+  {
+    count: 4,
+    title: '4 terminals',
+    note: 'Full cockpit — browser previews, Vercel and git on the right.',
+    shape: '▛▜\n▙▟'
+  },
+  {
+    count: 6,
+    title: '6 terminals',
+    note: 'Wider bench — hides the previews, Vercel and git column.',
+    shape: '▛▀▜\n▙▄▟'
+  }
+]
+
+function LayoutSection(): React.JSX.Element {
+  const { terminalCount, setTerminalCount } = useLayout()
+
+  return (
+    <section className="mb-5 border-b border-ink/15 pb-4">
+      <h3 className="font-[var(--font-display)] text-[1.15rem] font-semibold text-ink">
+        Layout
+      </h3>
+      <p className="mb-2 font-[var(--font-hand)] text-[0.92rem] text-ink-soft">
+        How many agent terminals sit on the bench. Six only fits by giving
+        up the right-hand column — terminals keep running either way, so
+        switching back and forth is free.
+      </p>
+      <div className="flex gap-2">
+        {LAYOUT_CHOICES.map((choice) => {
+          const active = choice.count === terminalCount
+          return (
+            <button
+              key={choice.count}
+              type="button"
+              onClick={() => setTerminalCount(choice.count)}
+              className={clsx(
+                'flex flex-1 items-start gap-3 rounded-sm border p-3 text-left',
+                active
+                  ? 'border-mucka bg-mucka/10'
+                  : 'border-ink/20 bg-paper-cream/85 hover:bg-paper-shadow'
+              )}
+            >
+              <span className="whitespace-pre font-mono text-[0.9rem] leading-[1.05] text-ink-soft">
+                {choice.shape}
+              </span>
+              <span className="min-w-0">
+                <span className="block font-sans text-[0.84rem] font-semibold text-ink">
+                  {choice.title}
+                  {active ? (
+                    <span className="ml-2 text-[0.66rem] uppercase tracking-[0.16em] text-mucka-deep">
+                      current
+                    </span>
+                  ) : null}
+                </span>
+                <span className="block text-[0.76rem] leading-snug text-ink-faint">
+                  {choice.note}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 interface DraftRow {
   agentId: AgentConfig['id']
   displayName: string
@@ -722,6 +795,8 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
 
   return (
     <>
+      <LayoutSection />
+
       <p className="mb-3 font-[var(--font-hand)] text-[0.92rem] text-ink-soft">
         Point each clipboard at a real git worktree, and choose what to
         run inside it. Saving restarts that agent&apos;s shell.

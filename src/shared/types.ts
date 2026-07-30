@@ -17,7 +17,13 @@ import type {
   TabState as BrowserTabState
 } from './browser'
 
-export type AgentId = 'dave' | 'sammy' | 'kev' | 'bren'
+export type AgentId =
+  | 'dave'
+  | 'sammy'
+  | 'kev'
+  | 'bren'
+  | 'marlene'
+  | 'albert'
 
 export type AgentStatus =
   | 'idle'

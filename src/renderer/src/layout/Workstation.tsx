@@ -13,6 +13,7 @@ import { SettingsModal } from '../components/SettingsModal'
 import { useGitStatus } from '../hooks/useGitStatus'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { useAgentsState } from '../state/AgentsContext'
+import { useLayout, useVisibleAgents } from '../state/LayoutContext'
 
 const STORAGE_COLLAPSED = 'explorer.collapsed'
 const STORAGE_AGENT = 'explorer.selectedAgent'
@@ -37,7 +38,9 @@ function readString(key: string): string | null {
 }
 
 export function Workstation(): React.JSX.Element {
-  const { agents, reload } = useAgentsState()
+  const { reload } = useAgentsState()
+  const agents = useVisibleAgents()
+  const { showRightColumn } = useLayout()
   const gitStatus = useGitStatus()
   const { toggle: toggleMucka, restartVersion } = useMuckaSession()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -110,7 +113,7 @@ export function Workstation(): React.JSX.Element {
         style={{
           gridTemplateColumns: `${
             explorerCollapsed ? EXPLORER_WIDTH_COLLAPSED : EXPLORER_WIDTH_EXPANDED
-          } 2fr 1.1fr 1.2fr`,
+          } ${showRightColumn ? '2fr 1.1fr 1.2fr' : '3.2fr 1.1fr'}`,
           transition: 'grid-template-columns 180ms ease'
         }}
       >
@@ -127,7 +130,7 @@ export function Workstation(): React.JSX.Element {
           restartVersion={restartVersion}
         />
         <MiddleColumn />
-        <RightColumn />
+        {showRightColumn ? <RightColumn /> : null}
       </main>
 
       <SettingsModal

@@ -6,7 +6,7 @@ import type {
   VercelDeployment,
   VercelDeploymentState
 } from '@shared/types'
-import { useAgentsState } from '../state/AgentsContext'
+import { useVisibleAgents } from '../state/LayoutContext'
 import { useVercelState } from '../state/VercelContext'
 import { Clipboard } from './Clipboard'
 import { StatusPill, type StatusVariant } from './ui/StatusPill'
@@ -308,7 +308,7 @@ function VercelRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
 }
 
 export function VercelPanel(): React.JSX.Element {
-  const { agents } = useAgentsState()
+  const agents = useVisibleAgents()
   const { status, summaries, refresh } = useVercelState()
 
   const tokenMissing = status?.kind === 'missing-token'
