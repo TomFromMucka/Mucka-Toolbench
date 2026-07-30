@@ -65,39 +65,84 @@ function detectStatus(buffer: string): AgentStatus {
 }
 
 /**
- * Pull the context window % out of Claude Code's TUI footer. The
- * format has drifted slightly between TUI revisions, so try a few
- * shapes. Returns null when no plausible match is in the tail.
+ * Last capture-group match in the tail, or null. The status line redraws
+ * constantly, so the tail usually holds several stale copies — the last
+ * one is the current value.
  */
-function detectContextPercent(buffer: string): number | null {
-  const tail = buffer.slice(-SCAN_TAIL_BYTES)
-  const patterns: RegExp[] = [
-    /context\s+left\s+until\s+auto-compact[:\s]+(\d{1,3})\s*%/i,
-    /(\d{1,3})\s*%\s+context\s+(?:left|remaining)/i,
-    /context[:\s]+(\d{1,3})\s*%/i,
-    /(\d{1,3})\s*%\s*·?\s*context/i
-  ]
-  for (const re of patterns) {
-    const m = tail.match(re)
-    if (!m) continue
+function lastPercent(tail: string, re: RegExp): number | null {
+  let found: number | null = null
+  for (const m of tail.matchAll(re)) {
     const n = parseInt(m[1], 10)
-    if (Number.isFinite(n) && n >= 0 && n <= 100) return n
+    if (Number.isFinite(n) && n >= 0 && n <= 100) found = n
+  }
+  return found
+}
+
+/**
+ * Percent of the context window *consumed*.
+ *
+ * Claude Code's built-in footer counts down ("Context left until
+ * auto-compact: 87%") while a custom status line built on
+ * `.context_window.used_percentage` counts up ("ctx:27%"). Both are
+ * normalised to used here, so everything downstream reads one direction.
+ * Remaining-shaped patterns are tried first because they're the specific
+ * ones; the bare `context: N%` catch-all is read as used.
+ */
+function detectContextUsedPercent(buffer: string): number | null {
+  const tail = buffer.slice(-SCAN_TAIL_BYTES)
+  const remaining: RegExp[] = [
+    /context\s+left\s+until\s+auto-compact[:\s]+(\d{1,3})\s*%/gi,
+    /(\d{1,3})\s*%\s+context\s+(?:left|remaining)/gi
+  ]
+  for (const re of remaining) {
+    const n = lastPercent(tail, re)
+    if (n !== null) return 100 - n
+  }
+  const used: RegExp[] = [
+    /\bctx[:\s]\s*(\d{1,3})\s*%/gi,
+    /context\s+used[:\s]+(\d{1,3})\s*%/gi,
+    /context[:\s]+(\d{1,3})\s*%/gi
+  ]
+  for (const re of used) {
+    const n = lastPercent(tail, re)
+    if (n !== null) return n
   }
   return null
+}
+
+/**
+ * Model display name from the status line, e.g. "Opus 5 (1M context)".
+ *
+ * Anchored on the `[model] ctx:N%` pairing rather than matching any
+ * bracketed text — square brackets are far too common in TUI output to
+ * key off alone.
+ */
+const MODEL_PATTERN = /\[([^[\]]{2,48})\]\s*ctx[:\s]/gi
+
+function detectModel(buffer: string): string | null {
+  const tail = buffer.slice(-SCAN_TAIL_BYTES)
+  let found: string | null = null
+  for (const m of tail.matchAll(MODEL_PATTERN)) {
+    const label = m[1].trim()
+    if (label.length > 0) found = label
+  }
+  return found
 }
 
 interface Tracker {
   agentId: AgentId
   buffer: string
   status: AgentStatus
-  contextPercent: number | null
+  contextUsedPercent: number | null
+  model: string | null
   decayTimer: NodeJS.Timeout | null
 }
 
 export interface StatusEmit {
   agentId: AgentId
   status: AgentStatus
-  contextPercent: number | null
+  contextUsedPercent: number | null
+  model: string | null
 }
 
 export class StatusDetector {
@@ -121,10 +166,11 @@ export class StatusDetector {
       agentId,
       buffer: '',
       status: 'idle',
-      contextPercent: null,
+      contextUsedPercent: null,
+      model: null,
       decayTimer: null
     })
-    this.emit({ agentId, status: 'idle', contextPercent: null })
+    this.emit({ agentId, status: 'idle', contextUsedPercent: null, model: null })
   }
 
   ingest(terminalId: TerminalId, data: string): void {
@@ -135,16 +181,25 @@ export class StatusDetector {
     tracker.buffer = (tracker.buffer + stripped).slice(-TAIL_BYTES)
 
     const nextStatus = detectStatus(tracker.buffer)
-    const nextContext = detectContextPercent(tracker.buffer)
-    const statusChanged = nextStatus !== tracker.status
-    const contextChanged = nextContext !== tracker.contextPercent
-    if (statusChanged || contextChanged) {
+    const nextContext = detectContextUsedPercent(tracker.buffer)
+    // The status line scrolls out of the tail between redraws, so treat a
+    // miss as "no news" and keep the last known values rather than
+    // flickering the header chips off and on.
+    const nextModel = detectModel(tracker.buffer) ?? tracker.model
+    const resolvedContext = nextContext ?? tracker.contextUsedPercent
+    if (
+      nextStatus !== tracker.status ||
+      resolvedContext !== tracker.contextUsedPercent ||
+      nextModel !== tracker.model
+    ) {
       tracker.status = nextStatus
-      tracker.contextPercent = nextContext
+      tracker.contextUsedPercent = resolvedContext
+      tracker.model = nextModel
       this.emit({
         agentId: tracker.agentId,
         status: nextStatus,
-        contextPercent: nextContext
+        contextUsedPercent: resolvedContext,
+        model: nextModel
       })
     }
 
@@ -159,7 +214,8 @@ export class StatusDetector {
           this.emit({
             agentId: tracker.agentId,
             status: 'idle',
-            contextPercent: tracker.contextPercent
+            contextUsedPercent: tracker.contextUsedPercent,
+            model: tracker.model
           })
         }
         tracker.decayTimer = null
@@ -172,7 +228,12 @@ export class StatusDetector {
     if (!tracker) return
     if (tracker.decayTimer) clearTimeout(tracker.decayTimer)
     this.trackers.delete(terminalId)
-    this.emit({ agentId: tracker.agentId, status: 'idle', contextPercent: null })
+    this.emit({
+      agentId: tracker.agentId,
+      status: 'idle',
+      contextUsedPercent: null,
+      model: null
+    })
   }
 
   disposeAll(): void {

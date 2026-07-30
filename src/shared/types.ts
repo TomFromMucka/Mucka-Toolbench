@@ -230,11 +230,20 @@ export interface AgentStatusEvent {
   agentId: AgentId
   status: AgentStatus
   /**
-   * Context window usage Claude Code reports at the bottom of its TUI
-   * (`Context left until auto-compact: 87%`). Null when the agent isn't
-   * running Claude Code or the value isn't currently visible.
+   * Percent of the context window *consumed*, scraped from Claude Code's
+   * status line. Sources disagree on direction — the built-in footer says
+   * "Context left until auto-compact: 87%" (remaining) while a custom
+   * statusline emitting `.context_window.used_percentage` says "ctx:27%"
+   * (used) — so StatusDetector normalises both to used before emitting.
+   * Null when the agent isn't running Claude Code or nothing is visible.
    */
-  contextPercent?: number | null
+  contextUsedPercent?: number | null
+  /**
+   * Model display name as the status line reports it, e.g.
+   * "Opus 5 (1M context)". Null when not running Claude Code or the
+   * status line doesn't carry it.
+   */
+  model?: string | null
 }
 
 /* ─── Mucka PM agent ─────────────────────────────────────────────────── */

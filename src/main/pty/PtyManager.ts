@@ -52,7 +52,8 @@ export class PtyManager {
       const event: AgentStatusEvent = {
         agentId: emit.agentId,
         status: emit.status,
-        contextPercent: emit.contextPercent
+        contextUsedPercent: emit.contextUsedPercent,
+        model: emit.model
       }
       this.webContents.send('agent:status', event)
     })
