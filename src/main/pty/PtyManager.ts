@@ -2,6 +2,7 @@ import * as pty from 'node-pty'
 import type { IPty } from 'node-pty'
 import type { WebContents } from 'electron'
 import type {
+  AgentConfig,
   AgentId,
   AgentStatusEvent,
   PtyDataEvent,
@@ -19,13 +20,25 @@ interface TerminalPty {
   terminalId: TerminalId
   agentId: AgentId
   proc: IPty
+  /** What this proc was actually spawned with — see `spawn`. */
+  signature: string
+}
+
+/** Identifies the shell a spawn request is asking for. */
+function signatureFor(cfg: AgentConfig): string {
+  return JSON.stringify([cfg.command, cfg.args, cfg.worktreePath])
 }
 
 /**
  * Owns the live PTY processes — keyed by terminalId, not agentId, so a
- * single agent can host multiple sub-terminals. Spawn is idempotent: a
- * repeat call for the same terminalId tears down the previous proc and
- * starts a fresh one at the owning agent's current cwd.
+ * single agent can host multiple sub-terminals.
+ *
+ * Spawn is attach-or-create: a repeat call for a terminal already running
+ * the requested shell reattaches to it, and only a request for a
+ * *different* shell (the agent's command, args or cwd changed) tears the
+ * old proc down. Restarting is therefore an explicit act — `killByAgent`
+ * via the `agents:restart` IPC — not a side effect of the renderer
+ * remounting a clipboard.
  */
 export class PtyManager {
   private readonly ptys = new Map<TerminalId, TerminalPty>()
@@ -46,17 +59,28 @@ export class PtyManager {
   }
 
   spawn(req: PtySpawnRequest): void {
+    const cfg = getAgentConfig(req.agentId)
+    if (!cfg) throw new Error(`Unknown agent: ${req.agentId}`)
+
+    const signature = signatureFor(cfg)
     const existing = this.ptys.get(req.terminalId)
     if (existing) {
+      // The renderer remounts a terminal for purely visual reasons — a
+      // layout change, a tab reshuffle, dev-server HMR — and each mount
+      // asks to spawn. When the live shell is already the one being asked
+      // for, reattach: killing it here would drop a running Claude session
+      // on the floor. The renderer has replayed scrollback by this point,
+      // so all that's left is to match the new pane size.
+      if (existing.signature === signature) {
+        this.resize({ terminalId: req.terminalId, cols: req.cols, rows: req.rows })
+        return
+      }
       try {
         existing.proc.kill()
       } catch {
         /* already dead */
       }
     }
-
-    const cfg = getAgentConfig(req.agentId)
-    if (!cfg) throw new Error(`Unknown agent: ${req.agentId}`)
 
     const proc = pty.spawn(cfg.command, cfg.args, {
       name: 'xterm-256color',
@@ -74,7 +98,8 @@ export class PtyManager {
     const entry: TerminalPty = {
       terminalId: req.terminalId,
       agentId: req.agentId,
-      proc
+      proc,
+      signature
     }
 
     this.statusDetector.register(req.terminalId, req.agentId)

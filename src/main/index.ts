@@ -387,6 +387,31 @@ function registerIpc(): void {
     return getAgentConfig(agentId)
   })
 
+  /**
+   * Explicit restart: kill the agent's shells and mark it running, so the
+   * renderer's remount spawns fresh ones. Spawn reattaches to a matching
+   * live shell, so a remount alone no longer restarts anything — anybody
+   * who wants a fresh process has to come through here.
+   */
+  ipcMain.handle('agents:restart', async (_event, agentId: AgentId) => {
+    const current = getAgentConfig(agentId)
+    if (!current) throw new Error(`Unknown agent: ${agentId}`)
+    ptyManager?.killByAgent(agentId)
+    const ordered = listAgentsFromDb()
+    const sortOrder = ordered.findIndex((a) => a.id === agentId)
+    upsertAgent(
+      { ...current, running: true },
+      sortOrder < 0 ? ordered.length : sortOrder
+    )
+    logEvent({
+      source: agentId,
+      kind: 'agent.restart',
+      message: 'Shell restarted.',
+      tone: 'normal'
+    })
+    return getAgentConfig(agentId)
+  })
+
   ipcMain.handle('agents:stop', async (_event, agentId: AgentId) => {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)

@@ -493,6 +493,13 @@ export interface MuckaApi {
   startAgent(agentId: AgentId): Promise<AgentConfig>
   /** Kill the agent's primary + all sub-terminals, set `running` false. */
   stopAgent(agentId: AgentId): Promise<AgentConfig>
+  /**
+   * Kill the agent's shells and leave it running, so the next mount spawns
+   * fresh ones. Remounting alone reattaches — this is the only way to get a
+   * new process. Bump the agent's restart version afterwards to force that
+   * remount.
+   */
+  restartAgent(agentId: AgentId): Promise<AgentConfig>
   pickDirectory(opts?: { defaultPath?: string }): Promise<string | null>
   spawnPty(req: PtySpawnRequest): Promise<void>
   writePty(req: PtyWriteRequest): void
