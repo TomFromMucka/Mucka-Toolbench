@@ -29,18 +29,29 @@ interface AgentClipboardProps {
   agent: Agent
   config: AgentConfig
   gitStatus?: GitStatus
-  /** Claude Code's reported context window usage (0-100). */
-  contextPercent?: number | null
+  /** Percent of the context window consumed (0-100). */
+  contextUsedPercent?: number | null
+  /** Model display name from the status line, e.g. "Opus 5 (1M context)". */
+  model?: string | null
   /** Height within its column — driven by the header's min/mid/max control. */
   size?: PanelSize
   onResize?: (size: PanelSize) => void
+}
+
+/**
+ * "Opus 5 (1M context)" → "Opus 5". The parenthetical is the first thing
+ * to go when a six-up column is narrow; the full name stays in the title.
+ */
+function compactModel(model: string): string {
+  return model.replace(/\s*\([^)]*\)\s*$/, '').trim() || model
 }
 
 export function AgentClipboard({
   agent,
   config,
   gitStatus,
-  contextPercent,
+  contextUsedPercent,
+  model,
   size = 'mid',
   onResize
 }: AgentClipboardProps): React.JSX.Element {
@@ -58,23 +69,37 @@ export function AgentClipboard({
       size={size}
       onResize={onResize}
       rightSlot={
-        <span className="flex items-center gap-2">
+        <span className="flex min-w-0 items-center gap-2">
+          {config.running && model ? (
+            <span
+              className="chamfer-sm max-w-[9rem] truncate px-1.5 py-0.5 text-[0.65rem]"
+              title={`Claude Code model — ${model}`}
+              style={{
+                background: 'rgba(234, 233, 232, 0.10)',
+                color: 'rgba(234, 233, 232, 0.85)'
+              }}
+            >
+              {compactModel(model)}
+            </span>
+          ) : null}
           {config.running &&
-          typeof contextPercent === 'number' &&
-          contextPercent >= 0 ? (
+          typeof contextUsedPercent === 'number' &&
+          contextUsedPercent >= 0 ? (
             <span
               className="chamfer-sm px-1.5 py-0.5 font-mono tabular-nums text-[0.65rem]"
-              title={`Claude Code context window — ${contextPercent}% remaining`}
+              title={`Claude Code context window — ${contextUsedPercent}% used, ${100 - contextUsedPercent}% left`}
               style={{
                 background:
-                  contextPercent <= 50
+                  contextUsedPercent >= 50
                     ? 'rgba(255, 90, 74, 0.22)'
                     : 'rgba(234, 233, 232, 0.10)',
                 color:
-                  contextPercent <= 50 ? 'var(--orange)' : 'rgba(234, 233, 232, 0.85)'
+                  contextUsedPercent >= 50
+                    ? 'var(--orange)'
+                    : 'rgba(234, 233, 232, 0.85)'
               }}
             >
-              ctx {contextPercent}%
+              ctx {contextUsedPercent}%
             </span>
           ) : null}
           <span className="flex items-center gap-1.5">

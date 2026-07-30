@@ -91,7 +91,7 @@ export function AgentGrid({
   restartVersion
 }: AgentGridProps): React.JSX.Element {
   const { events } = useEventsState()
-  const { statusFor, contextPercentFor } = useAgentStatuses()
+  const { statusFor, contextUsedPercentFor, modelFor } = useAgentStatuses()
   const { agentColumns } = useLayout()
   const list: AgentConfig[] =
     agents.length > 0
@@ -114,7 +114,8 @@ export function AgentGrid({
     agent: Agent
     config: AgentConfig
     gitStatus: GitStatus | undefined
-    contextPercent: number | null
+    contextUsedPercent: number | null
+    model: string | null
     key: string
   }
 
@@ -125,7 +126,8 @@ export function AgentGrid({
       agent: buildAgent(cfg, findLatestForAgent(events, cfg.id), liveStatus),
       config: cfg,
       gitStatus: gitStatus[cfg.id],
-      contextPercent: contextPercentFor(cfg.id),
+      contextUsedPercent: contextUsedPercentFor(cfg.id),
+      model: modelFor(cfg.id),
       key: `${spawnKey(cfg)}::r${restartVersion[cfg.id] ?? 0}`
     }
   }

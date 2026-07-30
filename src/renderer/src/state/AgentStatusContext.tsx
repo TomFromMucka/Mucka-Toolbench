@@ -3,12 +3,17 @@ import type { AgentId, AgentStatus, AgentStatusEvent } from '@shared/types'
 
 type StatusMap = Partial<Record<AgentId, AgentStatus>>
 type ContextMap = Partial<Record<AgentId, number | null>>
+type ModelMap = Partial<Record<AgentId, string | null>>
 
 interface AgentStatusValue {
   statuses: StatusMap
-  contextPercents: ContextMap
+  contextUsedPercents: ContextMap
+  models: ModelMap
   statusFor: (agentId: AgentId) => AgentStatus
-  contextPercentFor: (agentId: AgentId) => number | null
+  /** Percent of the context window consumed — see AgentStatusEvent. */
+  contextUsedPercentFor: (agentId: AgentId) => number | null
+  /** Model display name from the status line, e.g. "Opus 5 (1M context)". */
+  modelFor: (agentId: AgentId) => string | null
 }
 
 const Ctx = createContext<AgentStatusValue | null>(null)
@@ -19,7 +24,8 @@ export function AgentStatusProvider({
   children: React.ReactNode
 }): React.JSX.Element {
   const [statuses, setStatuses] = useState<StatusMap>({})
-  const [contextPercents, setContextPercents] = useState<ContextMap>({})
+  const [contextUsedPercents, setContextUsedPercents] = useState<ContextMap>({})
+  const [models, setModels] = useState<ModelMap>({})
 
   useEffect(() => {
     const api = window.mucka
@@ -30,11 +36,17 @@ export function AgentStatusProvider({
           ? prev
           : { ...prev, [event.agentId]: event.status }
       )
-      const nextCtx = event.contextPercent ?? null
-      setContextPercents((prev) =>
+      const nextCtx = event.contextUsedPercent ?? null
+      setContextUsedPercents((prev) =>
         prev[event.agentId] === nextCtx
           ? prev
           : { ...prev, [event.agentId]: nextCtx }
+      )
+      const nextModel = event.model ?? null
+      setModels((prev) =>
+        prev[event.agentId] === nextModel
+          ? prev
+          : { ...prev, [event.agentId]: nextModel }
       )
     })
   }, [])
@@ -42,12 +54,14 @@ export function AgentStatusProvider({
   const value = useMemo<AgentStatusValue>(
     () => ({
       statuses,
-      contextPercents,
+      contextUsedPercents,
+      models,
       statusFor: (agentId: AgentId): AgentStatus => statuses[agentId] ?? 'idle',
-      contextPercentFor: (agentId: AgentId): number | null =>
-        contextPercents[agentId] ?? null
+      contextUsedPercentFor: (agentId: AgentId): number | null =>
+        contextUsedPercents[agentId] ?? null,
+      modelFor: (agentId: AgentId): string | null => models[agentId] ?? null
     }),
-    [statuses, contextPercents]
+    [statuses, contextUsedPercents, models]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

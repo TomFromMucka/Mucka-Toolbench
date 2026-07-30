@@ -22,7 +22,8 @@ interface AgentSlot {
   agent: Agent
   config: AgentConfig
   gitStatus?: GitStatus
-  contextPercent: number | null
+  contextUsedPercent: number | null
+  model: string | null
   /** Stable React key — usually `spawnKey(cfg)::r${restartVersion}`. */
   key: string
 }
@@ -54,7 +55,8 @@ export function AgentColumnStack({
           agent={top.agent}
           config={top.config}
           gitStatus={top.gitStatus}
-          contextPercent={top.contextPercent}
+          contextUsedPercent={top.contextUsedPercent}
+          model={top.model}
           size={sizes[0]}
           onResize={setTop}
         />
@@ -67,7 +69,8 @@ export function AgentColumnStack({
           agent={bottom.agent}
           config={bottom.config}
           gitStatus={bottom.gitStatus}
-          contextPercent={bottom.contextPercent}
+          contextUsedPercent={bottom.contextUsedPercent}
+          model={bottom.model}
           size={sizes[1]}
           onResize={setBottom}
         />

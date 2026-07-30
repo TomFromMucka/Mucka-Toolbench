@@ -36,6 +36,12 @@ or "Tom, eyes here".
 - Status pill (top-right of each clipboard) flips between
   `idle` / `thinking` / `awaits Tom` based on Claude Code TUI cues
   parsed from the PTY (`esc to interrupt`, permission prompts).
+- Model + context chips sit alongside the pill, scraped from Claude
+  Code's status line — so the two things worth knowing at a glance
+  survive a terminal too narrow to show the status line itself. The
+  model name drops its parenthetical to fit (`Opus 5 (1M context)` →
+  `Opus 5`, full name on hover); `ctx` counts *up* as the window fills
+  and turns orange past 50%.
 - Attention glow: orange ring + chime + macOS dock bounce/badge
   whenever `needsAttention` flips true on any agent.
 - Per-agent headline below the clip header — latest job-sheet event
@@ -116,7 +122,15 @@ comes from the explicit `restartAgent` IPC.
 4KB ANSI-stripped buffer per primary terminal. Heuristic state
 detection: `esc to interrupt` → thinking; `Do you want to proceed`,
 `❯ 1.`, `Trust the files…` → awaiting-input. 2s silence → decay to
-idle.
+idle. Also scrapes the status line for the model name (anchored on the
+`[model] ctx:N%` pairing, since bare brackets are everywhere in TUI
+output) and context usage. Context sources disagree on direction — the
+built-in footer counts *down* (`Context left until auto-compact: 87%`)
+while a statusline built on `.context_window.used_percentage` counts
+*up* (`ctx:27%`) — so both normalise to **used** before emitting. The
+status line redraws constantly, so the last match in the buffer wins
+and a frame without one keeps the previous value rather than flickering
+the chips.
 
 **Database (`src/main/db`).** better-sqlite3, migrated idempotently
 on boot. Tables: `agents`, `kv` (notes), `events` (job sheet, capped
@@ -193,6 +207,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-07-30** — Model + context chips in the agent header. A
+  toolbench terminal is too narrow to show Claude Code's status line, so
+  the two things worth knowing at a glance are lifted into the clipboard
+  header instead. The existing `ctx` chip never populated because every
+  pattern required the literal word "context" and a custom statusline
+  emits `ctx:27%`; that percentage is also *used*, not remaining, so the
+  chip's colour rule was inverted. Both fixed, and everything now
+  normalises to used.
 - **2026-07-30** — Terminals reattach instead of restarting. `spawnPty`
   used to kill whatever it found and start a fresh shell, so every
   renderer remount — layout change, tab reshuffle, dev HMR — silently
