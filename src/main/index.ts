@@ -82,6 +82,7 @@ import {
   unbindMuckaTextBroadcaster
 } from './mucka/MuckaTextAgent'
 import { PtyManager } from './pty/PtyManager'
+import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
@@ -172,6 +173,7 @@ import type {
 const NOTES_KEY = 'notes'
 
 let ptyManager: PtyManager | null = null
+let claudeStateWatcher: ClaudeStateWatcher | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
@@ -234,6 +236,13 @@ function createWindow(): void {
   mainWindowRef = mainWindow
   installInputContextMenu(mainWindow.webContents)
   ptyManager = new PtyManager(mainWindow.webContents)
+  // Claude Code reports its own activity + model + context usage through
+  // ~/.claude/mucka-agent-state.sh; the stream can't be read reliably.
+  claudeStateWatcher = new ClaudeStateWatcher((event) => {
+    if (mainWindow.webContents.isDestroyed()) return
+    mainWindow.webContents.send('agent:status', event)
+  }, getAgentConfigs)
+  claudeStateWatcher.start()
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
@@ -274,6 +283,8 @@ function createWindow(): void {
     unbindBrowserManager()
     ptyManager?.killAll()
     ptyManager = null
+    claudeStateWatcher?.dispose()
+    claudeStateWatcher = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {
       app.dock.setBadge('')
@@ -416,6 +427,7 @@ function registerIpc(): void {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)
     ptyManager?.killByAgent(agentId)
+    claudeStateWatcher?.clear(agentId)
     if (current.running) {
       const ordered = listAgentsFromDb()
       const sortOrder = ordered.findIndex((a) => a.id === agentId)

@@ -34,11 +34,12 @@ or "Tom, eyes here".
   preview tab and spawn a fresh one that auto-types `npm run dev` and
   binds the detected `http://localhost:N` URL to the preview iframe.
 - Status pill (top-right of each clipboard) flips between
-  `idle` / `thinking` / `awaits Tom` based on Claude Code TUI cues
-  parsed from the PTY (`esc to interrupt`, permission prompts).
-- Model + context chips sit alongside the pill, scraped from Claude
-  Code's status line — so the two things worth knowing at a glance
-  survive a terminal too narrow to show the status line itself. The
+  `idle` / `thinking` / `awaits Tom`, driven by what Claude Code reports
+  about itself (see *Claude state* under Systems) rather than by reading
+  the terminal.
+- Model + context chips sit alongside the pill, reported by Claude Code
+  itself — so the two things worth knowing at a glance survive a terminal
+  too narrow to show the status line itself. The
   model name drops its parenthetical to fit (`Opus 5 (1M context)` →
   `Opus 5`, full name on hover); `ctx` counts *up* as the window fills
   and turns orange past 50%.
@@ -118,19 +119,26 @@ when they match so a remount can't restart a live session, and
 respawning when a config edit changed them. A genuinely fresh process
 comes from the explicit `restartAgent` IPC.
 
-**StatusDetector (`src/main/pty/StatusDetector.ts`).** Sliding
-4KB ANSI-stripped buffer per primary terminal. Heuristic state
-detection: `esc to interrupt` → thinking; `Do you want to proceed`,
-`❯ 1.`, `Trust the files…` → awaiting-input. 2s silence → decay to
-idle. Also scrapes the status line for the model name (anchored on the
-`[model] ctx:N%` pairing, since bare brackets are everywhere in TUI
-output) and context usage. Context sources disagree on direction — the
-built-in footer counts *down* (`Context left until auto-compact: 87%`)
-while a statusline built on `.context_window.used_percentage` counts
-*up* (`ctx:27%`) — so both normalise to **used** before emitting. The
-status line redraws constantly, so the last match in the buffer wins
-and a frame without one keeps the previous value rather than flickering
-the chips.
+**Claude state (`src/main/claude/ClaudeStateWatcher.ts`).** Claude Code
+reports on itself rather than the cockpit guessing. `~/.claude/mucka-agent-state.sh`
+is wired into the statusline (which receives `.model.display_name` and
+`.context_window.used_percentage` as JSON on every render) and into the
+UserPromptSubmit / Notification / Stop / SessionEnd hooks, and merges both
+into one JSON file per worktree under `~/.claude/mucka-state/`. Main
+watches that directory and emits `agent:status` as before.
+
+Bindings are exact where possible: the cockpit exports `MUCKA_AGENT` into
+each PTY, so a Claude it launched names its own agent. Sessions started
+elsewhere fall back to longest-prefix cwd matching, and an agent still
+pointed at `$HOME` is skipped so it can't claim every unrelated session.
+A `working` claim older than 90s is treated as idle, since a Claude killed
+mid-turn never fires Stop.
+
+This replaced heuristic scraping of the PTY stream, which could not work:
+the TUI redraws in place, so the stream holds interleaved fragments
+(`✻di113 tokens`, `✻ethinking`) and `esc to interrupt` appeared **zero**
+times across four real scrollback buffers — which is why the status pill
+sat on `idle` forever and Mucka's witnessed reply loop never fired.
 
 **Database (`src/main/db`).** better-sqlite3, migrated idempotently
 on boot. Tables: `agents`, `kv` (notes), `events` (job sheet, capped
@@ -207,6 +215,15 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-07-30** — Agent status actually works, and a waiting roll-call
+  in the banner. Status came from pattern-matching the PTY stream, which
+  cannot work against a TUI that redraws in place — `esc to interrupt`
+  appears zero times in real scrollback, so every agent read `idle`
+  forever (and Mucka's witnessed reply loop, which keys off busy →
+  finished, never fired). Claude Code now reports its own activity, model
+  and context through a statusline + hooks recorder; the cockpit watches
+  the files. The banner names whoever is waiting on Tom, since a glow on
+  one of six panels is easy to miss on an ultrawide.
 - **2026-07-30** — Model + context chips in the agent header. A
   toolbench terminal is too narrow to show Claude Code's status line, so
   the two things worth knowing at a glance are lifted into the clipboard

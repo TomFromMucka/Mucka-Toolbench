@@ -1,4 +1,5 @@
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
+import { AttentionRollCall } from './AttentionRollCall'
 
 interface MuckaTopBannerProps {
   onOpenSettings: () => void
@@ -66,6 +67,8 @@ export function MuckaTopBanner({
           <span style={{ fontWeight: 500 }}>{line}</span>
         </p>
       </div>
+
+      <AttentionRollCall />
 
       <button
         type="button"

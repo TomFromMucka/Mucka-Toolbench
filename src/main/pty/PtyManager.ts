@@ -4,7 +4,6 @@ import type { WebContents } from 'electron'
 import type {
   AgentConfig,
   AgentId,
-  AgentStatusEvent,
   PtyDataEvent,
   PtyExitEvent,
   PtyResizeRequest,
@@ -14,7 +13,6 @@ import type {
 } from '@shared/types'
 import { getAgentConfig } from '../config/agents'
 import { scrollback } from '../scrollback/Scrollback'
-import { StatusDetector } from './StatusDetector'
 
 interface TerminalPty {
   terminalId: TerminalId
@@ -43,20 +41,9 @@ function signatureFor(cfg: AgentConfig): string {
 export class PtyManager {
   private readonly ptys = new Map<TerminalId, TerminalPty>()
   private readonly webContents: WebContents
-  private readonly statusDetector: StatusDetector
 
   constructor(webContents: WebContents) {
     this.webContents = webContents
-    this.statusDetector = new StatusDetector((emit) => {
-      if (this.webContents.isDestroyed()) return
-      const event: AgentStatusEvent = {
-        agentId: emit.agentId,
-        status: emit.status,
-        contextUsedPercent: emit.contextUsedPercent,
-        model: emit.model
-      }
-      this.webContents.send('agent:status', event)
-    })
   }
 
   spawn(req: PtySpawnRequest): void {
@@ -103,12 +90,9 @@ export class PtyManager {
       signature
     }
 
-    this.statusDetector.register(req.terminalId, req.agentId)
-
     proc.onData((data) => {
       if (this.ptys.get(req.terminalId)?.proc !== proc) return
       scrollback.append(req.terminalId, data)
-      this.statusDetector.ingest(req.terminalId, data)
       if (this.webContents.isDestroyed()) return
       const event: PtyDataEvent = { terminalId: req.terminalId, data }
       this.webContents.send('pty:data', event)
@@ -119,7 +103,6 @@ export class PtyManager {
       const isCurrent = current?.proc === proc
       if (isCurrent) {
         this.ptys.delete(req.terminalId)
-        this.statusDetector.release(req.terminalId)
       }
       if (this.webContents.isDestroyed() || !isCurrent) return
       const event: PtyExitEvent = {
@@ -158,7 +141,6 @@ export class PtyManager {
       /* already dead */
     }
     this.ptys.delete(terminalId)
-    this.statusDetector.release(terminalId)
   }
 
   /**
@@ -182,6 +164,5 @@ export class PtyManager {
     for (const id of [...this.ptys.keys()]) {
       this.kill(id)
     }
-    this.statusDetector.disposeAll()
   }
 }
