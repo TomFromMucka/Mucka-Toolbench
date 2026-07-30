@@ -189,6 +189,14 @@ in sync with reality without anyone having to remember to "tell" her.
   `src/main` and reach the renderer only through preload-exposed,
   contextBridge-typed APIs. The renderer process is sandbox-adjacent and
   must stay simple.
+- **Never infer agent state by reading the PTY stream.** Claude Code's
+  TUI redraws in place, so the stream is interleaved fragments — cues
+  like `esc to interrupt` never appear contiguously (zero matches across
+  four real scrollback buffers). Anything you want to know about a
+  running Claude comes from `~/.claude/mucka-agent-state.sh`, which the
+  statusline and the UserPromptSubmit / Notification / Stop hooks feed,
+  and which `ClaudeStateWatcher` reads. Extend that instead of adding
+  another regex.
 - **`spawnPty` is attach-or-create, and restarting is explicit.**
   `PtyManager.spawn` compares the request against the live proc's
   signature (command + args + cwd): same shell → reattach and resize;
