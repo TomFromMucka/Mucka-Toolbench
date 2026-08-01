@@ -215,6 +215,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-08-01** — Releases stopped half-publishing. electron-builder
+  runs a publisher per artifact and they raced to create the GitHub
+  release; the loser 422'd and aborted the run, killing the in-flight
+  180MB zip while the small blockmap had already uploaded. Twice that
+  shipped a release the updater could see but not download.
+  `release:mac` now creates the release up front and verifies the zip +
+  latest-mac.yml are actually present before declaring success, since
+  electron-builder exits 0 on a partial upload.
 - **2026-07-30** — Agent status actually works, and a waiting roll-call
   in the banner. Status came from pattern-matching the PTY stream, which
   cannot work against a TUI that redraws in place — `esc to interrupt`
