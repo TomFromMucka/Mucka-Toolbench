@@ -16,7 +16,8 @@ import type {
   MicAccess,
   MuckaChatMessage,
   MuckaSessionState,
-  MuckaStatus
+  MuckaStatus,
+  SentryIssue
 } from '@shared/types'
 import type { ClientTools } from '@elevenlabs/react'
 import { useAgentsState } from '../state/AgentsContext'
@@ -42,6 +43,37 @@ async function deliverAgentReply(agentId: AgentId, body: string): Promise<void> 
     } catch {
       // PM busy mid-reply — wait and retry.
       await new Promise((r) => setTimeout(r, 1500))
+    }
+  }
+}
+
+/**
+ * Hand one Sentry issue to the PM as a triage turn. Same framing trick as
+ * the agent reply above — it reads as ambient context she was handed, not
+ * something Tom typed.
+ */
+async function deliverSentryIssue(issue: SentryIssue): Promise<void> {
+  const users =
+    issue.userCount > 0
+      ? `${issue.userCount} user${issue.userCount === 1 ? '' : 's'} affected`
+      : 'no users affected'
+  const msg =
+    `⟢ New Sentry issue — triage it.\n\n` +
+    `${issue.shortId} [${issue.project}] ${issue.title}\n` +
+    `${issue.level}${issue.category ? ` · ${issue.category}` : ''} · ${issue.count} event${
+      issue.count === 1 ? '' : 's'
+    } · ${users}\n` +
+    `${issue.detail ? `${issue.detail}\n` : ''}${issue.permalink}\n\n` +
+    '(Pull the detail with get_sentry_issue, then rule on it with triage_sentry_issue — ' +
+    'every issue ends in ticket, noise or watch. Write the card first when it\'s a ticket ' +
+    'and pass its id. Keep what you say to Tom to a line.)'
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      await window.mucka.sendChatMessage(msg)
+      return
+    } catch {
+      // PM busy mid-reply — wait and retry.
+      await new Promise((r) => setTimeout(r, 2000))
     }
   }
 }
@@ -201,6 +233,58 @@ function InnerProvider({
           /* best-effort */
         })
     })
+  }, [])
+
+  // Sentry triage queue. Issues arrive from the main-process poller (and a
+  // backlog can be waiting at boot if the cockpit was closed), so they're
+  // drained strictly one at a time — a parallel fan-out would have her
+  // triaging four issues in four interleaved turns.
+  useEffect(() => {
+    const queue: SentryIssue[] = []
+    let draining = false
+    let cancelled = false
+
+    const drain = async (): Promise<void> => {
+      if (draining) return
+      draining = true
+      try {
+        while (queue.length > 0 && !cancelled) {
+          const issue = queue.shift()
+          if (!issue) break
+          await deliverSentryIssue(issue)
+        }
+      } finally {
+        draining = false
+      }
+    }
+
+    const enqueue = (issue: SentryIssue): void => {
+      if (queue.some((q) => q.id === issue.id)) return
+      queue.push(issue)
+      void drain()
+    }
+
+    // Anything the poller recorded while the window was closed (or before
+    // this effect mounted) is still sitting untriaged in sqlite.
+    void window.mucka
+      .listUntriagedSentry()
+      .then(async (pending) => {
+        if (cancelled || pending.length === 0) return
+        const live = await window.mucka.listSentryIssues()
+        for (const row of pending) {
+          const issue = live.find((i) => i.id === row.issueId)
+          if (issue) enqueue(issue)
+        }
+      })
+      .catch(() => {
+        /* best-effort */
+      })
+
+    const off = window.mucka.onSentryNewIssue((event) => enqueue(event.issue))
+    return () => {
+      cancelled = true
+      off()
+    }
   }, [])
 
   const conversation = useConversation({

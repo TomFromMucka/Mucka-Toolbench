@@ -9,6 +9,9 @@ import type {
   MemoryType,
   RoadmapCard,
   RoadmapColumn,
+  SentryIssue,
+  SentryTriage,
+  SentryVerdict,
   VercelAgentSummary,
   VercelDeployment
 } from '@shared/types'
@@ -670,6 +673,111 @@ function describeCardLine(card: RoadmapCard): string {
   return `  • ${card.title}${tagPart}\n    id: ${card.id}${bodyExcerpt}`
 }
 
+/* ─── Sentry triage ──────────────────────────────────────────────────── */
+
+function describeSentryIssue(issue: SentryIssue, triaged?: SentryTriage | null): string {
+  const users = issue.userCount > 0 ? `${issue.userCount} users` : 'no users'
+  const verdict = triaged?.verdict ? ` — already triaged: ${triaged.verdict}` : ''
+  return (
+    `${issue.shortId} [${issue.project}] ${issue.title}` +
+    ` (${issue.level}${issue.category ? `/${issue.category}` : ''}, ` +
+    `${issue.count} events, ${users}, first seen ${new Date(issue.firstSeen).toISOString().slice(0, 16).replace('T', ' ')})${verdict}`
+  )
+}
+
+/** Match on either the numeric id or the human short id ("MUCKA-WEB-38"). */
+async function resolveSentryIssue(params: Record<string, unknown>): Promise<SentryIssue> {
+  const raw = parseString(params, 'issue').trim()
+  if (!raw) throw new Error('issue must not be empty')
+  const issues = await window.mucka.listSentryIssues()
+  const match = issues.find(
+    (i) => i.id === raw || i.shortId.toLowerCase() === raw.toLowerCase()
+  )
+  // Fall back to a direct fetch — an archived or older issue won't be in
+  // the poller's unresolved cache, but Tom can still ask about it by id.
+  return match ?? (await window.mucka.getSentryIssue(raw))
+}
+
+async function listSentryIssuesHandler(): Promise<string> {
+  const status = await window.mucka.getSentryStatus()
+  if (status.kind !== 'ok') {
+    return status.kind === 'missing-token'
+      ? 'Sentry has no auth token — Tom needs to add one in Settings → API Keys.'
+      : 'Sentry has no organisation slug set — Settings → API Keys.'
+  }
+  const [issues, untriaged] = await Promise.all([
+    window.mucka.listSentryIssues(),
+    window.mucka.listUntriagedSentry()
+  ])
+  if (issues.length === 0) return 'Sentry is clean — nothing unresolved.'
+  const pending = new Set(untriaged.map((t) => t.issueId))
+  const lines = issues.map(
+    (i) => `${pending.has(i.id) ? '· [awaiting triage] ' : '· '}${describeSentryIssue(i)}`
+  )
+  return `${issues.length} unresolved:\n${lines.join('\n')}`
+}
+
+async function getSentryIssueHandler(params: Record<string, unknown>): Promise<string> {
+  const issue = await resolveSentryIssue(params)
+  const lines = [
+    describeSentryIssue(issue),
+    issue.detail ? `message: ${issue.detail}` : null,
+    issue.culprit ? `culprit: ${issue.culprit}` : null,
+    `unhandled: ${issue.isUnhandled ? 'yes' : 'no'}`,
+    issue.priority ? `priority: ${issue.priority}` : null,
+    `last seen: ${new Date(issue.lastSeen).toISOString().slice(0, 16).replace('T', ' ')}`,
+    issue.permalink
+  ].filter((l): l is string => l !== null)
+  return lines.join('\n')
+}
+
+function parseVerdict(raw: unknown): SentryVerdict {
+  if (raw === 'ticket' || raw === 'noise' || raw === 'watch') return raw
+  throw new Error(`verdict must be one of ticket, noise, watch — got ${JSON.stringify(raw)}`)
+}
+
+function makeTriageSentryIssue() {
+  return async (params: Record<string, unknown>): Promise<string> => {
+    const issue = await resolveSentryIssue(params)
+    const verdict = parseVerdict(params['verdict'])
+    const reason = parseString(params, 'reason').trim()
+    if (!reason) throw new Error('reason must not be empty')
+    const cardId =
+      typeof params['card_id'] === 'string' && params['card_id'].trim().length > 0
+        ? (params['card_id'] as string).trim()
+        : null
+
+    // The one hard rail on an auto-executing outward write: anything with
+    // real users behind it or flagged high priority never gets archived on
+    // a judgement call, however confident she is.
+    if (verdict === 'noise' && (issue.userCount > 0 || issue.priority === 'high')) {
+      return (
+        `Refused: ${issue.shortId} has ${issue.userCount} users affected` +
+        `${issue.priority === 'high' ? ' and is high priority' : ''}, so it can't be archived as noise. ` +
+        'Open a card and triage it as a ticket instead.'
+      )
+    }
+
+    if (verdict === 'noise') {
+      await window.mucka.archiveSentryIssue(issue.id)
+    }
+    // Main logs the job-sheet line — the record and the audit trail land
+    // together rather than depending on two renderer calls both landing.
+    await window.mucka.recordSentryTriage({
+      issueId: issue.id,
+      verdict,
+      reason,
+      cardId
+    })
+
+    if (verdict === 'noise') return `${issue.shortId} archived in Sentry — ${reason}`
+    if (verdict === 'ticket') {
+      return `${issue.shortId} logged as a ticket${cardId ? ` (card ${cardId})` : ''} — ${reason}`
+    }
+    return `${issue.shortId} left open and marked watch — ${reason}`
+  }
+}
+
 async function listRoadmapHandler(): Promise<string> {
   const cards = await window.mucka.listRoadmap()
   if (cards.length === 0) return 'Roadmap is empty.'
@@ -974,6 +1082,10 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     post_pr_review: makePostPrReview(deps),
     deploy_to_vercel: makeDeployToVercel(deps),
     open_pr: makeOpenPr(deps),
+
+    list_sentry_issues: () => listSentryIssuesHandler(),
+    get_sentry_issue: (params) => getSentryIssueHandler(params),
+    triage_sentry_issue: makeTriageSentryIssue(),
 
     list_roadmap: () => listRoadmapHandler(),
     create_roadmap_card: (params) => createRoadmapCardHandler(params),

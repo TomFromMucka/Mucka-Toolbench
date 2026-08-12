@@ -86,13 +86,14 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (37).**
+**Mucka tools (40).**
 
 Read-only (auto-execute):
 - `list_agents`, `get_git_status`, `get_recent_output`,
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
   `get_pr_status`, `get_cockpit_doc`, `get_product_doc`,
-  `list_memories`, `get_memory`, `list_roadmap`, `read_pr_diff`.
+  `list_memories`, `get_memory`, `list_roadmap`, `read_pr_diff`,
+  `list_sentry_issues`, `get_sentry_issue`.
 - Plus the SDK's built-in `WebSearch` / `WebFetch` in text mode, so
   Mucka can research a ticket before writing it. Everything else
   built-in (Bash, Read, Write…) is still denied.
@@ -100,7 +101,8 @@ Read-only (auto-execute):
 Chrome writes (auto-execute):
 - `set_banner_status`, `append_note`, `flag_attention`,
   `clear_attention`, `set_agent_preview`, `remember`, `start_agent`,
-  `create_roadmap_card`, `update_roadmap_card`, `move_roadmap_card`.
+  `create_roadmap_card`, `update_roadmap_card`, `move_roadmap_card`,
+  `triage_sentry_issue`.
 
 Confirm-gated:
 - `set_agent_worktree`, `set_agent_command`, `restart_agent`,
@@ -222,6 +224,19 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-08-13** — Sentry issues triage themselves. A `SentryPoller`
+  checks the org every five minutes, records anything new in sqlite
+  (dedupe by issue id, so restarts can't re-report) and hands it to
+  Mucka as a triage turn. She pulls the detail, then rules: *ticket*
+  (writes a roadmap card, which already has a Send-to-worktree button),
+  *noise* (archives it in Sentry), or *watch* (left alone so it comes
+  back if it escalates). Auto-executes with no confirm strip — the
+  guard is in code, not the prompt: anything with users affected or
+  high priority can't be archived, and every verdict lands on the job
+  sheet with the permalink. Token, org slug and **region URL** go in
+  Settings → API Keys; the region is the trap, since an EU org 404s
+  every call against sentry.io and it reads as a bad token.
 
 - **2026-08-12** — Tickets became launch prompts. An open roadmap card
   now has a **Send to worktree** button: pick an agent from the
