@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
-import { ImagePlus, Pencil, Trash2, X } from 'lucide-react'
+import { ChevronUp, ImagePlus, Pencil, Send, Trash2, X } from 'lucide-react'
 import type {
+  AgentConfig,
   RoadmapCard,
   RoadmapColumn,
   RoadmapCreateInput,
   RoadmapUpdateInput
 } from '@shared/types'
+import { useAgentsState } from '../state/AgentsContext'
+import { useVisibleAgents } from '../state/LayoutContext'
+import { useMuckaSession } from '../mucka/MuckaSessionContext'
+import { launchClaudeWithPrompt } from '../mucka/dispatch'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
 
@@ -57,8 +62,13 @@ export function RoadmapCardModal({
   const [tagsRaw, setTagsRaw] = useState(card?.tags.join(', ') ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dispatchTo, setDispatchTo] = useState<AgentConfig | null>(null)
   const titleRef = useRef<HTMLInputElement | null>(null)
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const agents = useVisibleAgents()
+  const { reload: reloadAgents } = useAgentsState()
+  const { bumpRestart } = useMuckaSession()
 
   // In create mode, pre-generate the card id client-side so any images
   // attached before the first save land in the right per-card folder.
@@ -76,6 +86,7 @@ export function RoadmapCardModal({
     setTagsRaw(card?.tags.join(', ') ?? '')
     setError(null)
     setBusy(false)
+    setDispatchTo(null)
     if (!card) setCreateId(crypto.randomUUID())
   }, [open, card, defaultColumn, initialMode])
 
@@ -228,6 +239,42 @@ export function RoadmapCardModal({
     [handlePickFiles]
   )
 
+  const handleDispatch = useCallback(
+    async (agent: AgentConfig): Promise<void> => {
+      if (!card) return
+      if (agent.running) {
+        const ok = window.confirm(
+          `${agent.displayName} is already running.\n\nSending this ticket restarts their shell — anything live in that session is lost. Carry on?`
+        )
+        if (!ok) return
+      }
+      setError(null)
+      setBusy(true)
+      setDispatchTo(agent)
+      try {
+        await launchClaudeWithPrompt({
+          agentId: agent.id,
+          prompt: buildLaunchPrompt(card),
+          reloadAgents,
+          bumpRestart
+        })
+        // Sending a ticket to a worktree is the moment it starts, so the
+        // lane follows. Shipped/doing cards stay where Tom put them.
+        if (card.column === 'backlog' || card.column === 'next' || card.column === 'parked') {
+          await window.mucka.moveRoadmapCard({ id: card.id, column: 'doing' })
+        }
+        onClose()
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        setError(`Couldn't send to ${agent.displayName}: ${message}`)
+      } finally {
+        setBusy(false)
+        setDispatchTo(null)
+      }
+    },
+    [bumpRestart, card, onClose, reloadAgents]
+  )
+
   const handleDelete = useCallback(async (): Promise<void> => {
     if (!card) return
     const ok = window.confirm(`Delete this card?\n\n${card.title}`)
@@ -354,18 +401,26 @@ export function RoadmapCardModal({
                 size="sm"
                 trailingIcon={null}
                 onClick={onClose}
+                disabled={busy}
               >
                 Close
               </Button>
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 leadingIcon={Pencil}
                 trailingIcon={null}
                 onClick={() => setMode('edit')}
+                disabled={busy}
               >
                 Edit
               </Button>
+              <SendToWorktree
+                agents={agents}
+                busy={busy}
+                sendingTo={dispatchTo}
+                onSend={(agent) => void handleDispatch(agent)}
+              />
             </>
           ) : (
             <>
@@ -658,4 +713,179 @@ function Field({
 
 function columnLabel(col: RoadmapColumn): string {
   return COLUMNS.find((c) => c.id === col)?.label ?? col
+}
+
+/**
+ * The ticket, as the agent will read it. Deliberately verbatim — Mucka
+ * writes these cards as launch prompts, so the cockpit adds a title and
+ * tags and otherwise gets out of the way.
+ */
+function buildLaunchPrompt(card: RoadmapCard): string {
+  const tags = card.tags.length > 0 ? `\nTags: ${card.tags.join(', ')}` : ''
+  const body = card.body.trim()
+  return `# ${card.title}${tags}\n\n${
+    body || '(No detail on the ticket — ask before you start if the intent is unclear.)'
+  }`
+}
+
+function shortPath(path: string): string {
+  const home = '/Users/'
+  if (!path.startsWith(home)) return path
+  const rest = path.slice(home.length)
+  const cut = rest.indexOf('/')
+  return cut < 0 ? '~' : `~${rest.slice(cut)}`
+}
+
+function SendToWorktree({
+  agents,
+  busy,
+  sendingTo,
+  onSend
+}: {
+  agents: AgentConfig[]
+  busy: boolean
+  sendingTo: AgentConfig | null
+  onSend: (agent: AgentConfig) => void
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+
+  const { free, busyAgents } = useMemo(
+    () => ({
+      free: agents.filter((a) => !a.running),
+      busyAgents: agents.filter((a) => a.running)
+    }),
+    [agents]
+  )
+
+  // Click-away and Esc close the menu without touching the modal itself.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [open])
+
+  const pick = (agent: AgentConfig): void => {
+    setOpen(false)
+    onSend(agent)
+  }
+
+  const label = sendingTo ? `Sending to ${sendingTo.displayName}…` : 'Send to worktree'
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <Button
+        variant="primary"
+        size="sm"
+        leadingIcon={Send}
+        trailingIcon={ChevronUp}
+        onClick={() => setOpen((v) => !v)}
+        disabled={busy || agents.length === 0}
+      >
+        {label}
+      </Button>
+
+      {open ? (
+        <div
+          className="chamfer-card absolute right-0 bottom-full z-10 mb-1.5 w-[min(340px,80vw)] overflow-hidden"
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.45)'
+          }}
+        >
+          <MenuHeading>Idle — ready for a ticket</MenuHeading>
+          {free.length === 0 ? (
+            <p
+              className="px-3 py-2 t-body-sm italic"
+              style={{ color: 'var(--dirty-grey)' }}
+            >
+              Every worktree is running. Pick one below to restart it.
+            </p>
+          ) : (
+            free.map((a) => (
+              <AgentRow key={a.id} agent={a} onPick={() => pick(a)} />
+            ))
+          )}
+
+          {busyAgents.length > 0 ? (
+            <>
+              <MenuHeading>Running — sending restarts Claude</MenuHeading>
+              {busyAgents.map((a) => (
+                <AgentRow key={a.id} agent={a} running onPick={() => pick(a)} />
+              ))}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MenuHeading({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div
+      className="px-3 pt-2 pb-1 t-label-sm"
+      style={{
+        color: 'var(--dirty-grey)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em'
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function AgentRow({
+  agent,
+  running = false,
+  onPick
+}: {
+  agent: AgentConfig
+  running?: boolean
+  onPick: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors hover:bg-van-white/10"
+    >
+      <span className="flex items-center gap-2">
+        <span
+          className="size-1.5 rounded-full"
+          style={{ background: running ? 'var(--orange)' : 'var(--dirty-grey)' }}
+        />
+        <span
+          style={{
+            fontFamily: 'var(--font-soehne)',
+            fontSize: '13px',
+            color: 'var(--van-white)'
+          }}
+        >
+          {agent.displayName}
+        </span>
+      </span>
+      <span
+        className="truncate pl-3.5 font-mono text-[0.68rem]"
+        style={{ color: 'var(--dirty-grey)', maxWidth: '100%' }}
+      >
+        {shortPath(agent.worktreePath)}
+      </span>
+    </button>
+  )
 }

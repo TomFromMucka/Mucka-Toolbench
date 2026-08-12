@@ -65,6 +65,11 @@ or "Tom, eyes here".
   newest first.
 - Notes scratchpad — free-form textarea, 600 ms debounced autosave
   to sqlite, flushed on blur and ⌘S.
+- Roadmap kanban — five lanes, drag-and-drop, cards open in a modal.
+  **Send to worktree** on an open ticket picks an agent from a
+  dropdown (idle ones first, running ones flagged as a restart),
+  launches Claude Code in that worktree and pastes the ticket in as
+  the opening prompt; the card moves to *Doing*.
 
 **Right column.**
 - Two preview iframes (top + middle) — bind via the per-agent
@@ -81,13 +86,16 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (34).**
+**Mucka tools (37).**
 
 Read-only (auto-execute):
 - `list_agents`, `get_git_status`, `get_recent_output`,
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
   `get_pr_status`, `get_cockpit_doc`, `get_product_doc`,
   `list_memories`, `get_memory`, `list_roadmap`, `read_pr_diff`.
+- Plus the SDK's built-in `WebSearch` / `WebFetch` in text mode, so
+  Mucka can research a ticket before writing it. Everything else
+  built-in (Bash, Read, Write…) is still denied.
 
 Chrome writes (auto-execute):
 - `set_banner_status`, `append_note`, `flag_attention`,
@@ -214,6 +222,18 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-08-12** — Tickets became launch prompts. An open roadmap card
+  now has a **Send to worktree** button: pick an agent from the
+  dropdown (idle grouped first, running ones warn that they'll be
+  restarted) and the cockpit points it at Claude Code, restarts it and
+  pastes the ticket in as the opening prompt, then moves the card to
+  *Doing*. Prompts go in via bracketed paste, so a multi-line markdown
+  body arrives as one block instead of one Enter per line — `delegate`
+  and `send_to_agent` share the same path and got that fix too.
+  Mucka's prompt now treats a ticket as the prompt an agent is launched
+  with (interview first, then write to shape), and she has `WebSearch` /
+  `WebFetch` in text mode to research before she writes.
 
 - **2026-08-01** — Releases stopped half-publishing. electron-builder
   runs a publisher per artifact and they raced to create the GitHub
