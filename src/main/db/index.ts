@@ -98,6 +98,20 @@ function migrate(d: DatabaseType): void {
       message_count INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS conv_sum_ts_idx ON conversation_summaries(ts DESC);
+    CREATE TABLE IF NOT EXISTS sentry_issues (
+      issue_id TEXT PRIMARY KEY,
+      short_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      project TEXT NOT NULL DEFAULT '',
+      permalink TEXT NOT NULL DEFAULT '',
+      first_seen INTEGER NOT NULL,
+      seen_at INTEGER NOT NULL,
+      triaged_at INTEGER,
+      verdict TEXT,
+      reason TEXT,
+      card_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS sentry_untriaged_idx ON sentry_issues(triaged_at, first_seen);
   `)
 
   // Idempotent column additions for older databases.

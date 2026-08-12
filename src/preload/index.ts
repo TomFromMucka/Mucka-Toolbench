@@ -21,6 +21,11 @@ import type {
   GitStatus,
   GitStatusEvent,
   JobEvent,
+  SentryIssue,
+  SentryNewIssueEvent,
+  SentryStatus,
+  SentryTriage,
+  SentryVerdict,
   MicAccess,
   MuckaApi,
   MuckaStatus,
@@ -265,6 +270,30 @@ const muckaApi: MuckaApi = {
       handler(payload)
     ipcRenderer.on('github:update', listener)
     return () => ipcRenderer.off('github:update', listener)
+  },
+
+  getSentryStatus: () => ipcRenderer.invoke('sentry:status') as Promise<SentryStatus>,
+  listSentryIssues: () => ipcRenderer.invoke('sentry:list') as Promise<SentryIssue[]>,
+  refreshSentry: () => ipcRenderer.invoke('sentry:refresh') as Promise<SentryIssue[]>,
+  getSentryIssue: (issueId: string) =>
+    ipcRenderer.invoke('sentry:get', issueId) as Promise<SentryIssue>,
+  archiveSentryIssue: (issueId: string) =>
+    ipcRenderer.invoke('sentry:archive', issueId) as Promise<void>,
+  recordSentryTriage: (input: {
+    issueId: string
+    verdict: SentryVerdict
+    reason: string
+    cardId?: string | null
+  }) => ipcRenderer.invoke('sentry:triage', input) as Promise<void>,
+  listUntriagedSentry: () =>
+    ipcRenderer.invoke('sentry:untriaged') as Promise<SentryTriage[]>,
+  onSentryNewIssue: (handler: (event: SentryNewIssueEvent) => void): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: SentryNewIssueEvent
+    ): void => handler(payload)
+    ipcRenderer.on('sentry:new-issue', listener)
+    return () => ipcRenderer.off('sentry:new-issue', listener)
   },
 
   fetchPrReviewContext: (agentId: AgentId) =>
