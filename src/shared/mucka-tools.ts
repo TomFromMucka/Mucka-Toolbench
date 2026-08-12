@@ -624,6 +624,58 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     }
   },
   {
+    name: 'list_sentry_issues',
+    description:
+      "Unresolved Sentry issues across every project, newest first, with short id, project, level, event count, users affected and whether you've already triaged each one. Call this when Tom asks what's broken / what's erroring in production, or before triaging so you can spot an issue that's really a duplicate of one you've already ruled on. Auto-executes.",
+    parameters: { type: 'object', properties: {}, required: [] }
+  },
+  {
+    name: 'get_sentry_issue',
+    description:
+      'Full detail for one Sentry issue: title, culprit, exception message, level, category, event count, users affected, first/last seen and the permalink. Call this before triaging anything — the poll summary alone is not enough to judge whether an issue is real. Auto-executes.',
+    parameters: {
+      type: 'object',
+      properties: {
+        issue: {
+          type: 'string',
+          description:
+            'The issue id or short id, e.g. "MUCKA-WEB-38". Take it from list_sentry_issues or the triage prompt you were handed.'
+        }
+      },
+      required: ['issue']
+    }
+  },
+  {
+    name: 'triage_sentry_issue',
+    description:
+      "Record your verdict on a Sentry issue and act on it. verdict 'ticket' = real, you've opened a roadmap card (pass its id); 'noise' = not worth Tom's time, which ALSO archives the issue in Sentry so it stops coming back; 'watch' = might matter but there isn't enough signal yet, left alone in Sentry. Every issue you're handed must end with one of these — an untriaged issue is re-queued. Auto-executes, so be sure before you call it with 'noise'. Refuses to archive anything with users affected or high priority — those are always a ticket.",
+    parameters: {
+      type: 'object',
+      properties: {
+        issue: {
+          type: 'string',
+          description: 'Issue id or short id, e.g. "MUCKA-WEB-38".'
+        },
+        verdict: {
+          type: 'string',
+          description: 'One of ticket, noise, watch.',
+          enum: ['ticket', 'noise', 'watch']
+        },
+        reason: {
+          type: 'string',
+          description:
+            'One line on why — this is the audit trail on the job sheet, so make it the reason a human would give, not a restatement of the title.'
+        },
+        card_id: {
+          type: 'string',
+          description:
+            "Roadmap card id when the verdict is 'ticket'. Create the card first with create_roadmap_card, then pass its id here."
+        }
+      },
+      required: ['issue', 'verdict', 'reason']
+    }
+  },
+  {
     name: 'list_roadmap',
     description:
       "Returns every roadmap kanban card grouped by column (backlog, next, doing, shipped, parked). Use this BEFORE answering 'what's next?', 'what are we working on?', or before suggesting where a new ticket should land — you need to see the current state to make sensible calls. Output includes id, title, body excerpt, and tags per card. Auto-executes.",
