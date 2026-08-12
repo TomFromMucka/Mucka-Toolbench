@@ -637,6 +637,26 @@ export interface MuckaApi {
     handler: (event: GitHubUpdateEvent) => void
   ): () => void
 
+  /* Sentry — issue triage */
+  getSentryStatus(): Promise<SentryStatus>
+  /** Latest unresolved issues from the poller's cache. */
+  listSentryIssues(): Promise<SentryIssue[]>
+  /** Force a poll now rather than waiting for the interval. */
+  refreshSentry(): Promise<SentryIssue[]>
+  getSentryIssue(issueId: string): Promise<SentryIssue>
+  /** Archive in Sentry (status `ignored`, substatus `archived_forever`). */
+  archiveSentryIssue(issueId: string): Promise<void>
+  /** Record Mucka's verdict in the cockpit's own triage table. */
+  recordSentryTriage(input: {
+    issueId: string
+    verdict: SentryVerdict
+    reason: string
+    cardId?: string | null
+  }): Promise<void>
+  /** Issues seen but not yet ruled on — drives the triage queue. */
+  listUntriagedSentry(): Promise<SentryTriage[]>
+  onSentryNewIssue(handler: (event: SentryNewIssueEvent) => void): () => void
+
   /* PR review — Mucka's review_pr tool */
   fetchPrReviewContext(agentId: AgentId): Promise<PrReviewContext>
   submitPrReview(input: PrReviewSubmission): Promise<PrReviewSubmitted>
@@ -816,6 +836,66 @@ export interface GitHubAgentSummary {
 export interface GitHubUpdateEvent {
   agentId: AgentId
   summary: GitHubAgentSummary
+}
+
+/* ─── Sentry ─────────────────────────────────────────────────────────── */
+
+export type SentryStatus =
+  | { kind: 'ok' }
+  | { kind: 'missing-token' }
+  | { kind: 'missing-org' }
+
+/** One grouped Sentry issue, flattened to what triage actually needs. */
+export interface SentryIssue {
+  /** Numeric id used by the API. */
+  id: string
+  /** Human id, e.g. "MUCKA-WEB-38". What Tom sees in Sentry. */
+  shortId: string
+  title: string
+  culprit: string | null
+  level: string
+  status: string
+  substatus: string | null
+  /** Event count. */
+  count: number
+  /** Distinct users affected — 0 means nobody noticed. */
+  userCount: number
+  firstSeen: number
+  lastSeen: number
+  permalink: string
+  priority: string | null
+  /** e.g. "error", "outage", "cron" — outages aren't code bugs. */
+  category: string | null
+  isUnhandled: boolean
+  /** Project slug, e.g. "mucka-web". */
+  project: string
+  /** Exception message when the title is just the type. */
+  detail: string | null
+}
+
+/** What Mucka decided about an issue. */
+export type SentryVerdict = 'ticket' | 'noise' | 'watch'
+
+/** The cockpit's own triage record for an issue. */
+export interface SentryTriage {
+  issueId: string
+  shortId: string
+  title: string
+  project: string
+  permalink: string
+  firstSeen: number
+  /** When the poller first saw it. */
+  seenAt: number
+  /** Null until Mucka has ruled on it. */
+  triagedAt: number | null
+  verdict: SentryVerdict | null
+  reason: string | null
+  /** Roadmap card she opened, when the verdict was `ticket`. */
+  cardId: string | null
+}
+
+export interface SentryNewIssueEvent {
+  issue: SentryIssue
 }
 
 /* ─── PR review (Mucka's review_pr tool) ─────────────────────────────── */

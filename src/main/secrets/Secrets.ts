@@ -205,6 +205,34 @@ export async function testSecret(id: SecretId): Promise<SecretTestResult> {
         detail: data.login ? `authenticated as ${data.login}` : 'authenticated'
       }
     }
+    if (id === 'SENTRY_AUTH_TOKEN') {
+      const org = process.env.SENTRY_ORG_SLUG?.trim()
+      if (!org) return { ok: false, reason: 'set the organisation slug first' }
+      const base = (process.env.SENTRY_REGION_URL?.trim() || 'https://sentry.io').replace(
+        /\/+$/,
+        ''
+      )
+      const res = await fetch(`${base}/api/0/organizations/${org}/projects/`, {
+        headers: { Authorization: `Bearer ${value}` }
+      })
+      if (!res.ok) {
+        const hint =
+          res.status === 404
+            ? ' (wrong region URL or org slug?)'
+            : res.status === 403
+              ? ' (token missing event:read?)'
+              : ''
+        return { ok: false, reason: `${res.status} ${res.statusText}${hint}` }
+      }
+      const data = (await res.json()) as { slug?: string }[]
+      const slugs = Array.isArray(data)
+        ? data.map((p) => p.slug).filter((s): s is string => !!s)
+        : []
+      return {
+        ok: true,
+        detail: slugs.length > 0 ? `${slugs.length} projects: ${slugs.join(', ')}` : 'authenticated'
+      }
+    }
     if (id === 'VERCEL_API_TOKEN') {
       const res = await fetch('https://api.vercel.com/v2/user', {
         headers: { Authorization: `Bearer ${value}` }

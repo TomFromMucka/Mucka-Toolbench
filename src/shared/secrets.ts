@@ -20,8 +20,11 @@ export type SecretId =
   | 'GITHUB_TOKEN'
   | 'VERCEL_API_TOKEN'
   | 'VERCEL_TEAM_ID'
+  | 'SENTRY_AUTH_TOKEN'
+  | 'SENTRY_ORG_SLUG'
+  | 'SENTRY_REGION_URL'
 
-export type SecretCategory = 'elevenlabs' | 'github' | 'vercel'
+export type SecretCategory = 'elevenlabs' | 'github' | 'vercel' | 'sentry'
 
 export interface SecretDef {
   id: SecretId
@@ -97,6 +100,36 @@ export const SECRET_DEFS: readonly SecretDef[] = [
     label: 'Team ID',
     hint: 'Optional — only if your projects belong to a Vercel team and the team id is not in .vercel/project.json.',
     category: 'vercel',
+    required: false,
+    secret: false,
+    testable: false
+  },
+  {
+    id: 'SENTRY_AUTH_TOKEN',
+    envName: 'SENTRY_AUTH_TOKEN',
+    label: 'Auth token',
+    hint: 'Sentry → Settings → Auth Tokens (organization). Needs event:read, plus event:write so Mucka can archive noise.',
+    category: 'sentry',
+    required: false,
+    secret: true,
+    testable: true
+  },
+  {
+    id: 'SENTRY_ORG_SLUG',
+    envName: 'SENTRY_ORG_SLUG',
+    label: 'Organisation slug',
+    hint: 'The slug in your Sentry URL, e.g. the "acme" in acme.sentry.io.',
+    category: 'sentry',
+    required: false,
+    secret: false,
+    testable: false
+  },
+  {
+    id: 'SENTRY_REGION_URL',
+    envName: 'SENTRY_REGION_URL',
+    label: 'Region URL',
+    hint: 'Region host for your org — https://de.sentry.io for EU, https://us.sentry.io for US. Leave blank for sentry.io. Wrong region looks exactly like a bad token (404s).',
+    category: 'sentry',
     required: false,
     secret: false,
     testable: false

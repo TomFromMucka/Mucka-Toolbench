@@ -148,16 +148,18 @@ function TabStrip({ tab, onChange }: TabStripProps): React.JSX.Element {
 const CATEGORY_LABEL: Record<SecretCategory, string> = {
   elevenlabs: 'ElevenLabs',
   github: 'GitHub',
-  vercel: 'Vercel'
+  vercel: 'Vercel',
+  sentry: 'Sentry'
 }
 
 const CATEGORY_NOTE: Record<SecretCategory, string> = {
   elevenlabs: 'Voice mode. Without an API key, voice is disabled and text-mode Mucka still works.',
   github: 'PR + check-runs panel. Without a token, the GitHub panel shows a configure banner.',
-  vercel: 'Deployment panel + deploy_to_vercel Mucka tool. Without a token, the panel shows a configure banner.'
+  vercel: 'Deployment panel + deploy_to_vercel Mucka tool. Without a token, the panel shows a configure banner.',
+  sentry: 'New-issue triage. Mucka reads every new Sentry issue, writes a ticket for the real ones and archives the noise. Without a token, nothing polls.'
 }
 
-const CATEGORY_ORDER: SecretCategory[] = ['elevenlabs', 'github', 'vercel']
+const CATEGORY_ORDER: SecretCategory[] = ['elevenlabs', 'github', 'vercel', 'sentry']
 
 function KeysTab(): React.JSX.Element {
   const [statuses, setStatuses] = useState<SecretStatus[] | null>(null)
@@ -176,7 +178,8 @@ function KeysTab(): React.JSX.Element {
     const g: Record<SecretCategory, SecretDef[]> = {
       elevenlabs: [],
       github: [],
-      vercel: []
+      vercel: [],
+      sentry: []
     }
     for (const def of SECRET_DEFS) g[def.category].push(def)
     return g

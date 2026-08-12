@@ -101,6 +101,17 @@ import {
   unbindUpdaterBroadcaster
 } from './updater/Updater'
 import { GitHubPoller } from './github/GitHubPoller'
+import { SentryPoller } from './sentry/SentryPoller'
+import {
+  archiveIssue as sentryArchiveIssue,
+  getIssue as sentryGetIssue,
+  getStatus as sentryGetStatus
+} from './sentry/Sentry'
+import {
+  getTriage as getSentryTriage,
+  listUntriaged as listUntriagedSentry,
+  recordTriage as recordSentryTriage
+} from './db/sentry'
 import {
   clearSecret,
   initSecrets,
@@ -152,6 +163,7 @@ import type {
   MemoryListQuery,
   MemoryWriteInput,
   MicAccess,
+  SentryVerdict,
   MuckaTextToolResult,
   PrReviewContext,
   PrReviewSubmission,
@@ -177,6 +189,7 @@ let claudeStateWatcher: ClaudeStateWatcher | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
+let sentryPoller: SentryPoller | null = null
 let mainWindowRef: BrowserWindow | null = null
 let lastAttentionCount = 0
 
@@ -260,11 +273,13 @@ function createWindow(): void {
     webContents: mainWindow.webContents,
     getAgents: () => getAgentConfigs()
   })
+  sentryPoller = new SentryPoller({ webContents: mainWindow.webContents })
 
   mainWindow.webContents.on('did-finish-load', () => {
     gitService?.start()
     vercelPoller?.start()
     githubPoller?.start()
+    sentryPoller?.start()
     logEvent({ source: 'system', kind: 'boot', message: 'Cockpit started.', tone: 'normal' })
   })
 
@@ -275,6 +290,8 @@ function createWindow(): void {
     vercelPoller = null
     githubPoller?.stop()
     githubPoller = null
+    sentryPoller?.stop()
+    sentryPoller = null
     unbindEventsBroadcaster()
     unbindMuckaTextBroadcaster()
     unbindUpdaterBroadcaster()
@@ -535,6 +552,48 @@ function registerIpc(): void {
 
   ipcMain.handle('github:refresh', (_event, agentId: AgentId) =>
     githubPoller?.refreshOne(agentId) ?? null
+  )
+
+  ipcMain.handle('sentry:status', () => sentryGetStatus())
+
+  ipcMain.handle('sentry:list', () => sentryPoller?.getAll() ?? [])
+
+  ipcMain.handle('sentry:refresh', () => sentryPoller?.refresh() ?? [])
+
+  ipcMain.handle('sentry:get', (_event, issueId: string) => sentryGetIssue(issueId))
+
+  ipcMain.handle('sentry:untriaged', () => listUntriagedSentry())
+
+  ipcMain.handle('sentry:archive', async (_event, issueId: string) => {
+    await sentryArchiveIssue(issueId)
+  })
+
+  ipcMain.handle(
+    'sentry:triage',
+    (
+      _event,
+      input: {
+        issueId: string
+        verdict: SentryVerdict
+        reason: string
+        cardId?: string | null
+      }
+    ) => {
+      recordSentryTriage(input)
+      const record = getSentryTriage(input.issueId)
+      const label = record ? `${record.shortId} ${record.title.slice(0, 70)}` : input.issueId
+      logEvent({
+        source: 'mucka',
+        kind: `sentry.${input.verdict}`,
+        message:
+          input.verdict === 'noise'
+            ? `Sentry ${label} — archived as noise: ${input.reason}`
+            : input.verdict === 'ticket'
+              ? `Sentry ${label} — ticket written: ${input.reason}`
+              : `Sentry ${label} — watching: ${input.reason}`,
+        tone: input.verdict === 'ticket' ? 'attention' : 'normal'
+      })
+    }
   )
 
   ipcMain.handle(
