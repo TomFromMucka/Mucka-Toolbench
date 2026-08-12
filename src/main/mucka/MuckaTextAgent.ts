@@ -75,6 +75,13 @@ const mcpServer = buildMuckaMcpServer({
  */
 const ALLOWED_MUCKA_TOOLS = TOOL_DEFINITIONS.map((d) => `mcp__mucka__${d.name}`)
 
+/**
+ * Built-in SDK tools Mucka is allowed alongside the cockpit set. Research
+ * only — she writes tickets that agents execute, so she needs to be able to
+ * read the web, but nothing here can touch the machine (no Bash, no Write).
+ */
+const ALLOWED_BUILTIN_TOOLS = ['WebSearch', 'WebFetch']
+
 function dispatchTool(
   name: string,
   params: Record<string, unknown>
@@ -439,17 +446,20 @@ export async function sendMessage(text: string): Promise<void> {
       ...(claudeBinary ? { pathToClaudeCodeExecutable: claudeBinary } : {}),
       includePartialMessages: true,
       mcpServers: { mucka: mcpServer },
-      allowedTools: ALLOWED_MUCKA_TOOLS,
-      // Belt-and-braces: auto-allow cockpit tools, and deny anything else
-      // (built-in Read/Bash/etc.) so a stray call can never hang on a
-      // permission prompt this surface can't show.
+      allowedTools: [...ALLOWED_MUCKA_TOOLS, ...ALLOWED_BUILTIN_TOOLS],
+      // Belt-and-braces: auto-allow cockpit tools plus the read-only web
+      // pair, and deny anything else (Bash/Read/Write/etc.) so a stray call
+      // can never hang on a permission prompt this surface can't show.
       canUseTool: async (toolName, input) => {
-        if (toolName.startsWith('mcp__mucka__')) {
+        if (
+          toolName.startsWith('mcp__mucka__') ||
+          ALLOWED_BUILTIN_TOOLS.includes(toolName)
+        ) {
           return { behavior: 'allow', updatedInput: input }
         }
         return {
           behavior: 'deny',
-          message: `Mucka can only use cockpit tools, not ${toolName}.`
+          message: `Mucka can only use cockpit tools and web research, not ${toolName}.`
         }
       },
       ...(MODEL ? { model: MODEL } : {})

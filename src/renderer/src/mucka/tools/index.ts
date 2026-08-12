@@ -14,6 +14,7 @@ import type {
 } from '@shared/types'
 import { MUCKA_AGENT_IDS, TOOL_DEFINITIONS } from '@shared/mucka-tools'
 import type { ConfirmRequest, EditConfirmRequest } from '../MuckaSessionContext'
+import { launchClaudeWithPrompt, submitPromptAndEnter } from '../dispatch'
 
 const MEMORY_TYPES: readonly MemoryType[] = [
   'profile',
@@ -876,42 +877,6 @@ function makeBroadcastToAgents(deps: ToolDeps) {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-// Heuristics that Claude Code's TUI is up and waiting for input.
-const CLAUDE_READY = /│\s*>|\? for shortcuts|esc to interrupt|Welcome to Claude|Try ["“]/i
-
-/**
- * Poll an agent's scrollback until Claude Code looks ready for a prompt:
- * either a known TUI marker shows up, or output goes quiet for a beat.
- * Bounded by a timeout so delegation never hangs forever.
- */
-async function waitForClaudeReady(terminalId: string, timeoutMs = 20000): Promise<void> {
-  await delay(1500) // let the PTY spawn + Claude start booting
-  const start = Date.now()
-  let lastLen = -1
-  let stable = 0
-  while (Date.now() - start < timeoutMs) {
-    let sb = ''
-    try {
-      sb = await window.mucka.getScrollback(terminalId)
-    } catch {
-      sb = ''
-    }
-    if (CLAUDE_READY.test(sb)) return
-    if (sb.length > 0 && sb.length === lastLen) {
-      stable += 1
-      if (stable >= 3) return // ~2s of quiet — assume the prompt is ready
-    } else {
-      stable = 0
-      lastLen = sb.length
-    }
-    await delay(700)
-  }
-}
-
 function makeDelegate(deps: ToolDeps) {
   return async (params: Record<string, unknown>): Promise<string> => {
     const agentId = parseAgentId(params)
@@ -931,24 +896,14 @@ function makeDelegate(deps: ToolDeps) {
     const finalTask = approved.trim()
     if (!finalTask) return `Tom blanked the task. Nothing delegated to ${label}.`
 
-    // 1. Point at the worktree and switch the agent to Claude Code.
-    await window.mucka.updateAgent({
-      id: agentId,
-      command: 'claude',
-      args: [],
-      ...(worktree ? { worktreePath: worktree } : {})
+    await launchClaudeWithPrompt({
+      agentId,
+      prompt: finalTask,
+      ...(worktree ? { worktreePath: worktree } : {}),
+      reloadAgents: deps.reloadAgents,
+      bumpRestart: deps.bumpRestart
     })
-    // 2. (Re)start so Claude boots fresh in that worktree. Must be the
-    //    explicit restart — if the agent was already running claude there,
-    //    a plain remount would reattach and the task would land in the
-    //    middle of the old session.
-    await window.mucka.restartAgent(agentId)
-    await deps.reloadAgents()
-    deps.bumpRestart(agentId)
-    // 3. Wait for the TUI, then submit the task as the first prompt.
-    await waitForClaudeReady(agentId)
-    window.mucka.writePty({ terminalId: agentId, data: finalTask + '\r' })
-    // 4. Bring the agent's reply back to the PM when it finishes.
+    // Bring the agent's reply back to the PM when it finishes.
     deps.armReplyWatch?.(agentId)
     return `Delegated to ${label} — Claude is running in ${where} and the task is in. I'll bring back its reply when it's done.`
   }
@@ -969,8 +924,7 @@ function makeSendToAgent(deps: ToolDeps) {
     const trimmed = approved.trim()
     if (!trimmed) return `Tom blanked the message. Nothing sent to ${agentId}.`
     // Mucka writes to the agent's primary terminal (terminalId === agentId).
-    // \r is what terminals receive when you press Enter.
-    window.mucka.writePty({ terminalId: agentId, data: trimmed + '\r' })
+    await submitPromptAndEnter(agentId, trimmed)
     deps.armReplyWatch?.(agentId)
     return `Sent to ${agentId}: ${trimmed.slice(0, 200)}${trimmed.length > 200 ? '…' : ''}`
   }
