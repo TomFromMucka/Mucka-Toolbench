@@ -234,7 +234,10 @@ shared primitives in `components/ui/`:
   back if it escalates). Auto-executes with no confirm strip — the
   guard is in code, not the prompt: anything with users affected or
   high priority can't be archived, and every verdict lands on the job
-  sheet with the permalink. Token, org slug and **region URL** go in
+  sheet with the permalink. *Watch* is not a dead end — a watched issue
+  is handed back for re-triage once it escalates (anyone newly
+  affected, or events up 5× and +20), carrying what she said last time
+  and the before/after numbers. Token, org slug and **region URL** go in
   Settings → API Keys; the region is the trap, since an EU org 404s
   every call against sentry.io and it reads as a bad token.
 

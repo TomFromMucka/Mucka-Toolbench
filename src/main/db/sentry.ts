@@ -13,6 +13,8 @@ interface TriageRow {
   verdict: string | null
   reason: string | null
   card_id: string | null
+  triage_count: number
+  triage_user_count: number
 }
 
 function rowToTriage(row: TriageRow): SentryTriage {
@@ -27,7 +29,9 @@ function rowToTriage(row: TriageRow): SentryTriage {
     triagedAt: row.triaged_at,
     verdict: isVerdict(row.verdict) ? row.verdict : null,
     reason: row.reason,
-    cardId: row.card_id
+    cardId: row.card_id,
+    triageCount: row.triage_count,
+    triageUserCount: row.triage_user_count
   }
 }
 
@@ -71,11 +75,15 @@ export function recordTriage(input: {
   verdict: SentryVerdict
   reason: string
   cardId?: string | null
+  /** Event + user counts as they stood when the call was made. */
+  count?: number
+  userCount?: number
 }): void {
   getDb()
     .prepare(
       `UPDATE sentry_issues
-          SET triaged_at = @triagedAt, verdict = @verdict, reason = @reason, card_id = @cardId
+          SET triaged_at = @triagedAt, verdict = @verdict, reason = @reason,
+              card_id = @cardId, triage_count = @count, triage_user_count = @userCount
         WHERE issue_id = @issueId`
     )
     .run({
@@ -83,8 +91,21 @@ export function recordTriage(input: {
       triagedAt: Date.now(),
       verdict: input.verdict,
       reason: input.reason,
-      cardId: input.cardId ?? null
+      cardId: input.cardId ?? null,
+      count: input.count ?? 0,
+      userCount: input.userCount ?? 0
     })
+}
+
+/**
+ * Put a previously-triaged issue back in the queue. `verdict` and `reason`
+ * are deliberately left in place — they're the "you said watch because X"
+ * context the re-triage turn is built from.
+ */
+export function markForRetriage(issueId: string): void {
+  getDb()
+    .prepare(`UPDATE sentry_issues SET triaged_at = NULL WHERE issue_id = ?`)
+    .run(issueId)
 }
 
 /** Issues seen but not yet triaged — what the triage queue drains. */

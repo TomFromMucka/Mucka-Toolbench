@@ -109,7 +109,9 @@ function migrate(d: DatabaseType): void {
       triaged_at INTEGER,
       verdict TEXT,
       reason TEXT,
-      card_id TEXT
+      card_id TEXT,
+      triage_count INTEGER NOT NULL DEFAULT 0,
+      triage_user_count INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS sentry_untriaged_idx ON sentry_issues(triaged_at, first_seen);
   `)
@@ -134,5 +136,23 @@ function migrate(d: DatabaseType): void {
     // and Tom presses Start when he wants them. Avoids four zsh sessions
     // chewing on the worktrees before he's ready.
     d.exec(`ALTER TABLE agents ADD COLUMN running INTEGER NOT NULL DEFAULT 0`)
+  }
+
+  const sentryCols = new Set(
+    d
+      .prepare<[], { name: string }>(`PRAGMA table_info(sentry_issues)`)
+      .all()
+      .map((c) => c.name)
+  )
+  // Counts at the moment of triage — the baseline an escalation is measured
+  // against. Zero on rows written before this column existed, which puts
+  // them on the absolute margin alone (20 events) rather than the multiple.
+  if (!sentryCols.has('triage_count')) {
+    d.exec(`ALTER TABLE sentry_issues ADD COLUMN triage_count INTEGER NOT NULL DEFAULT 0`)
+  }
+  if (!sentryCols.has('triage_user_count')) {
+    d.exec(
+      `ALTER TABLE sentry_issues ADD COLUMN triage_user_count INTEGER NOT NULL DEFAULT 0`
+    )
   }
 }
