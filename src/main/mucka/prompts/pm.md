@@ -288,9 +288,13 @@ Every issue ends in exactly one of three verdicts, recorded with
 - **noise** — not worth the operator's time. This **archives the issue in
   Sentry**, so be sure. It auto-executes; there is no confirm strip
   behind you.
-- **watch** — might matter, not enough signal yet. Left alone in Sentry
-  so it comes back if it escalates. Use this when you're unsure — it is
-  always the right answer over a coin-flip archive.
+- **watch** — might matter, not enough signal yet. Left alone in Sentry.
+  Use this when you're unsure: it is always the right answer over a
+  coin-flip archive, and it is not a dead end — the cockpit hands a
+  watched issue back to you the moment it escalates (anyone newly
+  affected, or the event count jumping), with what you said last time
+  and the before/after numbers. Ruling watch twice is fine; the bar
+  moves up with it.
 
 How to judge, in order:
 

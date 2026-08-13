@@ -1,7 +1,12 @@
 import type { WebContents } from 'electron'
-import type { SentryIssue, SentryNewIssueEvent } from '@shared/types'
+import type {
+  SentryEscalation,
+  SentryIssue,
+  SentryNewIssueEvent,
+  SentryTriage
+} from '@shared/types'
 import { getStatus, listIssues } from './Sentry'
-import { knownIssueIds, recordSeen } from '../db/sentry'
+import { getTriage, knownIssueIds, markForRetriage, recordSeen } from '../db/sentry'
 import { logEvent } from '../events/Events'
 
 /**
@@ -20,10 +25,27 @@ const POLL_INTERVAL_MS = 5 * 60_000
 const FIRST_RUN_PERIOD = '24h'
 const STEADY_PERIOD = '14d'
 
+/**
+ * What counts as a watched issue getting worse. Either anyone new being
+ * affected — going from "nobody noticed" to "someone did" is the whole
+ * signal — or the event count growing by both a multiple and an absolute
+ * margin, so a 2-event issue ticking to 4 doesn't drag her back.
+ */
+const ESCALATION_COUNT_FACTOR = 5
+const ESCALATION_COUNT_MARGIN = 20
+
 interface SentryPollerDeps {
   webContents: WebContents
   /** Called once per genuinely new issue, after it's been recorded. */
   onNewIssue?: (issue: SentryIssue) => void
+}
+
+function hasEscalated(issue: SentryIssue, prior: SentryTriage): boolean {
+  if (issue.userCount > prior.triageUserCount) return true
+  return (
+    issue.count >= prior.triageCount * ESCALATION_COUNT_FACTOR &&
+    issue.count - prior.triageCount >= ESCALATION_COUNT_MARGIN
+  )
 }
 
 function toneFor(issue: SentryIssue): 'bad' | 'attention' | 'normal' {
@@ -97,7 +119,10 @@ export class SentryPoller {
 
       const known = knownIssueIds()
       for (const issue of issues) {
-        if (known.has(issue.id)) continue
+        if (known.has(issue.id)) {
+          this.checkEscalation(issue)
+          continue
+        }
         const isNew = recordSeen({
           issueId: issue.id,
           shortId: issue.shortId,
@@ -138,9 +163,42 @@ export class SentryPoller {
     }
   }
 
-  private broadcast(issue: SentryIssue): void {
+  /**
+   * A `watch` verdict would otherwise be a dead end — she rules "not yet"
+   * and the issue never comes back, however bad it gets. So re-queue a
+   * watched issue once it crosses the escalation bar. Tickets are already
+   * actioned and noise is archived out of the unresolved list, so neither
+   * reaches here.
+   */
+  private checkEscalation(issue: SentryIssue): void {
+    const prior = getTriage(issue.id)
+    if (!prior || prior.triagedAt === null) return
+    if (prior.verdict !== 'watch') return
+    if (!hasEscalated(issue, prior)) return
+
+    markForRetriage(issue.id)
+    logEvent({
+      source: 'system',
+      kind: 'sentry.escalated',
+      message:
+        `Sentry — ${issue.shortId} escalated since you watched it: ` +
+        `${prior.triageCount} → ${issue.count} events, ` +
+        `${prior.triageUserCount} → ${issue.userCount} users`,
+      tone: issue.userCount > 0 ? 'bad' : 'attention'
+    })
+    const escalation: SentryEscalation = {
+      previousVerdict: prior.verdict,
+      previousReason: prior.reason,
+      previousCount: prior.triageCount,
+      previousUserCount: prior.triageUserCount
+    }
+    this.broadcast(issue, escalation)
+    this.onNewIssue?.(issue)
+  }
+
+  private broadcast(issue: SentryIssue, escalation?: SentryEscalation): void {
     if (this.webContents.isDestroyed()) return
-    const event: SentryNewIssueEvent = { issue }
+    const event: SentryNewIssueEvent = escalation ? { issue, escalation } : { issue }
     this.webContents.send('sentry:new-issue', event)
   }
 }

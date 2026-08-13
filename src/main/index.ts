@@ -577,6 +577,8 @@ function registerIpc(): void {
         verdict: SentryVerdict
         reason: string
         cardId?: string | null
+        count?: number
+        userCount?: number
       }
     ) => {
       recordSentryTriage(input)

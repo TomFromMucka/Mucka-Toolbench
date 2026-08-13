@@ -284,6 +284,8 @@ const muckaApi: MuckaApi = {
     verdict: SentryVerdict
     reason: string
     cardId?: string | null
+    count?: number
+    userCount?: number
   }) => ipcRenderer.invoke('sentry:triage', input) as Promise<void>,
   listUntriagedSentry: () =>
     ipcRenderer.invoke('sentry:untriaged') as Promise<SentryTriage[]>,

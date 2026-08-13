@@ -17,6 +17,7 @@ import type {
   MuckaChatMessage,
   MuckaSessionState,
   MuckaStatus,
+  SentryEscalation,
   SentryIssue
 } from '@shared/types'
 import type { ClientTools } from '@elevenlabs/react'
@@ -52,13 +53,22 @@ async function deliverAgentReply(agentId: AgentId, body: string): Promise<void> 
  * the agent reply above — it reads as ambient context she was handed, not
  * something Tom typed.
  */
-async function deliverSentryIssue(issue: SentryIssue): Promise<void> {
+async function deliverSentryIssue(
+  issue: SentryIssue,
+  escalation?: SentryEscalation
+): Promise<void> {
   const users =
     issue.userCount > 0
       ? `${issue.userCount} user${issue.userCount === 1 ? '' : 's'} affected`
       : 'no users affected'
+  const header = escalation
+    ? `⟢ Sentry issue you marked ${escalation.previousVerdict} has escalated — re-triage it.\n\n` +
+      `You said: "${escalation.previousReason ?? 'no reason recorded'}"\n` +
+      `Then: ${escalation.previousCount} events, ${escalation.previousUserCount} users. ` +
+      `Now: ${issue.count} events, ${issue.userCount} users.\n\n`
+    : `⟢ New Sentry issue — triage it.\n\n`
   const msg =
-    `⟢ New Sentry issue — triage it.\n\n` +
+    header +
     `${issue.shortId} [${issue.project}] ${issue.title}\n` +
     `${issue.level}${issue.category ? ` · ${issue.category}` : ''} · ${issue.count} event${
       issue.count === 1 ? '' : 's'
@@ -240,7 +250,7 @@ function InnerProvider({
   // drained strictly one at a time — a parallel fan-out would have her
   // triaging four issues in four interleaved turns.
   useEffect(() => {
-    const queue: SentryIssue[] = []
+    const queue: { issue: SentryIssue; escalation?: SentryEscalation }[] = []
     let draining = false
     let cancelled = false
 
@@ -249,18 +259,18 @@ function InnerProvider({
       draining = true
       try {
         while (queue.length > 0 && !cancelled) {
-          const issue = queue.shift()
-          if (!issue) break
-          await deliverSentryIssue(issue)
+          const next = queue.shift()
+          if (!next) break
+          await deliverSentryIssue(next.issue, next.escalation)
         }
       } finally {
         draining = false
       }
     }
 
-    const enqueue = (issue: SentryIssue): void => {
-      if (queue.some((q) => q.id === issue.id)) return
-      queue.push(issue)
+    const enqueue = (issue: SentryIssue, escalation?: SentryEscalation): void => {
+      if (queue.some((q) => q.issue.id === issue.id)) return
+      queue.push(escalation ? { issue, escalation } : { issue })
       void drain()
     }
 
@@ -273,14 +283,29 @@ function InnerProvider({
         const live = await window.mucka.listSentryIssues()
         for (const row of pending) {
           const issue = live.find((i) => i.id === row.issueId)
-          if (issue) enqueue(issue)
+          if (!issue) continue
+          // An untriaged row that still holds a verdict was put back by an
+          // escalation, so it re-enters as a re-triage rather than as new.
+          enqueue(
+            issue,
+            row.verdict
+              ? {
+                  previousVerdict: row.verdict,
+                  previousReason: row.reason,
+                  previousCount: row.triageCount,
+                  previousUserCount: row.triageUserCount
+                }
+              : undefined
+          )
         }
       })
       .catch(() => {
         /* best-effort */
       })
 
-    const off = window.mucka.onSentryNewIssue((event) => enqueue(event.issue))
+    const off = window.mucka.onSentryNewIssue((event) =>
+      enqueue(event.issue, event.escalation)
+    )
     return () => {
       cancelled = true
       off()

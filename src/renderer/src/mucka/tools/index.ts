@@ -767,7 +767,9 @@ function makeTriageSentryIssue() {
       issueId: issue.id,
       verdict,
       reason,
-      cardId
+      cardId,
+      count: issue.count,
+      userCount: issue.userCount
     })
 
     if (verdict === 'noise') return `${issue.shortId} archived in Sentry — ${reason}`

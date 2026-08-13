@@ -648,7 +648,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'triage_sentry_issue',
     description:
-      "Record your verdict on a Sentry issue and act on it. verdict 'ticket' = real, you've opened a roadmap card (pass its id); 'noise' = not worth Tom's time, which ALSO archives the issue in Sentry so it stops coming back; 'watch' = might matter but there isn't enough signal yet, left alone in Sentry. Every issue you're handed must end with one of these — an untriaged issue is re-queued. Auto-executes, so be sure before you call it with 'noise'. Refuses to archive anything with users affected or high priority — those are always a ticket.",
+      "Record your verdict on a Sentry issue and act on it. verdict 'ticket' = real, you've opened a roadmap card (pass its id); 'noise' = not worth Tom's time, which ALSO archives the issue in Sentry so it stops coming back; 'watch' = might matter but there isn't enough signal yet, left alone in Sentry — a watched issue is handed back to you automatically if it escalates, so watch is a safe holding answer rather than a dead end. Every issue you're handed must end with one of these — an untriaged issue is re-queued. Auto-executes, so be sure before you call it with 'noise'. Refuses to archive anything with users affected or high priority — those are always a ticket.",
     parameters: {
       type: 'object',
       properties: {

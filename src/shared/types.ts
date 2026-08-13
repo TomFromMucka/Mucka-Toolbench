@@ -652,6 +652,9 @@ export interface MuckaApi {
     verdict: SentryVerdict
     reason: string
     cardId?: string | null
+    /** Counts at verdict time — the baseline a later escalation is measured against. */
+    count?: number
+    userCount?: number
   }): Promise<void>
   /** Issues seen but not yet ruled on — drives the triage queue. */
   listUntriagedSentry(): Promise<SentryTriage[]>
@@ -892,10 +895,28 @@ export interface SentryTriage {
   reason: string | null
   /** Roadmap card she opened, when the verdict was `ticket`. */
   cardId: string | null
+  /** Event count when the verdict was recorded — the escalation baseline. */
+  triageCount: number
+  /** Users affected when the verdict was recorded. */
+  triageUserCount: number
+}
+
+/**
+ * Why an already-triaged issue is back in the queue. Only `watch` issues
+ * come back — a ticket is already actioned and noise is archived.
+ */
+export interface SentryEscalation {
+  /** The verdict being revisited. */
+  previousVerdict: SentryVerdict
+  previousReason: string | null
+  previousCount: number
+  previousUserCount: number
 }
 
 export interface SentryNewIssueEvent {
   issue: SentryIssue
+  /** Absent for a genuinely new issue; set when a watched one has grown. */
+  escalation?: SentryEscalation
 }
 
 /* ─── PR review (Mucka's review_pr tool) ─────────────────────────────── */
