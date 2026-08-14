@@ -225,6 +225,21 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-08-13** — Terminals render on the GPU. xterm was on its DOM
+  renderer (no WebGL/canvas addon) with `cursorBlink: true`, so six
+  panes repainted through the compositor forever with no output at all
+  — an idle cockpit measured 25% renderer + 25% GPU. Added
+  `@xterm/addon-webgl` with a fallback to DOM on context loss, and
+  turned the cursor blink off. The addon reaches into xterm internals
+  and can fail to activate without throwing, which would put us quietly
+  back on the slow path, so each pane now logs
+  `[mucka] <id>: renderer = webgl | dom (fallback)` at startup — check
+  the DevTools console after an update. The attention glow still
+  animates `filter` (three drop-shadows, re-rasterised per frame) but
+  only while an agent is flagged; it now honours
+  `prefers-reduced-motion`. Note the idle burn is variable, not
+  steady — sample it five times, not once.
+
 - **2026-08-13** — Sentry issues triage themselves. A `SentryPoller`
   checks the org every five minutes, records anything new in sqlite
   (dedupe by issue id, so restarts can't re-report) and hands it to
