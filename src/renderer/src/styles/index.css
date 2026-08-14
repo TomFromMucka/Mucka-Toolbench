@@ -240,6 +240,18 @@ textarea,
   }
 }
 
+/* Animating `filter` is not compositor-only: three stacked drop-shadows
+   with a 32px blur are re-rasterised every frame for as long as the glow
+   is mounted. It is deliberately kept — a pulsing halo is the one motion
+   that says "Tom, look here" — but it only ever runs while an agent is
+   actually flagged, and it stops entirely when motion is unwelcome. */
+@media (prefers-reduced-motion: reduce) {
+  .attention-glow,
+  .mucka-live-pip {
+    animation: none;
+  }
+}
+
 /* ─── Mucka voice "live" pip ─────────────────────────────────────────── */
 @utility mucka-live-pip {
   display: inline-block;

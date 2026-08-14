@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import type { AgentId, TerminalId } from '@shared/types'
 import { requestPreviewNavigation } from '../state/previewBus'
@@ -107,7 +108,10 @@ export function AgentTerminal({
     let cancelled = false
 
     const term = new Terminal({
-      cursorBlink: true,
+      // Off deliberately. On the DOM renderer this was the only thing
+      // repainting a settled cockpit — six panes blinking forever with no
+      // output. Cheap again under WebGL, so flip it back if you miss it.
+      cursorBlink: false,
       fontFamily:
         'ui-monospace, "SF Mono", Menlo, "JetBrains Mono", "Fira Code", monospace',
       fontSize: 12,
@@ -159,6 +163,42 @@ export function AgentTerminal({
       })
     )
     term.open(host)
+
+    // WebGL renderer. Must be loaded *after* open() — it needs the element.
+    // Without it xterm falls back to its DOM renderer, which repaints
+    // through the compositor on every cursor tick and every write; six of
+    // those panes is what kept the GPU process busy while the cockpit was
+    // doing nothing. Failure here is never fatal: a machine that can't give
+    // us a context (or loses one when the GPU resets / display changes)
+    // drops back to the DOM renderer rather than losing the terminal.
+    let webgl: WebglAddon | null = null
+    try {
+      webgl = new WebglAddon()
+      webgl.onContextLoss(() => {
+        console.info(`[mucka] ${terminalId}: WebGL context lost → DOM renderer`)
+        webgl?.dispose()
+        webgl = null
+      })
+      term.loadAddon(webgl)
+    } catch (err) {
+      console.info(`[mucka] ${terminalId}: WebGL unavailable → DOM renderer`, err)
+      webgl?.dispose()
+      webgl = null
+    }
+
+    // The addon reaches into xterm internals and can fail to activate
+    // without throwing here, which would leave us quietly back on the slow
+    // path — the exact bug this change exists to remove. The WebGL renderer
+    // paints into canvases inside the screen element; the DOM one builds
+    // rows of spans. So ask the DOM which one we actually got.
+    requestAnimationFrame(() => {
+      if (cancelled) return
+      const usingWebgl = host.querySelector('canvas') !== null
+      console.info(
+        `[mucka] ${terminalId}: renderer = ${usingWebgl ? 'webgl' : 'dom (fallback)'}`
+      )
+    })
+
     termRef.current = term
     fitRef.current = fit
 
