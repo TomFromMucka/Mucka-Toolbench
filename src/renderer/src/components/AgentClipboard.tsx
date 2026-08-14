@@ -19,7 +19,7 @@ const STATUS_DOT: Record<AgentStatus, string> = {
   idle: 'bg-dirty-grey',
   thinking: 'bg-status-warn',
   editing: 'bg-status-ok',
-  running: 'bg-status-ok animate-pulse',
+  running: 'bg-status-ok',
   'awaiting-input': 'bg-orange',
   blocked: 'bg-status-bad',
   done: 'bg-status-ok'
