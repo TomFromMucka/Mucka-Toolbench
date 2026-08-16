@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { rowForSize, type PanelSize } from './panelSize'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { MuckaChat } from './MuckaChat'
-import { JobSheet } from './JobSheet'
+import { RoadmapPanel } from './RoadmapPanel'
 import { NotesPanel } from './NotesPanel'
 
 type Sizes = [PanelSize, PanelSize, PanelSize]
@@ -33,7 +33,7 @@ export function MiddleColumn(): React.JSX.Element {
       style={{ gridTemplateRows: rows, transition: 'grid-template-rows 180ms ease' }}
     >
       <MuckaChat size={effective[0]} onResize={setAt(0)} />
-      <JobSheet size={effective[1]} onResize={setAt(1)} />
+      <RoadmapPanel size={effective[1]} onResize={setAt(1)} />
       <NotesPanel size={effective[2]} onResize={setAt(2)} />
     </div>
   )
