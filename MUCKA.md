@@ -60,9 +60,6 @@ or "Tom, eyes here".
   to the same `chat_messages` table, so each mode sees what the other
   has said. Voice bubbles render with a thin orange border + italic
   and a `voice` tag in the footer.
-- Job sheet — live event feed (Vercel transitions, PR/CI flips,
-  attention flags, cockpit boots, config changes). Day separators,
-  newest first.
 - Notes scratchpad — free-form textarea, 600 ms debounced autosave
   to sqlite, flushed on blur and ⌘S.
 - Roadmap kanban — five lanes, drag-and-drop, cards open in a modal.
@@ -157,7 +154,10 @@ with optional `source: 'voice'` segment tag).
 
 **Event stream (`src/main/events`).** `logEvent({source, kind,
 message, tone})` inserts + broadcasts. Sources: agent ids, `mucka`,
-`system`. Used by the job sheet panel and the per-agent headline.
+`system`. The job-sheet *panel* is gone (Tom never used it), but the
+stream itself is load-bearing: it drives the per-agent headline, and
+it is the audit trail for anything Mucka does unsupervised — Sentry
+verdicts especially. She reads it back with `get_recent_events`.
 
 **Vercel poller (`src/main/vercel`).** REST `/v6/deployments` every
 30s. Reads `.vercel/project.json` from the worktree when no manual
@@ -224,6 +224,12 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-08-16** — Dropped the Job Sheet tab; the middle panel is just
+  the Roadmap now (`JobSheet.tsx` → `RoadmapPanel.tsx`, ~150 lines
+  lighter). Events keep being recorded — they still feed the per-agent
+  headline and Mucka's `get_recent_events`, which is how you audit
+  unsupervised Sentry triage now that there's no feed on screen.
 
 - **2026-08-13** — Terminals render on the GPU. xterm was on its DOM
   renderer (no WebGL/canvas addon) with `cursorBlink: true`, so six
