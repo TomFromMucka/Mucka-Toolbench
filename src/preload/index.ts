@@ -21,6 +21,7 @@ import type {
   GitStatus,
   GitStatusEvent,
   JobEvent,
+  SentryHealth,
   SentryIssue,
   SentryNewIssueEvent,
   SentryStatus,
@@ -289,6 +290,7 @@ const muckaApi: MuckaApi = {
   }) => ipcRenderer.invoke('sentry:triage', input) as Promise<void>,
   listUntriagedSentry: () =>
     ipcRenderer.invoke('sentry:untriaged') as Promise<SentryTriage[]>,
+  getSentryHealth: () => ipcRenderer.invoke('sentry:health') as Promise<SentryHealth>,
   onSentryNewIssue: (handler: (event: SentryNewIssueEvent) => void): (() => void) => {
     const listener = (
       _e: Electron.IpcRendererEvent,

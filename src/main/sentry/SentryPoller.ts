@@ -95,6 +95,20 @@ export class SentryPoller {
     return this.lastError
   }
 
+  /**
+   * Enough to tell "nothing is wrong" from "we don't know yet". An empty
+   * issue list is ambiguous on its own — never polled, poll failed, and
+   * genuinely clean all look identical, and reporting the last two as
+   * "clean" is worse than saying nothing.
+   */
+  getHealth(): { hasPolled: boolean; lastError: string | null; count: number } {
+    return {
+      hasPolled: this.hasPolled,
+      lastError: this.lastError,
+      count: this.cache.length
+    }
+  }
+
   async refresh(): Promise<SentryIssue[]> {
     await this.tick()
     return this.cache

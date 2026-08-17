@@ -705,11 +705,23 @@ async function listSentryIssuesHandler(): Promise<string> {
       ? 'Sentry has no auth token — Tom needs to add one in Settings → API Keys.'
       : 'Sentry has no organisation slug set — Settings → API Keys.'
   }
-  const [issues, untriaged] = await Promise.all([
+  const [issues, untriaged, health] = await Promise.all([
     window.mucka.listSentryIssues(),
-    window.mucka.listUntriagedSentry()
+    window.mucka.listUntriagedSentry(),
+    window.mucka.getSentryHealth()
   ])
-  if (issues.length === 0) return 'Sentry is clean — nothing unresolved.'
+  if (issues.length === 0) {
+    // Never claim "clean" off an empty cache — it also means "hasn't run
+    // yet" and "the poll is failing", and reporting either as clean tells
+    // Tom production is fine when nobody has actually looked.
+    if (health.lastError) {
+      return `Can't tell — the last Sentry poll failed: ${health.lastError}`
+    }
+    if (!health.hasPolled) {
+      return "Can't tell yet — Sentry hasn't been polled successfully since the cockpit started. If credentials were just added, give it five minutes."
+    }
+    return 'Sentry is clean — nothing unresolved. (Polled fine, genuinely empty.)'
+  }
   const pending = new Set(untriaged.map((t) => t.issueId))
   const lines = issues.map(
     (i) => `${pending.has(i.id) ? '· [awaiting triage] ' : '· '}${describeSentryIssue(i)}`
