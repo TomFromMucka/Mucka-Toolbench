@@ -54,6 +54,24 @@ export GITHUB_TOKEN="${GITHUB_TOKEN:-$GH_TOKEN}"
 
 echo "→ Using GitHub token from: $TOKEN_SOURCE"
 
+# Signing identity must be the one the installed app was signed with.
+# Squirrel validates the update against the running app's designated
+# requirement, which pins the team — sign with a different Apple account
+# and the in-app update dies at install with "code failed to satisfy
+# specified code requirement(s)", which is how 0.4.0 got stranded. Fail
+# here rather than after a 173MB upload nobody can install.
+EXPECTED_IDENTITY="Apple Development: Thomas Webster (TD8AYA5K8T)"  # team Q37JNZCSRD
+if ! security find-identity -v -p codesigning | grep -qF "$EXPECTED_IDENTITY"; then
+  echo "  Signing identity not in the keychain:" >&2
+  echo "    $EXPECTED_IDENTITY" >&2
+  echo "  Available:" >&2
+  security find-identity -v -p codesigning | sed 's/^/    /' >&2
+  echo "  Apple Development certs expire annually — renew in Xcode, or update" >&2
+  echo "  EXPECTED_IDENTITY here and mac.identity in electron-builder.yml together." >&2
+  exit 1
+fi
+echo "→ Signing identity present: $EXPECTED_IDENTITY"
+
 VERSION="$(node -p "require('./package.json').version")"
 TAG="v${VERSION}"
 
