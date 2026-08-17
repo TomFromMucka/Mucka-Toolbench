@@ -70,7 +70,7 @@ TAG="v${VERSION}"
 if gh release view "$TAG" >/dev/null 2>&1; then
   echo "→ Release $TAG already exists — uploading into it."
 else
-  echo "→ Creating release $TAG…"
+  echo "→ Creating release ${TAG}…"
   gh release create "$TAG" --title "$VERSION" --generate-notes
 fi
 
