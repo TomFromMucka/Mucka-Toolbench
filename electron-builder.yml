@@ -23,6 +23,15 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # Pinned deliberately. Squirrel's designated requirement includes the
+  # team identifier, so an update signed by a different Apple account can
+  # never validate against an installed build — the in-app update just
+  # fails at install time with "code failed to satisfy specified code
+  # requirement(s)". That is what stranded 0.4.0 on disk: it was signed
+  # by team 5J838DR8CA, 0.5.0 by Q37JNZCSRD. Pinning means a keychain
+  # that can't supply this identity fails the build loudly instead of
+  # quietly shipping a release nobody can update to.
+  identity: "Apple Development: Thomas Webster (TD8AYA5K8T)"  # team Q37JNZCSRD
   # zip-only by default. The auto-updater (electron-updater) only reads
   # the zip + latest-mac.yml, so the DMG was purely a fresh-install
   # nicety — and dmgbuild's "hdiutil couldn't unmount, Resource busy"
