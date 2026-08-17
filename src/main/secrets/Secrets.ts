@@ -212,25 +212,37 @@ export async function testSecret(id: SecretId): Promise<SecretTestResult> {
         /\/+$/,
         ''
       )
-      const res = await fetch(`${base}/api/0/organizations/${org}/projects/`, {
-        headers: { Authorization: `Bearer ${value}` }
+      // Test the endpoint the poller actually uses. Listing projects
+      // needs project:read/org:read, so a token scoped exactly right for
+      // this app — event:read to poll, event:write to archive — failed the
+      // test while working perfectly in use.
+      const params = new URLSearchParams({
+        query: 'is:unresolved',
+        statsPeriod: '14d',
+        limit: '1',
+        project: '-1'
       })
+      const res = await fetch(
+        `${base}/api/0/organizations/${org}/issues/?${params}`,
+        { headers: { Authorization: `Bearer ${value}` } }
+      )
       if (!res.ok) {
         const hint =
           res.status === 404
             ? ' (wrong region URL or org slug?)'
-            : res.status === 403
-              ? ' (token missing event:read?)'
+            : res.status === 403 || res.status === 401
+              ? ' (token needs the event:read scope)'
               : ''
         return { ok: false, reason: `${res.status} ${res.statusText}${hint}` }
       }
-      const data = (await res.json()) as { slug?: string }[]
-      const slugs = Array.isArray(data)
-        ? data.map((p) => p.slug).filter((s): s is string => !!s)
-        : []
+      const data = (await res.json()) as unknown
+      const count = Array.isArray(data) ? data.length : 0
       return {
         ok: true,
-        detail: slugs.length > 0 ? `${slugs.length} projects: ${slugs.join(', ')}` : 'authenticated'
+        detail:
+          count > 0
+            ? 'authenticated — issues readable'
+            : 'authenticated — no unresolved issues right now'
       }
     }
     if (id === 'VERCEL_API_TOKEN') {
