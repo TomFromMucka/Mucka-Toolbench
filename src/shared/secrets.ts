@@ -108,7 +108,7 @@ export const SECRET_DEFS: readonly SecretDef[] = [
     id: 'SENTRY_AUTH_TOKEN',
     envName: 'SENTRY_AUTH_TOKEN',
     label: 'Auth token',
-    hint: 'Sentry → Settings → Auth Tokens (organization). Needs event:read, plus event:write so Mucka can archive noise.',
+    hint: 'Sentry → Settings → Auth Tokens. Needs event:read + project:read (without project:read the API returns an empty list rather than an error), plus event:write so Mucka can archive noise.',
     category: 'sentry',
     required: false,
     secret: true,
