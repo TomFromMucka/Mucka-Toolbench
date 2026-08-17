@@ -564,6 +564,10 @@ function registerIpc(): void {
 
   ipcMain.handle('sentry:untriaged', () => listUntriagedSentry())
 
+  ipcMain.handle('sentry:health', () =>
+    sentryPoller?.getHealth() ?? { hasPolled: false, lastError: null, count: 0 }
+  )
+
   ipcMain.handle('sentry:archive', async (_event, issueId: string) => {
     await sentryArchiveIssue(issueId)
   })

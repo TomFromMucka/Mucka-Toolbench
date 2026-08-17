@@ -658,6 +658,8 @@ export interface MuckaApi {
   }): Promise<void>
   /** Issues seen but not yet ruled on — drives the triage queue. */
   listUntriagedSentry(): Promise<SentryTriage[]>
+  /** Whether the poller has actually succeeded, so an empty list can be read honestly. */
+  getSentryHealth(): Promise<SentryHealth>
   onSentryNewIssue(handler: (event: SentryNewIssueEvent) => void): () => void
 
   /* PR review — Mucka's review_pr tool */
@@ -911,6 +913,13 @@ export interface SentryEscalation {
   previousReason: string | null
   previousCount: number
   previousUserCount: number
+}
+
+/** Poller state — distinguishes "clean" from "never ran" and "failing". */
+export interface SentryHealth {
+  hasPolled: boolean
+  lastError: string | null
+  count: number
 }
 
 export interface SentryNewIssueEvent {
