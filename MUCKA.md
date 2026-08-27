@@ -225,6 +225,27 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-08-27** — The Sentry loop closes. The poller now also watches
+  the issues Mucka has ticketed and hands her a turn when one *moves* in
+  Sentry, not just when it appears: resolved → she moves the card to
+  shipped, resolved-then-erroring-again → she pulls it back out of
+  shipped and flags the operator, archived by hand → she decides what
+  the card deserves. Last status lives on the `sentry_issues` row, so a
+  change is reported as an edge rather than every five minutes, and an
+  undelivered one survives the window being shut — a resolve overnight
+  is still handed over at boot. The unresolved list the tick already
+  fetched answers for free; only the quiet ones cost a request, twelve
+  a tick, least-recently-checked first, so seventy-odd open tickets
+  sweep inside the hour rather than hammering the API. The turn also
+  carries the other issues on the same card and where each stands —
+  a card covering a cluster isn't shipped because one of the cluster
+  went quiet. The first read of any ticket is written down quietly: the
+  seventy-odd tickets predating this all read "unresolved" by column
+  default, and reporting the truth against that default would have
+  handed her every already-fixed one at once. Ruling *ticket* stamps
+  that baseline itself, so a fix landing minutes after the card is
+  written still reports.
+
 - **2026-08-16** — Dropped the Job Sheet tab; the middle panel is just
   the Roadmap now (`JobSheet.tsx` → `RoadmapPanel.tsx`, ~150 lines
   lighter). Events keep being recorded — they still feed the per-agent

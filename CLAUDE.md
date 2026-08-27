@@ -223,10 +223,19 @@ Conversational AI — Tom toggles a session with the voice button (or
 `⌘M`), Mucka responds in voice and as bubbles in the `MuckaChat` panel.
 
 **Prompt is source-of-truth in the repo.** Edit
-`src/main/mucka/prompts/pm.md`, run `npm run mucka:sync --dry-run` to
+`src/main/mucka/prompts/pm.md`, run `npm run mucka:sync -- --dry-run` to
 diff against the live agent, then `npm run mucka:sync` to push. Never
 edit the prompt in the ElevenLabs dashboard — the next sync overwrites
 it.
+
+The `--` is not optional: `npm run mucka:sync --dry-run` swallows the
+flag and performs a **real sync**.
+
+**Check for a local override before editing the repo prompt.** If
+`~/.mucka-toolbench/prompts/pm.md` exists, the sync pushes *that* and
+ignores the repo copy — it says so in the first line of its output.
+On a machine with an override, editing only the repo file changes
+nothing about the live agent; the edit has to land in both.
 
 **Env vars (read by main process only):**
 

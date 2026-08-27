@@ -3,10 +3,19 @@ import type {
   SentryEscalation,
   SentryIssue,
   SentryNewIssueEvent,
+  SentryStatusChange,
   SentryTriage
 } from '@shared/types'
-import { getStatus, listIssues } from './Sentry'
-import { getTriage, knownIssueIds, markForRetriage, recordSeen } from '../db/sentry'
+import { getIssue, getStatus, listIssues } from './Sentry'
+import {
+  getTriage,
+  knownIssueIds,
+  listWatchedTickets,
+  markForRetriage,
+  markStatusChecked,
+  recordSeen,
+  recordStatus
+} from '../db/sentry'
 import { logEvent } from '../events/Events'
 
 /**
@@ -34,10 +43,21 @@ const STEADY_PERIOD = '14d'
 const ESCALATION_COUNT_FACTOR = 5
 const ESCALATION_COUNT_MARGIN = 20
 
+/**
+ * How many ticketed issues the status pass will spend a request on per
+ * tick. Only issues absent from the unresolved list cost anything, so this
+ * is a ceiling on the quiet ones. At a five-minute tick it sweeps a
+ * hundred-odd open tickets inside an hour, which is the right latency for
+ * "this card can move to shipped".
+ */
+const STATUS_CHECKS_PER_TICK = 12
+
 interface SentryPollerDeps {
   webContents: WebContents
   /** Called once per genuinely new issue, after it's been recorded. */
   onNewIssue?: (issue: SentryIssue) => void
+  /** Called once per status move on a ticketed issue, after it's recorded. */
+  onStatusChange?: (change: SentryStatusChange) => void
 }
 
 function hasEscalated(issue: SentryIssue, prior: SentryTriage): boolean {
@@ -55,6 +75,39 @@ function toneFor(issue: SentryIssue): 'bad' | 'attention' | 'normal' {
 }
 
 /**
+ * Sentry's own vocabulary is thin — `ignored` covers archiving and
+ * `unresolved` covers both "never fixed" and "came back". The pairing is
+ * what carries the meaning, so read the transition, not the destination.
+ */
+function isRegression(change: SentryStatusChange): boolean {
+  return (
+    change.to === 'unresolved' &&
+    (change.from === 'resolved' || change.substatus === 'regressed')
+  )
+}
+
+function statusKind(change: SentryStatusChange): string {
+  if (isRegression(change)) return 'regressed'
+  if (change.to === 'resolved') return 'resolved'
+  if (change.to === 'ignored') return 'archived'
+  return 'status'
+}
+
+function statusMessage(change: SentryStatusChange): string {
+  const label = `${change.shortId} ${change.title.slice(0, 70)}`
+  if (isRegression(change)) return `Sentry — ${label} has come back after being resolved`
+  if (change.to === 'resolved') return `Sentry — ${label} resolved`
+  if (change.to === 'ignored') return `Sentry — ${label} archived in Sentry`
+  return `Sentry — ${label} moved ${change.from} → ${change.to}`
+}
+
+function statusTone(change: SentryStatusChange): 'win' | 'attention' | 'normal' {
+  if (isRegression(change)) return 'attention'
+  if (change.to === 'resolved') return 'win'
+  return 'normal'
+}
+
+/**
  * Polls the org's unresolved issues and reports ones the cockpit has never
  * seen. Dedupe is by Sentry issue id in sqlite, so restarts, HMR reloads
  * and overlapping ticks can't re-report or re-triage the same issue.
@@ -63,6 +116,7 @@ export class SentryPoller {
   private timer: NodeJS.Timeout | null = null
   private readonly webContents: WebContents
   private readonly onNewIssue: ((issue: SentryIssue) => void) | undefined
+  private readonly onStatusChange: ((change: SentryStatusChange) => void) | undefined
   private ticking = false
   private hasPolled = false
   private lastError: string | null = null
@@ -71,6 +125,7 @@ export class SentryPoller {
   constructor(deps: SentryPollerDeps) {
     this.webContents = deps.webContents
     this.onNewIssue = deps.onNewIssue
+    this.onStatusChange = deps.onStatusChange
   }
 
   start(): void {
@@ -158,6 +213,7 @@ export class SentryPoller {
         this.broadcast(issue)
         this.onNewIssue?.(issue)
       }
+      await this.checkTicketStatuses()
       this.hasPolled = true
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -208,6 +264,72 @@ export class SentryPoller {
     }
     this.broadcast(issue, escalation)
     this.onNewIssue?.(issue)
+  }
+
+  /**
+   * The back half of the loop: a ticket she wrote gets fixed, Sentry moves
+   * the issue, and she hears about it so the card can follow.
+   *
+   * Cheap first — anything on this tick's unresolved list is answered for
+   * free. The rest each cost a request, and there are dozens of open
+   * tickets, so only a slice is asked about per tick; the watch list comes
+   * back least-recently-checked first, which turns that into a rolling
+   * sweep of the whole list rather than the same rows every time.
+   */
+  private async checkTicketStatuses(): Promise<void> {
+    const watched = listWatchedTickets()
+    const unresolved = new Map(this.cache.map((i) => [i.id, i]))
+    let budget = STATUS_CHECKS_PER_TICK
+
+    for (const row of watched) {
+      const live = unresolved.get(row.issueId)
+      let status: string
+      let substatus: string | null
+      if (live) {
+        status = live.status
+        substatus = live.substatus
+      } else {
+        if (budget <= 0) continue
+        budget -= 1
+        try {
+          const issue = await getIssue(row.issueId)
+          status = issue.status
+          substatus = issue.substatus
+        } catch {
+          // One unreachable issue shouldn't stall the sweep — the cursor is
+          // stamped anyway so a permanently 404ing row can't block the rest.
+          markStatusChecked(row.issueId)
+          continue
+        }
+      }
+
+      markStatusChecked(row.issueId)
+      // First read of a ticket the watch pass has never seen: write the
+      // baseline down quietly. Rows predating the watch pass all read
+      // "unresolved" by column default, and reporting the truth against
+      // that default would hand her every already-fixed ticket at once.
+      const change = recordStatus({
+        issueId: row.issueId,
+        status,
+        substatus,
+        silent: row.statusCheckedAt === null
+      })
+      if (!change) continue
+
+      logEvent({
+        source: 'system',
+        kind: `sentry.${statusKind(change)}`,
+        message: statusMessage(change),
+        tone: statusTone(change)
+      })
+      this.broadcastStatus(change)
+      this.onStatusChange?.(change)
+    }
+  }
+
+  private broadcastStatus(change: SentryStatusChange): void {
+    if (this.webContents.isDestroyed()) return
+    this.webContents.send('sentry:status-change', change)
   }
 
   private broadcast(issue: SentryIssue, escalation?: SentryEscalation): void {
