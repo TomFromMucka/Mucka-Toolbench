@@ -678,13 +678,13 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'list_roadmap',
     description:
-      "Returns every roadmap kanban card grouped by column (backlog, next, doing, shipped, parked). Use this BEFORE answering 'what's next?', 'what are we working on?', or before suggesting where a new ticket should land — you need to see the current state to make sensible calls. Output includes id, title, body excerpt, and tags per card. Auto-executes.",
+      "Returns every roadmap kanban card grouped by column (backlog, issues, next, doing, shipped, parked). Use this BEFORE answering 'what's next?', 'what are we working on?', or before suggesting where a new ticket should land — you need to see the current state to make sensible calls. Output includes id, title, body excerpt, and tags per card. Auto-executes.",
     parameters: { type: 'object', properties: {}, required: [] }
   },
   {
     name: 'create_roadmap_card',
     description:
-      "Create a new ticket on the roadmap kanban. Use when Tom describes a new feature, bug, or idea worth tracking. Default the column to 'backlog' for rough ideas, 'next' for things Tom flagged as priority, 'doing' only if Tom explicitly says he's starting it now. Body supports markdown. Auto-executes.",
+      "Create a new ticket on the roadmap kanban. Use when Tom describes a new feature, bug, or idea worth tracking. Default the column to 'backlog' for rough ideas, 'next' for things Tom flagged as priority, 'doing' only if Tom explicitly says he's starting it now. 'issues' is for production errors off Sentry triage — every card you open for a Sentry ticket goes there, and nothing else does. Body supports markdown. Auto-executes.",
     parameters: {
       type: 'object',
       properties: {
@@ -696,7 +696,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         column: {
           type: 'string',
           description: 'Which lane to land in.',
-          enum: ['backlog', 'next', 'doing', 'shipped', 'parked']
+          enum: ['backlog', 'issues', 'next', 'doing', 'shipped', 'parked']
         },
         body: {
           type: 'string',
@@ -737,7 +737,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'move_roadmap_card',
     description:
-      "Move a roadmap card to a different lane (e.g. backlog → next when Tom prioritises it, doing → shipped when work lands). Use when Tom says 'pull X into next', 'mark Y as done', 'park that one', etc. Auto-executes.",
+      "Move a roadmap card to a different lane (e.g. backlog → next when Tom prioritises it, issues → doing when someone picks a production bug up, doing → shipped when work lands). Use when Tom says 'pull X into next', 'mark Y as done', 'park that one', etc. Auto-executes.",
     parameters: {
       type: 'object',
       properties: {
@@ -748,7 +748,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         column: {
           type: 'string',
           description: 'Destination lane.',
-          enum: ['backlog', 'next', 'doing', 'shipped', 'parked']
+          enum: ['backlog', 'issues', 'next', 'doing', 'shipped', 'parked']
         }
       },
       required: ['id', 'column']

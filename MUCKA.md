@@ -62,7 +62,10 @@ or "Tom, eyes here".
   and a `voice` tag in the footer.
 - Notes scratchpad — free-form textarea, 600 ms debounced autosave
   to sqlite, flushed on blur and ⌘S.
-- Roadmap kanban — five lanes, drag-and-drop, cards open in a modal.
+- Roadmap kanban — six lanes, drag-and-drop, cards open in a modal.
+  **Issues** sits between Backlog and Next up and holds production
+  errors off Sentry triage, nothing else, so it reads as a straight
+  list of what's broken in production.
   **Send to worktree** on an open ticket picks an agent from a
   dropdown (idle ones first, running ones flagged as a restart),
   launches Claude Code in that worktree and pastes the ticket in as
@@ -224,6 +227,13 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-08-27** — The roadmap grew an **Issues** lane, between Backlog
+  and Next up. Every card Mucka opens off a Sentry ticket verdict lands
+  there and nothing else does, so the lane is a straight read of what's
+  broken in production rather than bugs sinking into the idea pile.
+  A regression on a shipped card comes back to Issues; sending an
+  Issues card to a worktree still moves it to Doing.
 
 - **2026-08-27** — The Sentry loop closes. The poller now also watches
   the issues Mucka has ticketed and hands her a turn when one *moves* in

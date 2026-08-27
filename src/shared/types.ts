@@ -334,12 +334,20 @@ export interface BroadcastResult {
 /**
  * Kanban columns, in left-to-right display order.
  * - backlog: raw ideas that aren't queued yet
+ * - issues:  production errors, straight off Sentry triage — a lane of
+ *            their own so a real bug can't sink into the idea pile
  * - next:    queued — pull next when there's capacity
  * - doing:   in flight right now
  * - shipped: landed (replaces the manual Recent-changes log over time)
  * - parked:  not now, but worth keeping (low-priority or paused)
  */
-export type RoadmapColumn = 'backlog' | 'next' | 'doing' | 'shipped' | 'parked'
+export type RoadmapColumn =
+  | 'backlog'
+  | 'issues'
+  | 'next'
+  | 'doing'
+  | 'shipped'
+  | 'parked'
 
 export interface RoadmapCard {
   id: string
