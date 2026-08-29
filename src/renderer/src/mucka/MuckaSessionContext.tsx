@@ -18,7 +18,8 @@ import type {
   MuckaSessionState,
   MuckaStatus,
   SentryEscalation,
-  SentryIssue
+  SentryIssue,
+  SentryStatusChange
 } from '@shared/types'
 import type { ClientTools } from '@elevenlabs/react'
 import { useAgentsState } from '../state/AgentsContext'
@@ -77,6 +78,73 @@ async function deliverSentryIssue(
     '(Pull the detail with get_sentry_issue, then rule on it with triage_sentry_issue — ' +
     'every issue ends in ticket, noise or watch. Write the card first when it\'s a ticket ' +
     'and pass its id. Keep what you say to Tom to a line.)'
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      await window.mucka.sendChatMessage(msg)
+      return
+    } catch {
+      // PM busy mid-reply — wait and retry.
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+  }
+}
+
+/**
+ * The other half of the Sentry loop: an issue she ticketed has moved in
+ * Sentry, so the card should probably follow. She rules on it rather than
+ * the card being moved underneath her — a card can cover more than the one
+ * issue, and only she knows that.
+ */
+function statusHeader(change: SentryStatusChange): string {
+  const regressed =
+    change.to === 'unresolved' &&
+    (change.from === 'resolved' || change.substatus === 'regressed')
+  if (regressed) {
+    return (
+      `⟢ Sentry issue you ticketed has come back — it was resolved, it's erroring again.\n\n` +
+      `The fix didn't hold. Pull the card back out of shipped if that's where it got to, ` +
+      `and flag Tom — a regression is worth interrupting him for.\n\n`
+    )
+  }
+  if (change.to === 'resolved') {
+    const open = change.cardSiblings.filter((sib) => sib.status === 'unresolved')
+    return (
+      `⟢ Sentry issue you ticketed is now resolved.\n\n` +
+      (open.length > 0
+        ? `The card also covers ${open.map((sib) => sib.shortId).join(', ')}, ` +
+          `still unresolved — so it is very likely not finished. Leave it where ` +
+          `it is unless you can see otherwise.\n\n`
+        : `Nothing else on the card is still erroring. If it's genuinely done, ` +
+          `move it to shipped.\n\n`)
+    )
+  }
+  if (change.to === 'ignored') {
+    return (
+      `⟢ Sentry issue you ticketed was archived in Sentry by hand — Tom's doing, not yours.\n\n` +
+      `Decide what that means for the card and act on it.\n\n`
+    )
+  }
+  return `⟢ Sentry issue you ticketed moved ${change.from} → ${change.to}.\n\n`
+}
+
+type SentryTurn =
+  | { kind: 'triage'; issue: SentryIssue; escalation?: SentryEscalation }
+  | { kind: 'status'; change: SentryStatusChange }
+
+async function deliverSentryStatusChange(change: SentryStatusChange): Promise<void> {
+  const msg =
+    statusHeader(change) +
+    `${change.shortId} [${change.project}] ${change.title}\n` +
+    `${change.cardId ? `Roadmap card: ${change.cardId}\n` : ''}` +
+    `${
+      change.cardSiblings.length > 0
+        ? `Also on that card: ${change.cardSiblings
+            .map((sib) => `${sib.shortId} (${sib.status})`)
+            .join(', ')}\n`
+        : ''
+    }${change.permalink}\n\n` +
+    '(list_roadmap to find the card, move_roadmap_card to move it. Keep what you say ' +
+    'to Tom to a line.)'
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       await window.mucka.sendChatMessage(msg)
@@ -245,12 +313,13 @@ function InnerProvider({
     })
   }, [])
 
-  // Sentry triage queue. Issues arrive from the main-process poller (and a
-  // backlog can be waiting at boot if the cockpit was closed), so they're
-  // drained strictly one at a time — a parallel fan-out would have her
-  // triaging four issues in four interleaved turns.
+  // Sentry queue — new issues to triage and status moves on ones she's
+  // already ticketed. Both arrive from the main-process poller (and a
+  // backlog can be waiting at boot if the cockpit was closed), and they
+  // share one queue drained strictly one at a time: a parallel fan-out
+  // would have her working four issues in four interleaved turns.
   useEffect(() => {
-    const queue: { issue: SentryIssue; escalation?: SentryEscalation }[] = []
+    const queue: SentryTurn[] = []
     let draining = false
     let cancelled = false
 
@@ -261,7 +330,14 @@ function InnerProvider({
         while (queue.length > 0 && !cancelled) {
           const next = queue.shift()
           if (!next) break
-          await deliverSentryIssue(next.issue, next.escalation)
+          if (next.kind === 'triage') {
+            await deliverSentryIssue(next.issue, next.escalation)
+          } else {
+            await deliverSentryStatusChange(next.change)
+            // Acked only once she's actually been handed it, so a change
+            // that arrives while the window is shut is still delivered.
+            await window.mucka.ackSentryStatusChange(next.change.issueId).catch(() => {})
+          }
         }
       } finally {
         draining = false
@@ -269,8 +345,25 @@ function InnerProvider({
     }
 
     const enqueue = (issue: SentryIssue, escalation?: SentryEscalation): void => {
-      if (queue.some((q) => q.issue.id === issue.id)) return
-      queue.push(escalation ? { issue, escalation } : { issue })
+      if (queue.some((q) => q.kind === 'triage' && q.issue.id === issue.id)) return
+      queue.push(
+        escalation ? { kind: 'triage', issue, escalation } : { kind: 'triage', issue }
+      )
+      void drain()
+    }
+
+    const enqueueStatus = (change: SentryStatusChange): void => {
+      if (
+        queue.some(
+          (q) =>
+            q.kind === 'status' &&
+            q.change.issueId === change.issueId &&
+            q.change.to === change.to
+        )
+      ) {
+        return
+      }
+      queue.push({ kind: 'status', change })
       void drain()
     }
 
@@ -303,12 +396,26 @@ function InnerProvider({
         /* best-effort */
       })
 
+    // Same reason as the untriaged backlog: a resolve that landed overnight
+    // has no live event left to catch, so it's read out of sqlite.
+    void window.mucka
+      .listSentryStatusChanges()
+      .then((pending) => {
+        if (cancelled) return
+        for (const change of pending) enqueueStatus(change)
+      })
+      .catch(() => {
+        /* best-effort */
+      })
+
     const off = window.mucka.onSentryNewIssue((event) =>
       enqueue(event.issue, event.escalation)
     )
+    const offStatus = window.mucka.onSentryStatusChange((change) => enqueueStatus(change))
     return () => {
       cancelled = true
       off()
+      offStatus()
     }
   }, [])
 

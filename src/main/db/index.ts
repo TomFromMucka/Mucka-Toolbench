@@ -111,7 +111,12 @@ function migrate(d: DatabaseType): void {
       reason TEXT,
       card_id TEXT,
       triage_count INTEGER NOT NULL DEFAULT 0,
-      triage_user_count INTEGER NOT NULL DEFAULT 0
+      triage_user_count INTEGER NOT NULL DEFAULT 0,
+      last_status TEXT NOT NULL DEFAULT 'unresolved',
+      last_substatus TEXT,
+      status_changed_at INTEGER,
+      pending_from_status TEXT,
+      status_checked_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS sentry_untriaged_idx ON sentry_issues(triaged_at, first_seen);
   `)
@@ -154,5 +159,31 @@ function migrate(d: DatabaseType): void {
     d.exec(
       `ALTER TABLE sentry_issues ADD COLUMN triage_user_count INTEGER NOT NULL DEFAULT 0`
     )
+  }
+  // Last status observed on a ticketed issue. Rows written before this
+  // column existed were unresolved when they were seen, which is what the
+  // default says, so no backfill is needed.
+  if (!sentryCols.has('last_status')) {
+    d.exec(
+      `ALTER TABLE sentry_issues ADD COLUMN last_status TEXT NOT NULL DEFAULT 'unresolved'`
+    )
+  }
+  if (!sentryCols.has('last_substatus')) {
+    d.exec(`ALTER TABLE sentry_issues ADD COLUMN last_substatus TEXT`)
+  }
+  if (!sentryCols.has('status_changed_at')) {
+    d.exec(`ALTER TABLE sentry_issues ADD COLUMN status_changed_at INTEGER`)
+  }
+  // The status a still-undelivered change moved *from*. Non-null is the
+  // "PM doesn't know yet" flag, and it holds the original `from` across
+  // further moves so a resolve-then-regress before she's told still reads
+  // as the whole journey rather than the last hop.
+  if (!sentryCols.has('pending_from_status')) {
+    d.exec(`ALTER TABLE sentry_issues ADD COLUMN pending_from_status TEXT`)
+  }
+  // Round-robin cursor for the watch pass. Null sorts first, so a row
+  // never checked goes to the front of the queue.
+  if (!sentryCols.has('status_checked_at')) {
+    d.exec(`ALTER TABLE sentry_issues ADD COLUMN status_checked_at INTEGER`)
   }
 }

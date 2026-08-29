@@ -18,6 +18,7 @@ import { Icon } from './ui/Icon'
 
 const COLUMNS: { id: RoadmapColumn; label: string }[] = [
   { id: 'backlog', label: 'Backlog' },
+  { id: 'issues', label: 'Issues' },
   { id: 'next', label: 'Next up' },
   { id: 'doing', label: 'Doing' },
   { id: 'shipped', label: 'Shipped' },
@@ -260,7 +261,12 @@ export function RoadmapCardModal({
         })
         // Sending a ticket to a worktree is the moment it starts, so the
         // lane follows. Shipped/doing cards stay where Tom put them.
-        if (card.column === 'backlog' || card.column === 'next' || card.column === 'parked') {
+        if (
+          card.column === 'backlog' ||
+          card.column === 'issues' ||
+          card.column === 'next' ||
+          card.column === 'parked'
+        ) {
           await window.mucka.moveRoadmapCard({ id: card.id, column: 'doing' })
         }
         onClose()

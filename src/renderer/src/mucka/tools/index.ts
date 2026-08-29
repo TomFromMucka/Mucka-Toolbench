@@ -631,6 +631,7 @@ function makeDeployToVercel(deps: ToolDeps) {
 
 const ROADMAP_COLUMNS: readonly RoadmapColumn[] = [
   'backlog',
+  'issues',
   'next',
   'doing',
   'shipped',
@@ -639,6 +640,7 @@ const ROADMAP_COLUMNS: readonly RoadmapColumn[] = [
 
 const ROADMAP_LABEL: Record<RoadmapColumn, string> = {
   backlog: 'Backlog',
+  issues: 'Issues',
   next: 'Next up',
   doing: 'Doing',
   shipped: 'Shipped',

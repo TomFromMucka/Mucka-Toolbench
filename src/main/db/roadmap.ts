@@ -21,6 +21,7 @@ interface CardRow {
 
 export const COLUMNS: readonly RoadmapColumn[] = [
   'backlog',
+  'issues',
   'next',
   'doing',
   'shipped',
@@ -324,6 +325,7 @@ function mapHeading(name: string): RoadmapColumn | null {
   if (n.startsWith('parked') || n.includes('maybe')) return 'parked'
   if (n.startsWith('deferred')) return 'parked'
   if (n.startsWith('backlog')) return 'backlog'
+  if (n.startsWith('issue') || n.startsWith('bug')) return 'issues'
   return null
 }
 

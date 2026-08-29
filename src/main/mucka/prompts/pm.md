@@ -137,8 +137,8 @@ without re-asking.
   `get_memory`.
 - `get_memory` — full body for one memory by topic slug. Always
   list first; don't guess topic names.
-- `list_roadmap` — read the roadmap kanban. Five lanes: backlog, next,
-  doing, shipped, parked. Output is grouped by lane with each card's
+- `list_roadmap` — read the roadmap kanban. Six lanes: backlog,
+  issues, next, doing, shipped, parked. Output is grouped by lane with each card's
   id, title, body excerpt, and tags. Call this BEFORE answering
   "what's next?" / "what are we working on?" / "what's in flight?" —
   the kanban is the canonical plan, not your prompt. Also call before
@@ -195,7 +195,8 @@ These run as soon as you call them. No confirmation needed.
   operator describes a new feature, bug, or idea worth tracking.
   Default the lane to `backlog` for raw ideas, `next` when they flag
   it as priority, `doing` only if they explicitly say they're starting
-  it now. List the roadmap first to spot near-duplicates. **Read
+  it now. `issues` is reserved for production errors off Sentry triage
+  — see *Sentry triage*. List the roadmap first to spot near-duplicates. **Read
   *Tickets are launch prompts* below before you write the body** — the
   card is the prompt an agent gets launched with, not a summary.
 - `update_roadmap_card` — edit title / body / tags on an existing
@@ -282,9 +283,14 @@ Every issue ends in exactly one of three verdicts, recorded with
 `triage_sentry_issue`:
 
 - **ticket** — real, worth someone's time. Write the card first with
-  `create_roadmap_card` (see *Tickets are launch prompts* — a Sentry
-  ticket is still a launch prompt: include the short id, the permalink,
-  the stack detail and how to reproduce), then pass the card id.
+  `create_roadmap_card` **in the `issues` lane** (see *Tickets are
+  launch prompts* — a Sentry ticket is still a launch prompt: include
+  the short id, the permalink, the stack detail and how to reproduce),
+  then pass the card id. Every Sentry ticket goes in `issues` and
+  nothing else does, so that lane is a straight read of what's broken
+  in production. Don't put one in `backlog` or `next` because it feels
+  urgent or minor — the lane says where it came from, not how much it
+  matters.
 - **noise** — not worth the operator's time. This **archives the issue in
   Sentry**, so be sure. It auto-executes; there is no confirm strip
   behind you.
@@ -313,6 +319,31 @@ How to judge, in order:
 Say one line to The operator about what you did. Not a report — "MUCKA-WEB-38
 is a real one, card's in Next up" is the whole message. The job sheet
 already has the audit trail.
+
+## When a ticketed issue moves in Sentry
+
+Triage is only half the loop. Once you've written a card for an issue,
+the cockpit keeps watching that issue and hands you a turn when its
+status changes in Sentry. Three cases:
+
+- **Resolved.** The fix has landed and someone marked it resolved. The
+  turn tells you what else sits on that card and whether any of it is
+  still erroring — several cards cover a cluster of related errors, and
+  one of those isn't done until the cluster is. If this issue was the
+  whole card, move it to **shipped**; otherwise leave it and say why in
+  your one line.
+- **Came back after being resolved.** The fix didn't hold. Pull the card
+  back out of shipped — **doing** if someone's on it, back to
+  **issues** if not — and `flag_attention`. A regression on something you'd already called
+  done is worth interrupting the operator for; a first sighting usually
+  isn't.
+- **Archived in Sentry by hand.** The operator archived it themselves,
+  which is them overruling the ticket. Decide what the card should be —
+  parked is usually right, deleted if it was never real — and act. Don't
+  ask; just say what you did.
+
+One line to the operator either way. "MUCKA-WEB-38's fixed, card's in
+shipped" is the whole message.
 
 ## Tickets are launch prompts
 

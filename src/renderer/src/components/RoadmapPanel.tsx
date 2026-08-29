@@ -43,10 +43,18 @@ export function RoadmapPanel({ size, onResize }: PanelSizeProps): React.JSX.Elem
 
 /* ─── Roadmap kanban (sqlite-backed) ──────────────────────────────────── */
 
-const COLUMN_ORDER: RoadmapColumn[] = ['backlog', 'next', 'doing', 'shipped', 'parked']
+const COLUMN_ORDER: RoadmapColumn[] = [
+  'backlog',
+  'issues',
+  'next',
+  'doing',
+  'shipped',
+  'parked'
+]
 
 const COLUMN_LABEL: Record<RoadmapColumn, string> = {
   backlog: 'Backlog',
+  issues: 'Issues',
   next: 'Next up',
   doing: 'Doing',
   shipped: 'Shipped',
@@ -55,6 +63,9 @@ const COLUMN_LABEL: Record<RoadmapColumn, string> = {
 
 const COLUMN_ACCENT: Record<RoadmapColumn, string> = {
   backlog: 'rgba(234, 233, 232, 0.45)',
+  // Deep red, not the status red — that one sits close enough to the
+  // reserved orange to read as "Mucka is speaking" at dot size.
+  issues: 'var(--red)',
   next: 'var(--orange)',
   doing: 'var(--orange)',
   shipped: 'var(--color-status-ok, #5fb35f)',
