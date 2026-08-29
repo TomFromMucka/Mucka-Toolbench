@@ -228,6 +228,16 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-08-29** — Fixed the in-app updater on locally-installed builds.
+  `npm run install:mac` builds without `--publish`, and electron-builder
+  only emits `Contents/Resources/app-update.yml` on a run that actually
+  publishes — so a local install had no updater config and the update
+  button failed with ENOENT before it ever reached GitHub. That is why
+  0.5.0 sat un-updatable. The file is now seeded through
+  `extraResources` so it lands *before* signing (adding it afterwards
+  would break the code seal), and `install-mac.sh` refuses to install an
+  app that is missing it.
+
 - **2026-08-27** — The roadmap grew an **Issues** lane, between Backlog
   and Next up. Every card Mucka opens off a Sentry ticket verdict lands
   there and nothing else does, so the lane is a straight read of what's

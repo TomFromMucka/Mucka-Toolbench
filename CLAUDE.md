@@ -214,6 +214,8 @@ in sync with reality without anyone having to remember to "tell" her.
 | `npm run lint`       | ESLint (config in `eslint.config.mjs`). |
 | `npm run build`      | Typecheck + electron-vite production build. |
 | `npm run build:mac`  | Build + electron-builder mac DMG. |
+| `npm run install:mac`| Build and swap the app in `/Applications`. |
+| `npm run release:mac`| Build, sign and publish a GitHub release. |
 | `npm run mucka:sync` | Create-or-update the Mucka PM agent + push prompt. |
 
 ## Mucka the PM agent

@@ -9,6 +9,14 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+# Seeds Contents/Resources/app-update.yml before signing. electron-builder
+# only generates that file on a run that actually publishes, so without
+# this a `build:mac` app has no updater config and electron-updater fails
+# at startup with ENOENT. It can't be added afterwards — Resources is
+# inside the code seal. See build/app-update.yml.
+extraResources:
+  - from: build/app-update.yml
+    to: app-update.yml
 asarUnpack:
   - resources/**
   - 'node_modules/@anthropic-ai/claude-agent-sdk/**'
