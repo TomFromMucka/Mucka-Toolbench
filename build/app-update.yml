@@ -1,0 +1,16 @@
+# Updater config baked into the .app at package time.
+#
+# electron-builder only emits Contents/Resources/app-update.yml on a run
+# that actually publishes. `build:mac` doesn't publish, so a locally
+# installed app shipped without it and electron-updater died at startup
+# with ENOENT on this exact path — which is how the installed 0.5.0 ended
+# up unable to even check for updates. Writing it after packaging is not
+# an option: Resources is inside the code seal, so it would invalidate the
+# signature. extraResources copies it in before signing instead.
+#
+# Keep in sync with the `publish:` block below in electron-builder.yml.
+owner: TomFromMucka
+repo: Mucka-Toolbench
+provider: github
+releaseType: release
+updaterCacheDirName: mucka-toolbench-updater

@@ -29,6 +29,20 @@ if [[ -z "$BUILT_APP" || ! -d "$BUILT_APP" ]]; then
 fi
 echo "  Built: $BUILT_APP"
 
+# Without this file electron-updater throws at startup —
+#   ENOENT ... Contents/Resources/app-update.yml
+# — and the in-app update button can't even reach GitHub to check. It is
+# seeded by `extraResources` in electron-builder.yml, because electron-builder
+# itself only generates it on a run that publishes and `build:mac` doesn't.
+# Fail here rather than silently installing an app that can never update
+# itself, which is how 0.5.0 sat un-updatable for twelve days.
+if [[ ! -f "$BUILT_APP/Contents/Resources/app-update.yml" ]]; then
+  echo "  Built app has no Contents/Resources/app-update.yml." >&2
+  echo "  The installed app would be unable to check for updates." >&2
+  echo "  Check the extraResources block in electron-builder.yml." >&2
+  exit 1
+fi
+
 # Graceful quit if the installed app is running.
 if pgrep -f "Mucka Toolbench.app/Contents/MacOS" >/dev/null; then
   echo "→ Quitting running app…"
