@@ -25,6 +25,7 @@ import type {
   SentryIssue,
   SentryNewIssueEvent,
   SentryStatus,
+  SentryStatusChange,
   SentryTriage,
   SentryVerdict,
   MicAccess,
@@ -298,6 +299,18 @@ const muckaApi: MuckaApi = {
     ): void => handler(payload)
     ipcRenderer.on('sentry:new-issue', listener)
     return () => ipcRenderer.off('sentry:new-issue', listener)
+  },
+  listSentryStatusChanges: () =>
+    ipcRenderer.invoke('sentry:status-changes') as Promise<SentryStatusChange[]>,
+  ackSentryStatusChange: (issueId: string) =>
+    ipcRenderer.invoke('sentry:ack-status', issueId) as Promise<void>,
+  onSentryStatusChange: (handler: (change: SentryStatusChange) => void): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: SentryStatusChange
+    ): void => handler(payload)
+    ipcRenderer.on('sentry:status-change', listener)
+    return () => ipcRenderer.off('sentry:status-change', listener)
   },
 
   fetchPrReviewContext: (agentId: AgentId) =>

@@ -108,7 +108,9 @@ import {
   getStatus as sentryGetStatus
 } from './sentry/Sentry'
 import {
+  ackStatusChange as ackSentryStatusChange,
   getTriage as getSentryTriage,
+  listPendingStatusChanges as listSentryStatusChanges,
   listUntriaged as listUntriagedSentry,
   recordTriage as recordSentryTriage
 } from './db/sentry'
@@ -563,6 +565,12 @@ function registerIpc(): void {
   ipcMain.handle('sentry:get', (_event, issueId: string) => sentryGetIssue(issueId))
 
   ipcMain.handle('sentry:untriaged', () => listUntriagedSentry())
+
+  ipcMain.handle('sentry:status-changes', () => listSentryStatusChanges())
+
+  ipcMain.handle('sentry:ack-status', (_event, issueId: string) => {
+    ackSentryStatusChange(issueId)
+  })
 
   ipcMain.handle('sentry:health', () =>
     sentryPoller?.getHealth() ?? { hasPolled: false, lastError: null, count: 0 }

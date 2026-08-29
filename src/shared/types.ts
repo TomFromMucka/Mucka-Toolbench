@@ -334,12 +334,20 @@ export interface BroadcastResult {
 /**
  * Kanban columns, in left-to-right display order.
  * - backlog: raw ideas that aren't queued yet
+ * - issues:  production errors, straight off Sentry triage — a lane of
+ *            their own so a real bug can't sink into the idea pile
  * - next:    queued — pull next when there's capacity
  * - doing:   in flight right now
  * - shipped: landed (replaces the manual Recent-changes log over time)
  * - parked:  not now, but worth keeping (low-priority or paused)
  */
-export type RoadmapColumn = 'backlog' | 'next' | 'doing' | 'shipped' | 'parked'
+export type RoadmapColumn =
+  | 'backlog'
+  | 'issues'
+  | 'next'
+  | 'doing'
+  | 'shipped'
+  | 'parked'
 
 export interface RoadmapCard {
   id: string
@@ -661,6 +669,15 @@ export interface MuckaApi {
   /** Whether the poller has actually succeeded, so an empty list can be read honestly. */
   getSentryHealth(): Promise<SentryHealth>
   onSentryNewIssue(handler: (event: SentryNewIssueEvent) => void): () => void
+  /**
+   * Status moves on ticketed issues the PM hasn't been told about yet.
+   * Survives the window being closed, so an overnight resolve is still
+   * delivered at boot rather than lost with the live event.
+   */
+  listSentryStatusChanges(): Promise<SentryStatusChange[]>
+  /** Mark a status change as delivered so it stops being re-queued. */
+  ackSentryStatusChange(issueId: string): Promise<void>
+  onSentryStatusChange(handler: (change: SentryStatusChange) => void): () => void
 
   /* PR review — Mucka's review_pr tool */
   fetchPrReviewContext(agentId: AgentId): Promise<PrReviewContext>
@@ -901,6 +918,12 @@ export interface SentryTriage {
   triageCount: number
   /** Users affected when the verdict was recorded. */
   triageUserCount: number
+  /**
+   * When the watch pass last read this issue's status from Sentry. Null
+   * means never — that first read establishes the baseline and is
+   * deliberately not reported.
+   */
+  statusCheckedAt: number | null
 }
 
 /**
@@ -926,6 +949,39 @@ export interface SentryNewIssueEvent {
   issue: SentryIssue
   /** Absent for a genuinely new issue; set when a watched one has grown. */
   escalation?: SentryEscalation
+}
+
+/**
+ * A ticketed issue whose status moved in Sentry — the back half of the
+ * loop. `from`/`to` are Sentry's own status strings ("unresolved",
+ * "resolved", "ignored"), so a regression reads as resolved → unresolved
+ * with substatus "regressed".
+ */
+/** Another issue on the same roadmap card, and where it stands. */
+export interface SentryCardSibling {
+  shortId: string
+  /** Last status the cockpit observed — "unresolved" until told otherwise. */
+  status: string
+}
+
+export interface SentryStatusChange {
+  issueId: string
+  shortId: string
+  title: string
+  project: string
+  permalink: string
+  /** The roadmap card the ticket verdict opened. */
+  cardId: string | null
+  /**
+   * Other issues on that same card. A card with a sibling still unresolved
+   * isn't finished, however resolved this one issue is.
+   */
+  cardSiblings: SentryCardSibling[]
+  /** Status when the PM was last brought up to date. */
+  from: string
+  to: string
+  substatus: string | null
+  changedAt: number
 }
 
 /* ─── PR review (Mucka's review_pr tool) ─────────────────────────────── */

@@ -19,6 +19,7 @@ const LOCAL_FILENAME = 'ROADMAP.local.md'
 
 const COLUMN_HEADING: Record<RoadmapColumn, string> = {
   backlog: 'Backlog',
+  issues: 'Issues',
   next: 'Next up',
   doing: 'Doing',
   shipped: 'Shipped',
