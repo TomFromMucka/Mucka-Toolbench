@@ -22,6 +22,7 @@ import type {
   SentryStatusChange
 } from '@shared/types'
 import type { ClientTools } from '@elevenlabs/react'
+import { fenceUntrusted } from '@shared/untrusted'
 import { useAgentsState } from '../state/AgentsContext'
 import { buildClientTools } from './tools/index'
 import { playConnectionChime } from './chime'
@@ -36,7 +37,7 @@ const REPLY_ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
 async function deliverAgentReply(agentId: AgentId, body: string): Promise<void> {
   const msg =
     `⟢ Auto-update from agent "${agentId}" — it finished its turn. Latest from its terminal:\n\n` +
-    `${body}\n\n` +
+    `${fenceUntrusted(`terminal output from ${agentId}`, body)}\n\n` +
     '(Summarise anything Tom needs to know. If a follow-up is warranted, draft it with send_to_agent for his sign-off — don\'t send silently.)'
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
@@ -70,11 +71,14 @@ async function deliverSentryIssue(
     : `⟢ New Sentry issue — triage it.\n\n`
   const msg =
     header +
-    `${issue.shortId} [${issue.project}] ${issue.title}\n` +
+    `${issue.shortId} [${issue.project}] ` +
     `${issue.level}${issue.category ? ` · ${issue.category}` : ''} · ${issue.count} event${
       issue.count === 1 ? '' : 's'
     } · ${users}\n` +
-    `${issue.detail ? `${issue.detail}\n` : ''}${issue.permalink}\n\n` +
+    `${fenceUntrusted(
+      'Sentry issue title + message',
+      `${issue.title}${issue.detail ? `\n${issue.detail}` : ''}`
+    )}\n${issue.permalink}\n\n` +
     '(Pull the detail with get_sentry_issue, then rule on it with triage_sentry_issue — ' +
     'every issue ends in ticket, noise or watch. Write the card first when it\'s a ticket ' +
     'and pass its id. Keep what you say to Tom to a line.)'
@@ -134,7 +138,7 @@ type SentryTurn =
 async function deliverSentryStatusChange(change: SentryStatusChange): Promise<void> {
   const msg =
     statusHeader(change) +
-    `${change.shortId} [${change.project}] ${change.title}\n` +
+    `${change.shortId} [${change.project}]\n${fenceUntrusted('Sentry issue title', change.title)}\n` +
     `${change.cardId ? `Roadmap card: ${change.cardId}\n` : ''}` +
     `${
       change.cardSiblings.length > 0

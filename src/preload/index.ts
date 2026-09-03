@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AgentConfig,
   AgentId,
@@ -407,16 +406,7 @@ ipcRenderer
     /* fallback to empty string */
   })
 
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('mucka', muckaApi)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore: define in dts
-  window.electron = electronAPI
-  // @ts-ignore: define in dts
-  window.mucka = muckaApi
-}
+// Only the typed cockpit API crosses the bridge. The generic
+// `electronAPI` (raw ipcRenderer on any channel) is deliberately not
+// exposed — every channel the renderer needs has a named method above.
+contextBridge.exposeInMainWorld('mucka', muckaApi)
