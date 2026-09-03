@@ -156,6 +156,7 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('mucka:text-history') as Promise<MuckaTextMessage[]>,
   sendChatMessage: (text: string) =>
     ipcRenderer.invoke('mucka:text-send', text) as Promise<void>,
+  abortChatTurn: () => ipcRenderer.invoke('mucka:text-abort') as Promise<boolean>,
   clearChatHistory: () =>
     ipcRenderer.invoke('mucka:text-clear') as Promise<void>,
   searchHistory: (query: string, limit?: number) =>

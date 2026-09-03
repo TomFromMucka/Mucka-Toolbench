@@ -229,6 +229,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Text-mode Mucka can be stopped. A `stop` button sits
+  beside the typing indicator; it aborts the SDK turn, keeps whatever had
+  already arrived (with a `(stopped)` tail) and releases the chat input,
+  which previously stayed dead until a restart if a turn hung. Resume is
+  safer too: the retry-without-session fallback now only fires when a
+  turn failed before producing any output (the missing-session case), so
+  a mid-turn network blip or tool error no longer replays executed tool
+  calls or forks the conversation.
 - **2026-09-03** — Mucka can read a worktree. Four auto-execute tools:
   `read_file` (line-numbered, paged), `list_dir`, `get_diff`
   (working / staged / branch-vs-main, optional path) and `git_log`
