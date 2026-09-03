@@ -228,6 +228,13 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Fixed text-mode Mucka 400ing on every turn. The Agent
+  SDK ships its own vendored Claude Code binary, and the pin at
+  `^0.3.142` gave us 2.1.142 — which rejected the `opus[1m]` default set
+  machine-wide in `~/.claude/settings.json`. Bumped to `^0.3.258`, and
+  pinned `MUCKA_TEXT_MODEL` in `.env` so Mucka no longer inherits a
+  moving CLI default.
+
 - **2026-08-29** — Fixed the in-app updater on locally-installed builds.
   `npm run install:mac` builds without `--publish`, and electron-builder
   only emits `Contents/Resources/app-update.yml` on a run that actually
