@@ -13,7 +13,9 @@ import type {
   SentryTriage,
   SentryVerdict,
   VercelAgentSummary,
-  VercelDeployment
+  VercelDeployment,
+  WorktreeDiffScope,
+  WorktreeReadResult
 } from '@shared/types'
 import { MUCKA_AGENT_IDS, TOOL_DEFINITIONS } from '@shared/mucka-tools'
 import { fenceUntrusted } from '@shared/untrusted'
@@ -167,6 +169,62 @@ async function getGitStatus(params: Record<string, unknown>): Promise<string> {
   const agentId = parseAgentId(params)
   const status = await window.mucka.refreshGit(agentId)
   return `${agentId}: ${describeGitLine(status)}`
+}
+
+/* ─── Worktree reads ─────────────────────────────────────────────────── */
+
+function optionalNumber(params: Record<string, unknown>, key: string): number | undefined {
+  const v = params[key]
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined
+}
+
+function optionalString(params: Record<string, unknown>, key: string): string {
+  const v = params[key]
+  return typeof v === 'string' ? v : ''
+}
+
+function renderWorktreeRead(result: WorktreeReadResult, label: string): string {
+  if (!result.ok) return result.reason
+  const body = fenceUntrusted(label, result.text)
+  return result.note ? `${body}\n(${result.note})` : body
+}
+
+async function readFileHandler(params: Record<string, unknown>): Promise<string> {
+  const agentId = parseAgentId(params)
+  const path = parseString(params, 'path').trim()
+  if (!path) throw new Error('path must not be empty')
+  const result = await window.mucka.readWorktreeFile(
+    agentId,
+    path,
+    optionalNumber(params, 'start_line'),
+    optionalNumber(params, 'max_lines')
+  )
+  return renderWorktreeRead(result, `file ${path} in ${agentId}'s worktree`)
+}
+
+async function listDirHandler(params: Record<string, unknown>): Promise<string> {
+  const agentId = parseAgentId(params)
+  const path = optionalString(params, 'path').trim()
+  const result = await window.mucka.listWorktreeDir(agentId, path)
+  return renderWorktreeRead(result, `directory listing from ${agentId}'s worktree`)
+}
+
+async function getDiffHandler(params: Record<string, unknown>): Promise<string> {
+  const agentId = parseAgentId(params)
+  const scopeRaw = optionalString(params, 'scope')
+  const scope: WorktreeDiffScope =
+    scopeRaw === 'staged' || scopeRaw === 'branch' ? scopeRaw : 'working'
+  const path = optionalString(params, 'path').trim()
+  const result = await window.mucka.getWorktreeDiff(agentId, scope, path || null)
+  return renderWorktreeRead(result, `${scope} diff from ${agentId}'s worktree`)
+}
+
+async function gitLogHandler(params: Record<string, unknown>): Promise<string> {
+  const agentId = parseAgentId(params)
+  const limit = optionalNumber(params, 'limit') ?? 20
+  const branchOnly = params['branch_only'] === true
+  const result = await window.mucka.getWorktreeLog(agentId, limit, branchOnly)
+  return renderWorktreeRead(result, `git log from ${agentId}'s worktree`)
 }
 
 async function getRecentOutput(params: Record<string, unknown>): Promise<string> {
@@ -1069,6 +1127,10 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
       ),
     list_agents: () => listAgents(),
     get_git_status: (params) => getGitStatus(params),
+    read_file: (params) => readFileHandler(params),
+    list_dir: (params) => listDirHandler(params),
+    get_diff: (params) => getDiffHandler(params),
+    git_log: (params) => gitLogHandler(params),
     get_recent_output: (params) => getRecentOutput(params),
     whats_happening: () => whatsHappening(),
     get_vercel_status: (params) => getVercelStatus(params),

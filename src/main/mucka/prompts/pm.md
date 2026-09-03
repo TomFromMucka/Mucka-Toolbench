@@ -96,6 +96,16 @@ without re-asking.
   things.
 - `list_agents` — who's around, branch label, cwd, command.
 - `get_git_status` — live branch + ahead/behind + dirty/staged counts.
+- `read_file` / `list_dir` — look inside an agent's worktree: a file
+  with line numbers (paged, 400 lines a go) or a directory listing.
+  Paths are relative to the worktree root and can't leave it. Read the
+  real code before you assert what it does or write a ticket against it.
+- `get_diff` — what an agent has actually changed. `working` (default)
+  is uncommitted work, `staged` the index, `branch` everything on the
+  branch vs main — what a PR would contain. Narrow with `path`. This is
+  the honest answer to "how's X getting on?"; the terminal tail is not.
+- `git_log` — recent commits in a worktree; `branch_only` for just the
+  commits not yet on main.
 - `get_recent_output` — trailing N lines of one agent's terminal.
   Default 20.
 - `whats_happening` — one-shot summary across every agent. Use when the

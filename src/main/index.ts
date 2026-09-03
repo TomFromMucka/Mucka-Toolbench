@@ -44,6 +44,12 @@ import {
   writeTextFile as fsWriteTextFile
 } from './fs/index'
 import {
+  listWorktreeDir,
+  readWorktreeDiff,
+  readWorktreeFile,
+  readWorktreeLog
+} from './worktree/WorktreeRead'
+import {
   bindEventsBroadcaster,
   listEvents,
   logEvent,
@@ -174,7 +180,8 @@ import type {
   RoadmapCreateInput,
   RoadmapMoveInput,
   RoadmapUpdateInput,
-  VoiceTranscriptInput
+  VoiceTranscriptInput,
+  WorktreeDiffScope
 } from '@shared/types'
 import type {
   AgentId,
@@ -508,6 +515,37 @@ function registerIpc(): void {
     }
     return getAgentConfig(agentId)
   })
+
+  // Mucka's read-only window into a worktree. Main resolves the agent's
+  // root and refuses anything that escapes it, so a path the model picked
+  // up from a diff or a Sentry title can't reach the rest of the disk.
+  const worktreeOf = (agentId: AgentId): string => {
+    const cfg = getAgentConfig(agentId)
+    if (!cfg) throw new Error(`Unknown agent: ${agentId}`)
+    return cfg.worktreePath
+  }
+  ipcMain.handle(
+    'worktree:read-file',
+    (_event, agentId: AgentId, path: string, startLine?: number, maxLines?: number) =>
+      readWorktreeFile(worktreeOf(agentId), String(path ?? ''), startLine, maxLines)
+  )
+  ipcMain.handle('worktree:list-dir', (_event, agentId: AgentId, path: string) =>
+    listWorktreeDir(worktreeOf(agentId), String(path ?? ''))
+  )
+  ipcMain.handle(
+    'worktree:diff',
+    (_event, agentId: AgentId, scope: WorktreeDiffScope, path: string | null) =>
+      readWorktreeDiff(
+        worktreeOf(agentId),
+        scope === 'staged' || scope === 'branch' ? scope : 'working',
+        typeof path === 'string' ? path : null
+      )
+  )
+  ipcMain.handle(
+    'worktree:log',
+    (_event, agentId: AgentId, limit: number, branchOnly: boolean) =>
+      readWorktreeLog(worktreeOf(agentId), Number(limit) || 20, branchOnly === true)
+  )
 
   ipcMain.handle('git:refresh', async (_event, agentId: AgentId) => {
     if (!gitService) throw new Error('git service not ready')
