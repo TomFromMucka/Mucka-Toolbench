@@ -95,6 +95,82 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
     }
   },
   {
+    name: 'read_file',
+    description:
+      "Read a file from one agent's worktree, with line numbers. Path is relative to the worktree root (e.g. src/app/page.tsx) and cannot leave it. Returns up to 400 lines from start_line; the reply tells you how many remain so you can page. Auto-executes. Use it to check a claim, review a change in context, or ground a ticket in the real code — never guess at what a file says.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: `Which agent — one of ${AGENT_LIST}.`,
+          enum: MUCKA_AGENT_IDS
+        },
+        path: { type: 'string', description: 'Path relative to the worktree root.' },
+        start_line: { type: 'number', description: 'First line to return (1-based). Default 1.' },
+        max_lines: { type: 'number', description: 'How many lines to return. Default 400, max 2000.' }
+      },
+      required: ['agent', 'path']
+    }
+  },
+  {
+    name: 'list_dir',
+    description:
+      "List a directory in one agent's worktree — folders first, then files. Path is relative to the worktree root; omit or pass '' for the root. Auto-executes. Reach for it before read_file when you're unsure where something lives.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: `Which agent — one of ${AGENT_LIST}.`,
+          enum: MUCKA_AGENT_IDS
+        },
+        path: { type: 'string', description: "Directory relative to the worktree root. '' for the root." }
+      },
+      required: ['agent']
+    }
+  },
+  {
+    name: 'get_diff',
+    description:
+      "Show what an agent has changed, as a unified diff with a --stat summary. scope: 'working' (uncommitted, staged + unstaged — the default), 'staged' (index only), or 'branch' (everything on the branch vs main, i.e. what a PR would contain). Optional path narrows to one file or folder. Capped at 40k chars. Auto-executes. This is how you see an agent's work before it's pushed — use it to answer 'how's Dave getting on?' with substance, or to review before suggesting a PR.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: `Which agent — one of ${AGENT_LIST}.`,
+          enum: MUCKA_AGENT_IDS
+        },
+        scope: {
+          type: 'string',
+          description: "'working' (default), 'staged' or 'branch'.",
+          enum: ['working', 'staged', 'branch']
+        },
+        path: { type: 'string', description: 'Optional file or folder, relative to the worktree root.' }
+      },
+      required: ['agent']
+    }
+  },
+  {
+    name: 'git_log',
+    description:
+      "Recent commits in one agent's worktree: hash, date, author, subject. Pass branch_only=true to see just the commits on this branch that aren't on main. Default 20, max 100. Auto-executes.",
+    parameters: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: `Which agent — one of ${AGENT_LIST}.`,
+          enum: MUCKA_AGENT_IDS
+        },
+        limit: { type: 'number', description: 'How many commits. Default 20.' },
+        branch_only: { type: 'boolean', description: 'Only commits not yet on main.' }
+      },
+      required: ['agent']
+    }
+  },
+  {
     name: 'get_recent_output',
     description:
       "Returns the most recent terminal output for one agent (default last 20 lines). Strips terminal escape codes. Call this when Tom asks what an agent has been doing, or to read context before saying anything specific about an agent's progress.",
