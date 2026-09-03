@@ -7,6 +7,8 @@ interface UseNotesResult {
   setText: (next: string) => void
   /** Persist immediately, bypassing the debounce (e.g. on blur). */
   flush: () => Promise<void>
+  /** Set when the last save failed; the text is still held locally and retried on the next edit. */
+  saveError: string | null
 }
 
 /**
@@ -16,6 +18,7 @@ interface UseNotesResult {
  */
 export function useNotes(): UseNotesResult {
   const [text, setTextState] = useState('')
+  const [saveError, setSaveError] = useState<string | null>(null)
   const pendingRef = useRef<string | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const lastSavedRef = useRef('')
@@ -51,8 +54,17 @@ export function useNotes(): UseNotesResult {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
-    await window.mucka.setNote(pending)
-    lastSavedRef.current = pending
+    try {
+      await window.mucka.setNote(pending)
+      lastSavedRef.current = pending
+      setSaveError(null)
+    } catch (err) {
+      // Keep the unsaved text queued so the next edit or ⌘S retries it,
+      // and say so — a scratchpad that silently drops a line is worse
+      // than one that admits it.
+      if (pendingRef.current === null) pendingRef.current = pending
+      setSaveError(err instanceof Error ? err.message : String(err))
+    }
   }, [])
 
   const setText = useCallback(
@@ -67,5 +79,5 @@ export function useNotes(): UseNotesResult {
     [flush]
   )
 
-  return { text, setText, flush }
+  return { text, setText, flush, saveError }
 }
