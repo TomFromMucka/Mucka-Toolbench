@@ -503,7 +503,7 @@ function UrlBar({
         spellCheck={false}
         autoCorrect="off"
         autoCapitalize="off"
-        className="min-w-0 flex-1 rounded-sm border border-ink/15 bg-paper-cream px-2 py-0.5 font-mono text-[0.78rem] text-ink focus:border-mucka focus:outline-none"
+        className="min-w-0 flex-1 rounded-sm border border-ink/15 bg-paper-cream px-2 py-0.5 font-mono text-[0.78rem] text-ink focus:border-ink/60 focus:outline-none"
       />
       <ViewportSelect value={presetId} onChange={onPresetChange} />
       <NavButton
