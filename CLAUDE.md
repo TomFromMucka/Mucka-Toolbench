@@ -264,6 +264,15 @@ guards against double-start / stop-during-connect races. macOS mic
 TCC prompt is triggered through `mucka:requestMic` IPC the first time
 the user starts a session.
 
+**Text mode runs on a vendored CLI, not yours.** `MuckaTextAgent`
+uses `@anthropic-ai/claude-agent-sdk`, which ships its own Claude Code
+binary — the SDK's `0.3.x` patch number *is* the CLI's `2.1.x` patch
+number. So the model list Mucka can use is whatever that pin supports,
+not what `claude --version` on the machine supports. `MUCKA_TEXT_MODEL`
+is pinned in `.env` for the same reason: unset, the SDK inherits the
+machine-wide default from `~/.claude/settings.json`, and one `/model`
+switch to something newer than the pin 400s every turn.
+
 **Tools (later phases).** Voice-only client tools that touch local
 state (PTY, sqlite, git, scrollback) belong in
 `src/renderer/src/mucka/tools/` and are registered with `startSession`
