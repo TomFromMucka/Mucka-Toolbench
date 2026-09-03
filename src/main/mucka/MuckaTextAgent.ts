@@ -58,6 +58,8 @@ let webContents: WebContents | null = null
 let promptCache: string | null = null
 let inFlight = false
 let hasPriorTurnThisBoot = false
+/** The turn in progress, so Tom can stop a reply that has wedged or run away. */
+let activeTurn: AbortController | null = null
 
 interface PendingCall {
   resolve: (result: MuckaTextToolResult) => void
@@ -326,9 +328,9 @@ function blocksToSegments(blocks: AssistantBlock[]): MuckaTextSegment[] {
 async function streamTurn(
   prompt: string,
   options: Options,
-  streamMessageId: string
+  streamMessageId: string,
+  progress: { collected: MuckaTextSegment[]; sawOutput: boolean }
 ): Promise<MuckaTextSegment[]> {
-  let collected: MuckaTextSegment[] = []
   const q = query({ prompt, options })
   for await (const msg of q as AsyncIterable<SDKMessage>) {
     if (msg.type === 'stream_event') {
@@ -342,13 +344,15 @@ async function streamTurn(
       ) {
         const delta = (event.delta as { text: string }).text
         if (delta.length > 0) {
+          progress.sawOutput = true
           emitStream({ messageId: streamMessageId, appendText: delta })
         }
       }
     } else if (msg.type === 'assistant') {
+      progress.sawOutput = true
       const blocks = (msg.message.content ?? []) as AssistantBlock[]
       const segs = blocksToSegments(blocks)
-      if (segs.length > 0) collected = collected.concat(segs)
+      if (segs.length > 0) progress.collected = progress.collected.concat(segs)
     } else if (msg.type === 'result') {
       if ('session_id' in msg && typeof msg.session_id === 'string' && msg.session_id) {
         currentSessionId = msg.session_id
@@ -357,7 +361,17 @@ async function streamTurn(
       break
     }
   }
-  return collected
+  return progress.collected
+}
+
+/**
+ * Stop the reply in progress. The SDK aborts the running turn; sendMessage
+ * then persists whatever had already arrived and releases the chat.
+ */
+export function abortTurn(): boolean {
+  if (!activeTurn) return false
+  activeTurn.abort()
+  return true
 }
 
 async function runSummary(transcript: string): Promise<string> {
@@ -435,6 +449,9 @@ export async function sendMessage(text: string): Promise<void> {
 
   inFlight = true
   const streamMessageId = `pending-${Date.now()}`
+  const abort = new AbortController()
+  activeTurn = abort
+  const progress = { collected: [] as MuckaTextSegment[], sawOutput: false }
   let collected: MuckaTextSegment[] = []
 
   try {
@@ -450,6 +467,7 @@ export async function sendMessage(text: string): Promise<void> {
       systemPrompt: loadPrompt(),
       cwd: app.getPath('userData'),
       ...(claudeBinary ? { pathToClaudeCodeExecutable: claudeBinary } : {}),
+      abortController: abort,
       includePartialMessages: true,
       mcpServers: { mucka: mcpServer },
       allowedTools: [...ALLOWED_MUCKA_TOOLS, ...ALLOWED_BUILTIN_TOOLS],
@@ -485,14 +503,18 @@ export async function sendMessage(text: string): Promise<void> {
       collected = await streamTurn(
         prompt,
         resumeId ? { ...baseOptions, resume: resumeId } : baseOptions,
-        streamMessageId
+        streamMessageId,
+        progress
       )
     } catch (err) {
-      // A resumed session log can be missing/corrupt — retry once fresh
-      // so the chat never bricks just because the prior session is gone.
-      if (resumeId) {
+      // A resumed session log can be missing or corrupt — that fails
+      // before anything streams, and a fresh session is the right recovery.
+      // A failure after output has started is something else (network,
+      // a tool, an abort): retrying it would replay tool calls that already
+      // ran, and swapping the session id would orphan the conversation.
+      if (resumeId && !progress.sawOutput && !abort.signal.aborted) {
         currentSessionId = null
-        collected = await streamTurn(prompt, baseOptions, streamMessageId)
+        collected = await streamTurn(prompt, baseOptions, streamMessageId, progress)
       } else {
         throw err
       }
@@ -511,12 +533,17 @@ export async function sendMessage(text: string): Promise<void> {
     void maybeSummarize()
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    const persisted = appendChat('assistant', [
-      { kind: 'text', text: `(agent error: ${message})` }
-    ])
+    const tail: MuckaTextSegment = abort.signal.aborted
+      ? { kind: 'text', text: '(stopped)' }
+      : { kind: 'text', text: `(agent error: ${message})` }
+    const persisted = appendChat('assistant', [...progress.collected, tail])
     emitMessage(persisted)
     emitStream({ messageId: streamMessageId, done: true })
+    // Whatever happened, this turn is over as far as the session goes —
+    // a later turn resumes the same session rather than forking it.
+    hasPriorTurnThisBoot = true
   } finally {
+    if (activeTurn === abort) activeTurn = null
     inFlight = false
   }
 }
