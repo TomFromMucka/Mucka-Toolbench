@@ -423,7 +423,7 @@ function TabPill({ tab }: { tab: TabState }): React.JSX.Element {
 function TabFavicon({ tab }: { tab: TabState }): React.JSX.Element {
   if (tab.loading) {
     return (
-      <span className="size-3 shrink-0 animate-pulse rounded-full bg-mucka/70" />
+      <span className="size-3 shrink-0 animate-pulse rounded-full bg-van-white/50" />
     )
   }
   if (tab.faviconUrl) {
