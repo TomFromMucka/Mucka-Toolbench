@@ -15,8 +15,11 @@ import {
   rollupChecks
 } from './GitHub'
 import { logEvent } from '../events/Events'
+import { Backoff, describeDelay, isAuthError } from '../net/Backoff'
 
 const POLL_INTERVAL_MS = 60_000
+const BACKOFF_MAX_MS = 15 * 60_000
+const AUTH_BACKOFF_MS = 15 * 60_000
 
 interface GitHubPollerDeps {
   webContents: WebContents
@@ -52,6 +55,7 @@ export class GitHubPoller {
   private readonly getAgents: () => AgentConfig[]
   private inFlight = new Map<AgentId, AbortController>()
   private cache = new Map<AgentId, GitHubAgentSummary>()
+  private readonly backoff = new Backoff(POLL_INTERVAL_MS, BACKOFF_MAX_MS)
 
   constructor(deps: GitHubPollerDeps) {
     this.webContents = deps.webContents
@@ -100,6 +104,8 @@ export class GitHubPoller {
 
   private async tick(): Promise<void> {
     if (this.webContents.isDestroyed()) return
+    // A manual refresh still goes through; only the clock is held back.
+    if (this.backoff.paused) return
     if (getStatus().kind !== 'ok') {
       for (const agent of this.getAgents()) {
         const repo = readGitHubOrigin(agent.worktreePath)
@@ -161,10 +167,12 @@ export class GitHubPoller {
       this.cache.set(agent.id, summary)
       this.emitTransitionEvents(agent, previous, summary)
       this.broadcast(summary)
+      this.backoff.succeed()
       return summary
     } catch (err) {
       if (ctl.signal.aborted) return this.get(agent.id)
       const message = err instanceof Error ? err.message : String(err)
+      this.noteFailure(message)
       const summary = emptySummary(agent.id, repo, agent.branch, message)
       this.cache.set(agent.id, summary)
       this.broadcast(summary)
@@ -172,6 +180,19 @@ export class GitHubPoller {
     } finally {
       if (this.inFlight.get(agent.id) === ctl) this.inFlight.delete(agent.id)
     }
+  }
+
+  private noteFailure(message: string): void {
+    const delay = this.backoff.fail(isAuthError(message) ? AUTH_BACKOFF_MS : 0)
+    // One line per streak — three calls per agent per minute against a
+    // revoked token would otherwise flood the sheet.
+    if (!this.backoff.streakJustStarted) return
+    logEvent({
+      source: 'system',
+      kind: 'github.poll_failed',
+      message: `GitHub polling paused ${describeDelay(delay)} — ${message.slice(0, 140)}`,
+      tone: 'attention'
+    })
   }
 
   private broadcast(summary: GitHubAgentSummary): void {

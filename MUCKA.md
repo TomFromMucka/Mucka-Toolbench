@@ -229,6 +229,12 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Pollers back off. Vercel, GitHub and Sentry each
+  double their wait after a failed tick (capped at 10 / 15 / 30 min,
+  with a longer floor on a 401/403) and reset on success, instead of
+  hammering a revoked token every tick. One job-sheet line per failure
+  streak says how long they're pausing. Manual refreshes ignore the
+  pause. Helper in `src/main/net/Backoff.ts`.
 - **2026-09-03** — Text-mode Mucka can be stopped. A `stop` button sits
   beside the typing indicator; it aborts the SDK turn, keeps whatever had
   already arrived (with a `(stopped)` tail) and releases the chat input,
