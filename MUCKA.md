@@ -229,6 +229,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Failures are visible. A terminal that can't spawn
+  (pruned worktree, bad command) prints why in the pane instead of
+  sitting blank; a notes save that fails flips the subtitle to *NOT
+  SAVED* with the reason and keeps the text for ⌘S; Settings → Agents
+  shows a save error in the footer and no longer wipes unsaved drafts
+  when agents reload in the background; start/stop failures show on the
+  clipboard. Scrollback replay now lands before any live chunk on a
+  reattach, so a reconnected pane reads in order.
 - **2026-09-03** — Pollers back off. Vercel, GitHub and Sentry each
   double their wait after a failed tick (capped at 10 / 15 / 30 min,
   with a longer floor on a 401/403) and reset on success, instead of

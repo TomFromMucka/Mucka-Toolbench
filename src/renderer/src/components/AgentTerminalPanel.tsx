@@ -53,6 +53,7 @@ function AgentIdleScreen({
 }): React.JSX.Element {
   const { reload } = useAgentsState()
   const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
 
   // VSCode-style: pick the folder first, then launch the terminal there.
   // If the user already used this agent in a real folder we still let them
@@ -60,12 +61,15 @@ function AgentIdleScreen({
   const startAt = useCallback(
     async (path: string): Promise<void> => {
       setStarting(true)
+      setStartError(null)
       try {
         if (path !== agent.worktreePath) {
           await window.mucka.updateAgent({ id: agent.id, worktreePath: path })
         }
         await window.mucka.startAgent(agent.id)
         await reload()
+      } catch (err) {
+        setStartError(err instanceof Error ? err.message : String(err))
       } finally {
         setStarting(false)
       }
@@ -116,6 +120,11 @@ function AgentIdleScreen({
         >
           {starting ? 'Starting…' : 'Open folder…'}
         </Button>
+        {startError ? (
+          <p className="t-label-sm" style={{ color: 'var(--orange)' }}>
+            Couldn&apos;t start — {startError}
+          </p>
+        ) : null}
         {hasRememberedFolder ? (
           <button
             type="button"
@@ -174,10 +183,12 @@ function RunningAgentPanel({
     try {
       await window.mucka.stopAgent(agent.id)
       await reload()
+    } catch (err) {
+      flashPreviewError(`Couldn't stop — ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setStopping(false)
     }
-  }, [agent.id, reload, stopping])
+  }, [agent.id, reload, stopping, flashPreviewError])
 
   const clearPreviewUrl = useCallback((): void => {
     void window.mucka

@@ -744,9 +744,13 @@ interface AgentsTabProps {
 function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Element {
   const [drafts, setDrafts] = useState<DraftRow[]>(() => agents.map(toDraft))
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Agents reload in the background (a poll, a Mucka tool). Adopt the new
+  // rows only while nothing here is edited — otherwise a reload mid-edit
+  // would throw away what Tom has typed.
   useEffect(() => {
-    setDrafts(agents.map(toDraft))
+    setDrafts((prev) => (prev.some((d) => d.dirty) ? prev : agents.map(toDraft)))
   }, [agents])
 
   const dirtyCount = drafts.filter((d) => d.dirty).length
@@ -774,6 +778,7 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
 
   async function handleSave(): Promise<void> {
     setSaving(true)
+    setSaveError(null)
     try {
       for (const d of drafts) {
         if (!d.dirty) continue
@@ -791,6 +796,8 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
         })
       }
       onClose()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
@@ -948,10 +955,15 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
       </ul>
 
       <div className="mt-5 flex items-center justify-end gap-2 border-t border-ink/15 pt-3">
-        <span className="mr-auto text-[0.78rem] text-ink-soft font-sans">
-          {dirtyCount === 0
-            ? 'No changes'
-            : `${dirtyCount} agent${dirtyCount === 1 ? '' : 's'} changed — saving will restart their shells`}
+        <span
+          className="mr-auto text-[0.78rem] font-sans"
+          style={saveError ? { color: 'var(--orange)' } : undefined}
+        >
+          {saveError
+            ? `Couldn't save — ${saveError}`
+            : dirtyCount === 0
+              ? 'No changes'
+              : `${dirtyCount} agent${dirtyCount === 1 ? '' : 's'} changed — saving will restart their shells`}
         </span>
         <button
           type="button"
