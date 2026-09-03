@@ -229,6 +229,15 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Security leftovers. Saved logins are scoped to
+  sites: the right-click menu only offers a credential on hosts listed
+  against it (Settings → Credentials, `*.vercel.app` wildcards allowed),
+  and an unscoped one binds to the first host it's used on. Every IPC
+  channel now checks the sender is the cockpit window's main frame.
+  Claude state files carry the cockpit terminal id (`MUCKA_TERMINAL`,
+  recorded by `~/.claude/mucka-agent-state.sh`) and the watcher ignores
+  files whose terminal is no longer live, so a leftover or forged file
+  can't claim an agent.
 - **2026-09-03** — Pollers back off. Vercel, GitHub and Sentry each
   double their wait after a failed tick (capped at 10 / 15 / 30 min,
   with a longer floor on a 401/403) and reset on success, instead of

@@ -35,6 +35,8 @@ interface ClaudeState {
   ctxUsed: number | null
   activity: string
   sessionId: string | null
+  /** $MUCKA_TERMINAL from the cockpit's PTY env, when the cockpit launched it. */
+  terminal: string | null
   ts: number
 }
 
@@ -72,6 +74,7 @@ function parseState(raw: string): ClaudeState | null {
       ctxUsed: typeof o.ctxUsed === 'number' ? o.ctxUsed : null,
       activity: typeof o.activity === 'string' ? o.activity : 'idle',
       sessionId: typeof o.sessionId === 'string' && o.sessionId.length > 0 ? o.sessionId : null,
+      terminal: typeof o.terminal === 'string' && o.terminal.length > 0 ? o.terminal : null,
       ts: typeof o.ts === 'number' ? o.ts : 0
     }
   } catch {
@@ -102,6 +105,7 @@ export function agentForCwd(cwd: string, agents: AgentConfig[]): AgentId | null 
 export class ClaudeStateWatcher {
   private readonly emit: (event: AgentStatusEvent) => void
   private readonly listAgents: () => AgentConfig[]
+  private readonly isLiveTerminal: (terminalId: string) => boolean
   private readonly stateDir: string
   private watcher: FSWatcher | null = null
   private sweep: NodeJS.Timeout | null = null
@@ -113,10 +117,12 @@ export class ClaudeStateWatcher {
   constructor(
     emit: (event: AgentStatusEvent) => void,
     listAgents: () => AgentConfig[],
+    isLiveTerminal: (terminalId: string) => boolean = () => true,
     stateDir: string = DEFAULT_STATE_DIR
   ) {
     this.emit = emit
     this.listAgents = listAgents
+    this.isLiveTerminal = isLiveTerminal
     this.stateDir = stateDir
   }
 
@@ -163,6 +169,10 @@ export class ClaudeStateWatcher {
         state = null
       }
       if (!state) continue
+      // A file stamped with a cockpit terminal id speaks for that PTY. If
+      // the PTY is gone the file is a leftover, and anything else writing
+      // one with a made-up id can't claim an agent either.
+      if (state.terminal && !this.isLiveTerminal(state.terminal)) continue
 
       // $MUCKA_AGENT is an exact binding from the cockpit's own PTY env;
       // fall back to matching the path only when it's absent.

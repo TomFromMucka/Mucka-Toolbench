@@ -32,6 +32,27 @@ interface StoredEntry {
   updatedAt: number
   /** safeStorage.encryptString of `{username, password}` JSON, base64. */
   enc: string
+  /** Hosts this login is offered on; absent on entries from before scoping. */
+  sites?: string[]
+}
+
+function normalizeSites(sites: string[] | undefined): string[] {
+  if (!sites) return []
+  const out = new Set<string>()
+  for (const raw of sites) {
+    const host = raw.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '')
+    if (host) out.add(host)
+  }
+  return [...out]
+}
+
+/** `*.vercel.app` matches any subdomain; a bare host matches exactly. */
+function siteMatches(pattern: string, host: string): boolean {
+  if (pattern.startsWith('*.')) {
+    const suffix = pattern.slice(1)
+    return host.endsWith(suffix) && host.length > suffix.length
+  }
+  return pattern === host
 }
 
 let cache: Record<string, StoredEntry> | null = null
@@ -101,8 +122,34 @@ function toSummary(id: string, entry: StoredEntry): CredentialSummary {
     username: decrypted?.username ?? '',
     passwordLast4: decrypted?.password ? decrypted.password.slice(-4) : '',
     createdAt: entry.createdAt,
-    updatedAt: entry.updatedAt
+    updatedAt: entry.updatedAt,
+    sites: entry.sites ?? []
   }
+}
+
+/**
+ * Logins the context menu may offer on `host`: those bound to it, plus
+ * any not yet bound to anywhere. A login bound elsewhere is withheld —
+ * the whole point is that a lookalike page doesn't get to list the real
+ * one.
+ */
+export function credentialsForHost(host: string): CredentialSummary[] {
+  const h = host.trim().toLowerCase()
+  return listCredentials().filter(
+    (c) => c.sites.length === 0 || (h.length > 0 && c.sites.some((s) => siteMatches(s, h)))
+  )
+}
+
+/** First use of an unbound login binds it to that host. */
+export function recordCredentialSite(id: string, host: string): void {
+  const store = load()
+  const entry = store[id]
+  const [h] = normalizeSites([host])
+  if (!entry || !h) return
+  if ((entry.sites ?? []).length > 0) return
+  entry.sites = [h]
+  entry.updatedAt = Date.now()
+  save()
 }
 
 export function listCredentials(): CredentialSummary[] {
@@ -120,7 +167,8 @@ export function createCredential(input: CredentialCreateInput): CredentialSummar
     label: input.label.trim() || 'Untitled',
     createdAt: now,
     updatedAt: now,
-    enc: encryptPair(input.username, input.password)
+    enc: encryptPair(input.username, input.password),
+    sites: normalizeSites(input.sites)
   }
   store[id] = entry
   save()
@@ -139,7 +187,8 @@ export function updateCredential(input: CredentialUpdateInput): CredentialSummar
     enc: encryptPair(
       input.username ?? current.username,
       input.password ?? current.password
-    )
+    ),
+    sites: input.sites === undefined ? (existing.sites ?? []) : normalizeSites(input.sites)
   }
   store[input.id] = next
   save()
