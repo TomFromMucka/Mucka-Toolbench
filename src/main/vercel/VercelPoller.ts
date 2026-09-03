@@ -9,8 +9,11 @@ import type {
 } from '@shared/types'
 import { listDeployments, resolveProject, getStatus } from './Vercel'
 import { logEvent } from '../events/Events'
+import { Backoff, describeDelay, isAuthError } from '../net/Backoff'
 
 const POLL_INTERVAL_MS = 30_000
+const BACKOFF_MAX_MS = 10 * 60_000
+const AUTH_BACKOFF_MS = 15 * 60_000
 const DEPLOYMENT_LIMIT = 20
 
 interface VercelPollerDeps {
@@ -59,6 +62,7 @@ export class VercelPoller {
   private readonly getAgents: () => AgentConfig[]
   private inFlight = new Map<AgentId, AbortController>()
   private cache = new Map<AgentId, VercelAgentSummary>()
+  private readonly backoff = new Backoff(POLL_INTERVAL_MS, BACKOFF_MAX_MS)
 
   constructor(deps: VercelPollerDeps) {
     this.webContents = deps.webContents
@@ -107,6 +111,8 @@ export class VercelPoller {
 
   private async tick(): Promise<void> {
     if (this.webContents.isDestroyed()) return
+    // A manual refresh still goes through; only the clock is held back.
+    if (this.backoff.paused) return
     if (getStatus().kind !== 'ok') {
       // No token — still update each agent's summary so the renderer
       // shows the "missing token" state with current project resolution.
@@ -166,12 +172,14 @@ export class VercelPoller {
       this.cache.set(agent.id, summary)
       this.emitTransitionEvents(agent, previous, summary)
       this.broadcast(summary)
+      this.backoff.succeed()
       return summary
     } catch (err) {
       if (ctl.signal.aborted) {
         return this.get(agent.id)
       }
       const message = err instanceof Error ? err.message : String(err)
+      this.noteFailure(message)
       const summary = emptySummary(agent.id, source, projectId, message)
       this.cache.set(agent.id, summary)
       this.broadcast(summary)
@@ -179,6 +187,19 @@ export class VercelPoller {
     } finally {
       if (this.inFlight.get(agent.id) === ctl) this.inFlight.delete(agent.id)
     }
+  }
+
+  private noteFailure(message: string): void {
+    const delay = this.backoff.fail(isAuthError(message) ? AUTH_BACKOFF_MS : 0)
+    // One line per streak — a dead token would otherwise write a job-sheet
+    // entry every thirty seconds.
+    if (!this.backoff.streakJustStarted) return
+    logEvent({
+      source: 'system',
+      kind: 'vercel.poll_failed',
+      message: `Vercel polling paused ${describeDelay(delay)} — ${message.slice(0, 140)}`,
+      tone: 'attention'
+    })
   }
 
   private broadcast(summary: VercelAgentSummary): void {

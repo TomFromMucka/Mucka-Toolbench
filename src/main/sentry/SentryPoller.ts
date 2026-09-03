@@ -17,6 +17,7 @@ import {
   recordStatus
 } from '../db/sentry'
 import { logEvent } from '../events/Events'
+import { Backoff, describeDelay, isAuthError } from '../net/Backoff'
 
 /**
  * Five minutes. Sentry is not a firehose here — the org averages a couple
@@ -24,6 +25,8 @@ import { logEvent } from '../events/Events'
  * not keeping up with volume.
  */
 const POLL_INTERVAL_MS = 5 * 60_000
+const BACKOFF_MAX_MS = 30 * 60_000
+const AUTH_BACKOFF_MS = 30 * 60_000
 
 /**
  * How far back the first poll of a boot looks. Deliberately short: on a
@@ -121,6 +124,7 @@ export class SentryPoller {
   private hasPolled = false
   private lastError: string | null = null
   private cache: SentryIssue[] = []
+  private readonly backoff = new Backoff(POLL_INTERVAL_MS, BACKOFF_MAX_MS)
 
   constructor(deps: SentryPollerDeps) {
     this.webContents = deps.webContents
@@ -172,6 +176,7 @@ export class SentryPoller {
   private async tick(): Promise<void> {
     if (this.webContents.isDestroyed()) return
     if (getStatus().kind !== 'ok') return
+    if (this.backoff.paused) return
     // Ticks overlap when a poll runs long; a second pass would read the
     // same issues before the first has written them to sqlite and report
     // every one of them twice.
@@ -185,6 +190,7 @@ export class SentryPoller {
       })
       this.cache = issues
       this.lastError = null
+      this.backoff.succeed()
 
       const known = knownIssueIds()
       for (const issue of issues) {
@@ -217,6 +223,7 @@ export class SentryPoller {
       this.hasPolled = true
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+      const delay = this.backoff.fail(isAuthError(message) ? AUTH_BACKOFF_MS : 0)
       // Log the first failure of a run only — a bad token would otherwise
       // write a job-sheet line every five minutes, forever.
       if (this.lastError !== message) {
@@ -224,7 +231,7 @@ export class SentryPoller {
         logEvent({
           source: 'system',
           kind: 'sentry.error',
-          message: `Sentry poll failed: ${message.slice(0, 160)}`,
+          message: `Sentry poll failed, paused ${describeDelay(delay)}: ${message.slice(0, 140)}`,
           tone: 'bad'
         })
       }
