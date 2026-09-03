@@ -22,6 +22,8 @@ interface MuckaTextValue {
   /** Last error, cleared on next send. */
   error: string | null
   send: (text: string) => Promise<void>
+  /** Stop the reply in progress; the partial text is kept in history. */
+  abort: () => Promise<void>
   clear: () => Promise<void>
 }
 
@@ -216,14 +218,18 @@ export function MuckaTextProvider({
     []
   )
 
+  const abort = useCallback(async () => {
+    await window.mucka.abortChatTurn()
+  }, [])
+
   const clear = useCallback(async () => {
     await window.mucka.clearChatHistory()
     setMessages([])
   }, [])
 
   const value = useMemo<MuckaTextValue>(
-    () => ({ status, messages, streaming, error, send, clear }),
-    [status, messages, streaming, error, send, clear]
+    () => ({ status, messages, streaming, error, send, abort, clear }),
+    [status, messages, streaming, error, send, abort, clear]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

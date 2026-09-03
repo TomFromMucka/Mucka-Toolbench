@@ -85,7 +85,8 @@ import {
   listHistory as muckaTextListHistory,
   searchHistory as muckaTextSearchHistory,
   sendMessage as muckaTextSendMessage,
-  unbindMuckaTextBroadcaster
+  unbindMuckaTextBroadcaster,
+  abortTurn as muckaTextAbortTurn
 } from './mucka/MuckaTextAgent'
 import { PtyManager } from './pty/PtyManager'
 import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
@@ -807,6 +808,7 @@ function registerIpc(): void {
   ipcMain.handle('mucka:text-search', (_event, query: string, limit?: number) =>
     muckaTextSearchHistory(typeof query === 'string' ? query : '', limit ?? 20)
   )
+  ipcMain.handle('mucka:text-abort', () => muckaTextAbortTurn())
   ipcMain.handle('mucka:text-send', async (_event, text: string) => {
     await muckaTextSendMessage(text)
   })
