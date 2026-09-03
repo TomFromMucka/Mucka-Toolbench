@@ -46,7 +46,13 @@ let summarizing = false
 const MODEL = process.env.MUCKA_TEXT_MODEL?.trim() || undefined
 const PROMPT_FALLBACK =
   'You are Mucka, a terse British PM for the dev cockpit.'
-const TOOL_CALL_TIMEOUT_MS = 60_000
+/**
+ * Must outlast the renderer's confirm strip (60s auto-deny) plus whatever
+ * a handler does after approval (delegate waits up to 20s for Claude to
+ * boot). If main gave up first, the model would see "timed out" and retry
+ * while Tom's late approval still executed the original — a double send.
+ */
+const TOOL_CALL_TIMEOUT_MS = 120_000
 
 let webContents: WebContents | null = null
 let promptCache: string | null = null
