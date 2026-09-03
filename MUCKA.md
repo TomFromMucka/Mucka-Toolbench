@@ -228,6 +228,18 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Delegate no longer pastes the ticket into a booting
+  shell. Readiness now comes from Claude Code itself: main's
+  `agents:await-claude` resolves when the statusline hook writes a state
+  file newer than the agent's last restart (session id as tiebreak), and
+  `dispatch.ts` waits on that instead of regex-matching the PTY stream —
+  which was matching the *previous* session's prompt because scrollback
+  survived the kill. An explicit kill (stop, restart, config change) now
+  forgets the buffer; quit still persists it. A torn-down session's state
+  file is ignored from the clear onward, so a stopped agent no longer
+  flips back to "awaits Tom" on the next sweep. If nothing reports within
+  20s the prompt still goes, with an event on the sheet naming the
+  statusline hook as the likely gap.
 - **2026-09-03** — Fixed text-mode Mucka 400ing on every turn. The Agent
   SDK ships its own vendored Claude Code binary, and the pin at
   `^0.3.142` gave us 2.1.142 — which rejected the `opus[1m]` default set

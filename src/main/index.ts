@@ -446,6 +446,32 @@ function registerIpc(): void {
     return getAgentConfig(agentId)
   })
 
+  /**
+   * Block until the Claude launched by the last start/restart reports in
+   * through the statusline hook, or the timeout passes. The renderer used
+   * to pattern-match the PTY stream for a prompt — which matched the dead
+   * session's prompt still in scrollback and pasted tickets into a shell
+   * that was still booting.
+   */
+  ipcMain.handle(
+    'agents:await-claude',
+    async (_event, agentId: AgentId, timeoutMs: number): Promise<boolean> => {
+      if (!claudeStateWatcher) return false
+      const bounded = Math.min(60_000, Math.max(1_000, Math.floor(timeoutMs)))
+      const ready = await claudeStateWatcher.waitForFreshSession(agentId, bounded)
+      if (!ready) {
+        logEvent({
+          source: agentId,
+          kind: 'agent.ready_timeout',
+          message:
+            'Claude never reported ready — is ~/.claude/statusline-command.sh feeding mucka-agent-state.sh? Sent the prompt anyway.',
+          tone: 'attention'
+        })
+      }
+      return ready
+    }
+  )
+
   ipcMain.handle('agents:stop', async (_event, agentId: AgentId) => {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)

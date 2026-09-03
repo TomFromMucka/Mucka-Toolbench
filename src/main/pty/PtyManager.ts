@@ -63,11 +63,7 @@ export class PtyManager {
         this.resize({ terminalId: req.terminalId, cols: req.cols, rows: req.rows })
         return
       }
-      try {
-        existing.proc.kill()
-      } catch {
-        /* already dead */
-      }
+      this.kill(req.terminalId)
     }
 
     const proc = pty.spawn(cfg.command, cfg.args, {
@@ -132,7 +128,26 @@ export class PtyManager {
     }
   }
 
+  /**
+   * Kill one terminal and forget its scrollback. The buffer belongs to the
+   * process that produced it: left in place, a fresh shell would replay a
+   * dead session's prompt above its own, and anything polling the buffer
+   * for signs of life would be reading the corpse.
+   */
   kill(terminalId: TerminalId): void {
+    const entry = this.ptys.get(terminalId)
+    if (!entry) return
+    try {
+      entry.proc.kill()
+    } catch {
+      /* already dead */
+    }
+    this.ptys.delete(terminalId)
+    scrollback.clear(terminalId)
+  }
+
+  /** Kill without forgetting scrollback — for quit, where the buffer is about to be persisted. */
+  private release(terminalId: TerminalId): void {
     const entry = this.ptys.get(terminalId)
     if (!entry) return
     try {
@@ -162,7 +177,7 @@ export class PtyManager {
 
   killAll(): void {
     for (const id of [...this.ptys.keys()]) {
-      this.kill(id)
+      this.release(id)
     }
   }
 }
