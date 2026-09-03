@@ -578,6 +578,8 @@ export interface MuckaApi {
   getMuckaTextStatus(): Promise<MuckaTextStatus>
   listChatHistory(): Promise<MuckaTextMessage[]>
   sendChatMessage(text: string): Promise<void>
+  /** Stop the reply in progress. False when nothing was running. */
+  abortChatTurn(): Promise<boolean>
   clearChatHistory(): Promise<void>
   /** Keyword recall across past conversation (transcript + summaries). */
   searchHistory(query: string, limit?: number): Promise<string>

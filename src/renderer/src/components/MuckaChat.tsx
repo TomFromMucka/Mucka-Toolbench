@@ -76,7 +76,7 @@ function ChatMessage({ message }: { message: MuckaTextMessage }): React.JSX.Elem
 
 export function MuckaChat({ size, onResize }: PanelSizeProps): React.JSX.Element {
   const { state, isSpeaking, credentialStatus } = useMuckaSession()
-  const { status, messages, streaming, error, send } = useMuckaText()
+  const { status, messages, streaming, error, send, abort } = useMuckaText()
   const { agents } = useAgentsState()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [draft, setDraft] = useState('')
@@ -196,7 +196,7 @@ export function MuckaChat({ size, onResize }: PanelSizeProps): React.JSX.Element
           )}
 
           {streaming ? (
-            <div className="flex items-start">
+            <div className="flex items-center gap-2">
               <div
                 className="chamfer-sm inline-flex items-center gap-1 px-2.5 py-1.5"
                 style={{ background: 'var(--orange)', color: 'var(--charcoal)' }}
@@ -205,6 +205,14 @@ export function MuckaChat({ size, onResize }: PanelSizeProps): React.JSX.Element
                 <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:120ms]" />
                 <span className="size-1.5 animate-bounce rounded-full bg-charcoal/70 [animation-delay:240ms]" />
               </div>
+              <button
+                type="button"
+                onClick={() => void abort()}
+                className="mucka-btn mucka-btn-secondary mucka-btn-sm"
+                title="Stop this reply — what's arrived so far is kept"
+              >
+                <span className="mucka-btn-label">stop</span>
+              </button>
             </div>
           ) : null}
 
