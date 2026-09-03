@@ -229,6 +229,12 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Pollers back off. Vercel, GitHub and Sentry each
+  double their wait after a failed tick (capped at 10 / 15 / 30 min,
+  with a longer floor on a 401/403) and reset on success, instead of
+  hammering a revoked token every tick. One job-sheet line per failure
+  streak says how long they're pausing. Manual refreshes ignore the
+  pause. Helper in `src/main/net/Backoff.ts`.
 - **2026-09-03** — Mucka can read a worktree. Four auto-execute tools:
   `read_file` (line-numbered, paged), `list_dir`, `get_diff`
   (working / staged / branch-vs-main, optional path) and `git_log`
