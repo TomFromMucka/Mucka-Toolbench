@@ -229,6 +229,13 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Brand orange back to its two meanings. Stripped it
+  from hover states, folder icons, active tab underlines, lane dots,
+  tag chips, drop-target rings, markdown links and bullets, the terminal
+  cursor and selection, focus rings and Settings badges. It remains on
+  Mucka's bubbles and confirm strip, attention states and error lines,
+  the status pills, and the primary CTA buttons the design system
+  defines as orange.
 - **2026-09-03** — Pollers back off. Vercel, GitHub and Sentry each
   double their wait after a failed tick (capped at 10 / 15 / 30 min,
   with a longer floor on a 401/403) and reset on success, instead of

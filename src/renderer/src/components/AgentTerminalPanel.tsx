@@ -324,16 +324,13 @@ function RunningAgentPanel({
               className={clsx(
                 'group t-label-sm flex items-center gap-1 chamfer-sm px-1.5 py-0.5',
                 isActive
-                  ? 'shadow-[inset_0_-2px_0_var(--orange)]'
+                  ? 'shadow-[inset_0_-2px_0_var(--van-white)]'
                   : 'opacity-60 hover:opacity-100',
-                tab.isPreviewSource && !isActive && 'text-orange'
+                tab.isPreviewSource && !isActive && 'text-van-white'
               )}
               style={{
                 background: isActive ? 'var(--surface2)' : 'transparent',
-                color:
-                  tab.isPreviewSource && !isActive
-                    ? 'var(--orange)'
-                    : 'var(--van-white)'
+                color: 'var(--van-white)'
               }}
             >
               <button
@@ -389,8 +386,8 @@ function RunningAgentPanel({
           title={`Fresh preview — runs \`${PREVIEW_COMMAND}\` in a new tab and binds its localhost URL to the iframe`}
           className="chamfer-sm ml-1 t-label-sm flex items-center gap-1 px-1.5 py-0.5"
           style={{
-            background: 'rgba(255, 78, 0, 0.18)',
-            color: 'var(--orange)'
+            background: 'rgba(234, 233, 232, 0.08)',
+            color: 'var(--van-white)'
           }}
         >
           <span className="font-mono text-[0.7rem]">▶</span>

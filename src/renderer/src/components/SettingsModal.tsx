@@ -30,7 +30,7 @@ interface SettingsModalProps {
 type Tab = 'agents' | 'keys' | 'credentials' | 'memory' | 'updates'
 
 const FIELD =
-  'w-full rounded-sm border border-ink/20 bg-paper-cream px-2 py-1 font-mono text-[0.82rem] text-ink focus:border-mucka focus:outline-none focus:ring-1 focus:ring-mucka'
+  'w-full rounded-sm border border-ink/20 bg-paper-cream px-2 py-1 font-mono text-[0.82rem] text-ink focus:border-ink/60 focus:outline-none focus:ring-1 focus:ring-ink/40'
 
 const LABEL =
   'block text-[0.7rem] uppercase tracking-[0.16em] text-ink-faint font-sans'
@@ -131,7 +131,7 @@ function TabStrip({ tab, onChange }: TabStripProps): React.JSX.Element {
             className={clsx(
               'rounded-t-sm border-b-2 px-3 py-1.5 font-sans text-[0.78rem] uppercase tracking-wide',
               active
-                ? 'border-mucka bg-paper-cream text-ink'
+                ? 'border-ink/60 bg-paper-cream text-ink'
                 : 'border-transparent text-ink-soft hover:text-ink'
             )}
           >
@@ -279,7 +279,7 @@ function SecretRow({
         <label className="font-sans text-[0.82rem] font-semibold text-ink">
           {def.label}
           {def.required ? (
-            <span className="ml-1 text-[0.7rem] uppercase tracking-wide text-mucka-deep">
+            <span className="ml-1 text-[0.7rem] uppercase tracking-wide text-ink-faint">
               required
             </span>
           ) : null}
@@ -674,7 +674,7 @@ function LayoutSection(): React.JSX.Element {
               className={clsx(
                 'flex flex-1 items-start gap-3 rounded-sm border p-3 text-left',
                 active
-                  ? 'border-mucka bg-mucka/10'
+                  ? 'border-ink/60 bg-ink/10'
                   : 'border-ink/20 bg-paper-cream/85 hover:bg-paper-shadow'
               )}
             >
@@ -685,7 +685,7 @@ function LayoutSection(): React.JSX.Element {
                 <span className="block font-sans text-[0.84rem] font-semibold text-ink">
                   {choice.title}
                   {active ? (
-                    <span className="ml-2 text-[0.66rem] uppercase tracking-[0.16em] text-mucka-deep">
+                    <span className="ml-2 text-[0.66rem] uppercase tracking-[0.16em] text-ink-faint">
                       current
                     </span>
                   ) : null}
@@ -822,7 +822,7 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
                 </span>
               </h3>
               {d.dirty ? (
-                <span className="text-[0.7rem] uppercase tracking-wide text-mucka-deep">
+                <span className="text-[0.7rem] uppercase tracking-wide text-ink-faint">
                   unsaved
                 </span>
               ) : null}
@@ -892,7 +892,7 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
                   <button
                     type="button"
                     onClick={() => setCommandPreset(d, 'claude')}
-                    className="shrink-0 rounded-sm border border-mucka/60 bg-mucka/10 px-1.5 py-1 text-[0.7rem] uppercase tracking-wide text-mucka-deep hover:bg-mucka/20"
+                    className="shrink-0 rounded-sm border border-ink/40 bg-ink/10 px-1.5 py-1 text-[0.7rem] uppercase tracking-wide text-ink-soft hover:bg-ink/20"
                     title="Preset: claude"
                   >
                     claude
@@ -993,7 +993,7 @@ function relativeAgo(ms: number): string {
 }
 
 const TYPE_BADGE: Record<MemoryType, string> = {
-  profile: 'bg-mucka/15 text-mucka-deep',
+  profile: 'bg-ink/15 text-ink-soft',
   preference: 'bg-status-ok/15 text-ink',
   project: 'bg-status-warn/15 text-ink',
   decision: 'bg-ink/15 text-ink',
@@ -1290,7 +1290,7 @@ function FilterChip({
       className={clsx(
         'rounded-sm border px-2 py-0.5 font-sans text-[0.72rem] uppercase tracking-wide',
         active
-          ? 'border-mucka bg-mucka/15 text-mucka-deep'
+          ? 'border-ink/60 bg-ink/15 text-ink'
           : 'border-ink/20 text-ink-soft hover:bg-paper-shadow',
         disabled && 'cursor-not-allowed opacity-40'
       )}

@@ -361,7 +361,7 @@ function Placeholder({
             fontWeight: 500,
             letterSpacing: '0.03em',
             textTransform: 'uppercase',
-            color: 'var(--orange)',
+            color: 'var(--dirty-grey)',
             marginBottom: '0.5rem'
           }}
         >
