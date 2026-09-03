@@ -34,7 +34,23 @@ interface ClaudeState {
   model: string | null
   ctxUsed: number | null
   activity: string
+  sessionId: string | null
   ts: number
+}
+
+/**
+ * What `clear` remembers about the session it retired, so a later wait
+ * can tell the replacement Claude apart from the file the old one left.
+ */
+interface SessionMarker {
+  since: number
+  previousSessionId: string | null
+}
+
+interface Waiter {
+  agentId: AgentId
+  resolve: (ready: boolean) => void
+  timer: NodeJS.Timeout
 }
 
 const ACTIVITY_STATUS: Record<string, AgentStatus> = {
@@ -55,6 +71,7 @@ function parseState(raw: string): ClaudeState | null {
       model: typeof o.model === 'string' ? o.model : null,
       ctxUsed: typeof o.ctxUsed === 'number' ? o.ctxUsed : null,
       activity: typeof o.activity === 'string' ? o.activity : 'idle',
+      sessionId: typeof o.sessionId === 'string' && o.sessionId.length > 0 ? o.sessionId : null,
       ts: typeof o.ts === 'number' ? o.ts : 0
     }
   } catch {
@@ -89,6 +106,9 @@ export class ClaudeStateWatcher {
   private watcher: FSWatcher | null = null
   private sweep: NodeJS.Timeout | null = null
   private readonly last = new Map<AgentId, string>()
+  private readonly held = new Map<AgentId, ClaudeState>()
+  private readonly markers = new Map<AgentId, SessionMarker>()
+  private waiters: Waiter[] = []
 
   constructor(
     emit: (event: AgentStatusEvent) => void,
@@ -154,6 +174,14 @@ export class ClaudeStateWatcher {
     }
 
     for (const [agentId, state] of freshest) {
+      // A file older than the agent's last clear describes a shell that
+      // has been torn down. Without this the sweep would resurrect a dead
+      // session's "waiting" the moment clear() had pushed idle.
+      const marker = this.markers.get(agentId)
+      if (marker && state.ts < marker.since) continue
+      this.held.set(agentId, state)
+      this.settleWaiters(agentId, state)
+
       const stale = now - state.ts > STALE_MS
       const status: AgentStatus =
         stale && state.activity === 'working'
@@ -169,9 +197,72 @@ export class ClaudeStateWatcher {
     }
   }
 
-  /** Drop an agent back to idle — used when its shells are torn down. */
+  /**
+   * Drop an agent back to idle — used when its shells are torn down. Also
+   * marks the moment, so state written by the retired session is ignored
+   * from here on and `waitForFreshSession` knows what "new" means.
+   */
   clear(agentId: AgentId): void {
+    // The hook script stamps whole seconds; round down so a write in the
+    // same second as the clear still counts as after it.
+    const since = Math.floor(Date.now() / 1000) * 1000
+    this.markers.set(agentId, {
+      since,
+      previousSessionId: this.held.get(agentId)?.sessionId ?? null
+    })
+    this.held.delete(agentId)
     this.push({ agentId, status: 'idle', contextUsedPercent: null, model: null })
+  }
+
+  /**
+   * Resolve once a Claude started after the agent's last `clear` reports
+   * in — the first statusline render is the earliest proof its TUI is up
+   * and taking input. False on timeout: nothing reported, which usually
+   * means the statusline hook isn't installed on this machine.
+   */
+  waitForFreshSession(agentId: AgentId, timeoutMs: number): Promise<boolean> {
+    const held = this.held.get(agentId)
+    if (held && this.isFresh(agentId, held)) return Promise.resolve(true)
+    return new Promise((resolve) => {
+      const waiter: Waiter = {
+        agentId,
+        resolve,
+        timer: setTimeout(() => {
+          this.waiters = this.waiters.filter((w) => w !== waiter)
+          resolve(false)
+        }, timeoutMs)
+      }
+      this.waiters.push(waiter)
+    })
+  }
+
+  private isFresh(agentId: AgentId, state: ClaudeState): boolean {
+    const marker = this.markers.get(agentId)
+    if (!marker) return true
+    if (state.ts < marker.since) return false
+    // Same second as the clear: the session id is the tiebreak, when both
+    // sides carry one.
+    if (state.sessionId && marker.previousSessionId) {
+      return state.sessionId !== marker.previousSessionId
+    }
+    return true
+  }
+
+  private settleWaiters(agentId: AgentId, state: ClaudeState): void {
+    if (!this.isFresh(agentId, state)) return
+    const [ready, rest] = this.waiters.reduce<[Waiter[], Waiter[]]>(
+      (acc, w) => {
+        acc[w.agentId === agentId ? 0 : 1].push(w)
+        return acc
+      },
+      [[], []]
+    )
+    if (ready.length === 0) return
+    this.waiters = rest
+    for (const w of ready) {
+      clearTimeout(w.timer)
+      w.resolve(true)
+    }
   }
 
   private push(event: AgentStatusEvent): void {
@@ -187,5 +278,12 @@ export class ClaudeStateWatcher {
     if (this.sweep) clearInterval(this.sweep)
     this.sweep = null
     this.last.clear()
+    this.held.clear()
+    this.markers.clear()
+    for (const w of this.waiters) {
+      clearTimeout(w.timer)
+      w.resolve(false)
+    }
+    this.waiters = []
   }
 }

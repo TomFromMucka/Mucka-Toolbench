@@ -517,6 +517,12 @@ export interface MuckaApi {
    * remount.
    */
   restartAgent(agentId: AgentId): Promise<AgentConfig>
+  /**
+   * Resolves true once the Claude started by the last start/restart has
+   * reported in (first statusline render), false if nothing arrived within
+   * `timeoutMs`. Wait on this before typing into a freshly launched agent.
+   */
+  awaitClaudeReady(agentId: AgentId, timeoutMs: number): Promise<boolean>
   pickDirectory(opts?: { defaultPath?: string }): Promise<string | null>
   spawnPty(req: PtySpawnRequest): Promise<void>
   writePty(req: PtyWriteRequest): void
