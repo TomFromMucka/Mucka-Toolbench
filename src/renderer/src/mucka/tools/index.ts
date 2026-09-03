@@ -16,6 +16,7 @@ import type {
   VercelDeployment
 } from '@shared/types'
 import { MUCKA_AGENT_IDS, TOOL_DEFINITIONS } from '@shared/mucka-tools'
+import { fenceUntrusted } from '@shared/untrusted'
 import type { ConfirmRequest, EditConfirmRequest } from '../MuckaSessionContext'
 import { launchClaudeWithPrompt, submitPromptAndEnter } from '../dispatch'
 
@@ -177,7 +178,7 @@ async function getRecentOutput(params: Record<string, unknown>): Promise<string>
   const raw = await window.mucka.getScrollback(agentId)
   const tail = lastLines(raw, requestedLines).trim()
   if (!tail) return `${agentId}: terminal is empty.`
-  return `${agentId} — last ${requestedLines} lines:\n${tail}`
+  return `${agentId} — last ${requestedLines} lines:\n${fenceUntrusted(`terminal output from ${agentId}`, tail)}`
 }
 
 async function getVercelStatus(params: Record<string, unknown>): Promise<string> {
@@ -424,7 +425,7 @@ async function whatsHappening(): Promise<string> {
         `  cwd: ${a.worktreePath}`,
         a.needsAttention ? `  ⚑ NEEDS TOM: ${a.attentionReason ?? '(no reason)'}` : null,
         `  last:`,
-        tail.split('\n').map((l) => `    ${l}`).join('\n')
+        fenceUntrusted(`terminal output from ${a.id}`, tail)
       ]
         .filter((l): l is string => l !== null)
         .join('\n')
@@ -735,7 +736,7 @@ async function getSentryIssueHandler(params: Record<string, unknown>): Promise<s
   const issue = await resolveSentryIssue(params)
   const lines = [
     describeSentryIssue(issue),
-    issue.detail ? `message: ${issue.detail}` : null,
+    issue.detail ? fenceUntrusted('Sentry error message', issue.detail) : null,
     issue.culprit ? `culprit: ${issue.culprit}` : null,
     `unhandled: ${issue.isUnhandled ? 'yes' : 'no'}`,
     issue.priority ? `priority: ${issue.priority}` : null,
@@ -900,7 +901,7 @@ async function readPrDiffHandler(params: Record<string, unknown>): Promise<strin
   ]
     .filter((l): l is string => l !== null)
     .join('\n')
-  return header + ctx.diff
+  return header + fenceUntrusted(`PR #${pr.number} diff`, ctx.diff)
 }
 
 function makePostPrReview(deps: ToolDeps) {

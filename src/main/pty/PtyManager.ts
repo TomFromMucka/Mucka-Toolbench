@@ -11,8 +11,28 @@ import type {
   PtyWriteRequest,
   TerminalId
 } from '@shared/types'
+import { SECRET_DEFS } from '@shared/secrets'
 import { getAgentConfig } from '../config/agents'
 import { scrollback } from '../scrollback/Scrollback'
+
+/**
+ * Env names that must never reach a worker shell. The cockpit decrypts
+ * its integration tokens into `process.env` at boot; a worker Claude has
+ * Bash, so anything inherited is one `env` away from its scrollback (and
+ * from Mucka's `get_recent_output`).
+ */
+const WITHHELD_ENV = new Set<string>([
+  ...SECRET_DEFS.map((d) => d.envName),
+  'GH_TOKEN'
+])
+
+function agentShellEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!WITHHELD_ENV.has(key)) env[key] = value
+  }
+  return env
+}
 
 interface TerminalPty {
   terminalId: TerminalId
@@ -72,7 +92,7 @@ export class PtyManager {
       rows: Math.max(5, req.rows),
       cwd: cfg.worktreePath,
       env: {
-        ...process.env,
+        ...agentShellEnv(),
         TERM: 'xterm-256color',
         MUCKA_AGENT: cfg.id,
         MUCKA_TERMINAL: req.terminalId

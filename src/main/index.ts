@@ -141,6 +141,7 @@ import {
   watchPath as fsWatch
 } from './fs/Watcher'
 import {
+  PREVIEW_PARTITION,
   bindBrowserManager,
   closeTab as browserCloseTab,
   goBack as browserGoBack,
@@ -226,6 +227,20 @@ function applyAttentionToShell(count: number): void {
   lastAttentionCount = safe
 }
 
+/**
+ * `shell.openExternal` hands the URL to the OS, which will happily run a
+ * `file:` or custom-scheme handler. Web and mail links are all the cockpit
+ * ever needs to hand off.
+ */
+function isExternallyOpenable(raw: string): boolean {
+  try {
+    const { protocol } = new URL(raw)
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:'
+  } catch {
+    return false
+  }
+}
+
 function createWindow(): void {
   const { workArea } = screen.getPrimaryDisplay()
 
@@ -243,7 +258,7 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true
     }
   })
@@ -319,7 +334,7 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (isExternallyOpenable(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
@@ -1005,6 +1020,16 @@ function configureMediaPermissions(): void {
   session.defaultSession.setPermissionCheckHandler(
     (_webContents, permission) => allow(permission)
   )
+
+  // Preview tabs live on their own partition, and a session with no
+  // handler grants every request — so a page in a preview could take the
+  // mic, camera or location without a prompt. Nothing previewed needs any
+  // of it; deny outright.
+  const previews = session.fromPartition(PREVIEW_PARTITION)
+  previews.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false)
+  })
+  previews.setPermissionCheckHandler(() => false)
 }
 
 // Privileged schemes must be registered BEFORE app is ready.

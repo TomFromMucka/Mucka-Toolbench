@@ -240,6 +240,16 @@ shared primitives in `components/ui/`:
   flips back to "awaits Tom" on the next sweep. If nothing reports within
   20s the prompt still goes, with an event on the sheet naming the
   statusline hook as the likely gap.
+- **2026-09-03** — Security hardening. Worker shells no longer inherit
+  the cockpit's integration tokens (GitHub, Vercel, Sentry, ElevenLabs);
+  preview tabs deny mic/camera/location and only load http(s); the main
+  window runs sandboxed with only the typed `window.mucka` bridge;
+  `shell.openExternal` is scheme-limited. Untrusted text handed to Mucka
+  (agent output, Sentry titles/messages, PR diffs) is fenced as
+  `<<<untrusted …>>>` and the prompt says to treat it as data, never
+  instructions. Main's tool timeout now outlasts the confirm strip so a
+  late approval can't double-fire. `npm audit fix` cleared the
+  transitive MCP/express advisories.
 - **2026-09-03** — Fixed text-mode Mucka 400ing on every turn. The Agent
   SDK ships its own vendored Claude Code binary, and the pin at
   `^0.3.142` gave us 2.1.142 — which rejected the `opus[1m]` default set

@@ -27,6 +27,9 @@ import { installInputContextMenu } from '../contextMenu/InputMenu'
 
 const SLOT_IDS: BrowserSlotId[] = ['left', 'right']
 
+/** Cookies + storage for preview tabs, kept apart from the cockpit's own session. */
+export const PREVIEW_PARTITION = 'persist:browser'
+
 interface Bounds {
   x: number
   y: number
@@ -58,6 +61,21 @@ const slots: Record<BrowserSlotId, SlotState> = {
 
 let parentWindow: BrowserWindow | null = null
 let broadcaster: WebContents | null = null
+
+/**
+ * Preview tabs are for dev servers and the web. A `loadURL` issued from
+ * main skips Chromium's renderer-side scheme checks, so without this a
+ * page could `window.open('file:///…')` and read the disk into a tab.
+ */
+export function isPreviewableUrl(raw: string): boolean {
+  if (raw === 'about:blank') return true
+  try {
+    const { protocol } = new URL(raw)
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 export function bindBrowserManager(window: BrowserWindow): void {
   parentWindow = window
@@ -175,21 +193,26 @@ function wireEvents(tab: Tab): void {
   // window.open / target=_blank / Cmd-click on a link → spawn another
   // tab in the SAME slot so the user stays inside the cockpit.
   wc.setWindowOpenHandler((details) => {
-    openTab({ slotId: tab.slotId, url: details.url, activate: true })
+    if (isPreviewableUrl(details.url)) {
+      openTab({ slotId: tab.slotId, url: details.url, activate: true })
+    }
     return { action: 'deny' }
+  })
+  wc.on('will-navigate', (event, url) => {
+    if (!isPreviewableUrl(url)) event.preventDefault()
   })
 }
 
 export function openTab(input: OpenTabInput): TabId | null {
   if (!parentWindow) return null
+  if (!isPreviewableUrl(input.url)) return null
   const view = new WebContentsView({
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      // Default persistent session — cookies + localStorage survive
-      // cockpit restarts, same as the iframe approach had.
-      partition: 'persist:browser'
+      // Persistent so cookies + localStorage survive cockpit restarts.
+      partition: PREVIEW_PARTITION
     }
   })
   const tab: Tab = {
@@ -281,7 +304,7 @@ function findTab(tabId: TabId): { tab: Tab; slotId: BrowserSlotId } | null {
 
 export function navigateTab(tabId: TabId, url: string): void {
   const found = findTab(tabId)
-  if (!found) return
+  if (!found || !isPreviewableUrl(url)) return
   found.tab.view.webContents.loadURL(url).catch(() => { /* did-fail-load handles */ })
 }
 
