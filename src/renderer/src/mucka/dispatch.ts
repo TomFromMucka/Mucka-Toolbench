@@ -4,39 +4,17 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Heuristics that Claude Code's TUI is up and waiting for input.
-const CLAUDE_READY = /│\s*>|\? for shortcuts|esc to interrupt|Welcome to Claude|Try ["“]/i
-
 /**
- * Poll an agent's scrollback until Claude Code looks ready for a prompt:
- * either a known TUI marker shows up, or output goes quiet for a beat.
- * Bounded by a timeout so a dispatch never hangs forever.
+ * Wait for a freshly launched Claude to report ready. The signal comes from
+ * Claude Code itself (its statusline hook writes the cockpit's state file
+ * on first render) — never from the PTY stream, which redraws in place and
+ * can't be read for cues. Falls through after the timeout so a machine
+ * without the hook still gets its prompt, just later than it needs to.
  */
-export async function waitForClaudeReady(
-  terminalId: string,
-  timeoutMs = 20000
-): Promise<void> {
-  await delay(1500) // let the PTY spawn + Claude start booting
-  const start = Date.now()
-  let lastLen = -1
-  let stable = 0
-  while (Date.now() - start < timeoutMs) {
-    let sb = ''
-    try {
-      sb = await window.mucka.getScrollback(terminalId)
-    } catch {
-      sb = ''
-    }
-    if (CLAUDE_READY.test(sb)) return
-    if (sb.length > 0 && sb.length === lastLen) {
-      stable += 1
-      if (stable >= 3) return // ~2s of quiet — assume the prompt is ready
-    } else {
-      stable = 0
-      lastLen = sb.length
-    }
-    await delay(700)
-  }
+export async function waitForClaudeReady(agentId: AgentId, timeoutMs = 20000): Promise<void> {
+  const ready = await window.mucka.awaitClaudeReady(agentId, timeoutMs)
+  // The first render lands a beat before the input accepts a paste.
+  await delay(ready ? 750 : 2000)
 }
 
 /**

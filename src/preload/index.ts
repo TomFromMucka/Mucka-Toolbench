@@ -77,6 +77,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('agents:stop', agentId) as Promise<AgentConfig>,
   restartAgent: (agentId: AgentId) =>
     ipcRenderer.invoke('agents:restart', agentId) as Promise<AgentConfig>,
+  awaitClaudeReady: (agentId: AgentId, timeoutMs: number) =>
+    ipcRenderer.invoke('agents:await-claude', agentId, timeoutMs) as Promise<boolean>,
   pickDirectory: (opts?: { defaultPath?: string }) =>
     ipcRenderer.invoke('dialog:pickDirectory', opts) as Promise<string | null>,
   spawnPty: (req: PtySpawnRequest) =>
