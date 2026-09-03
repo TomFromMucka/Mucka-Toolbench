@@ -86,10 +86,11 @@ or "Tom, eyes here".
 - Settings sheet — edit each agent's display name, branch,
   worktreePath, command/args, Vercel project id.
 
-**Mucka tools (40).**
+**Mucka tools (44).**
 
 Read-only (auto-execute):
-- `list_agents`, `get_git_status`, `get_recent_output`,
+- `list_agents`, `get_git_status`, `read_file`, `list_dir`, `get_diff`,
+  `git_log`, `get_recent_output`,
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
   `get_pr_status`, `get_cockpit_doc`, `get_product_doc`,
   `list_memories`, `get_memory`, `list_roadmap`, `read_pr_diff`,
@@ -228,6 +229,14 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Mucka can read a worktree. Four auto-execute tools:
+  `read_file` (line-numbered, paged), `list_dir`, `get_diff`
+  (working / staged / branch-vs-main, optional path) and `git_log`
+  (`branch_only` for unpushed commits). Main resolves every path against
+  the agent's worktree root and refuses anything that escapes it,
+  symlinks included (`src/main/worktree/WorktreeRead.ts`). Results are
+  fenced as untrusted content like PR diffs. Run `npm run mucka:sync`
+  so voice mode gets the schemas.
 - **2026-09-03** — Security hardening. Worker shells no longer inherit
   the cockpit's integration tokens (GitHub, Vercel, Sentry, ElevenLabs);
   preview tabs deny mic/camera/location and only load http(s); the main

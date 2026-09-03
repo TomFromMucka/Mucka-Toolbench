@@ -37,6 +37,8 @@ import type {
   MuckaTextToolResult,
   VoiceTranscriptInput,
   PtyDataEvent,
+  WorktreeDiffScope,
+  WorktreeReadResult,
   PtyExitEvent,
   PtyResizeRequest,
   PtySpawnRequest,
@@ -119,6 +121,20 @@ const muckaApi: MuckaApi = {
 
   getScrollback: (terminalId: TerminalId) =>
     ipcRenderer.invoke('pty:scrollback', terminalId) as Promise<string>,
+  readWorktreeFile: (agentId: AgentId, path: string, startLine?: number, maxLines?: number) =>
+    ipcRenderer.invoke(
+      'worktree:read-file',
+      agentId,
+      path,
+      startLine,
+      maxLines
+    ) as Promise<WorktreeReadResult>,
+  listWorktreeDir: (agentId: AgentId, path: string) =>
+    ipcRenderer.invoke('worktree:list-dir', agentId, path) as Promise<WorktreeReadResult>,
+  getWorktreeDiff: (agentId: AgentId, scope: WorktreeDiffScope, path: string | null) =>
+    ipcRenderer.invoke('worktree:diff', agentId, scope, path) as Promise<WorktreeReadResult>,
+  getWorktreeLog: (agentId: AgentId, limit: number, branchOnly: boolean) =>
+    ipcRenderer.invoke('worktree:log', agentId, limit, branchOnly) as Promise<WorktreeReadResult>,
 
   notifyAttention: (count: number) =>
     ipcRenderer.send('app:notify-attention', count),

@@ -419,6 +419,18 @@ export interface FsListing {
  * file is `binary` if it contains a NUL byte in the first read window,
  * `too-large` if its size exceeds the cap, and `ok` otherwise.
  */
+/** What `get_diff` compares: the working tree, the index, or the branch against main. */
+export type WorktreeDiffScope = 'working' | 'staged' | 'branch'
+
+/**
+ * Pre-formatted, capped text from a read-only look inside an agent's
+ * worktree, shaped for Mucka's context. `note` carries a truncation
+ * warning when the cap bit.
+ */
+export type WorktreeReadResult =
+  | { ok: true; text: string; note: string | null }
+  | { ok: false; reason: string }
+
 export type FilePreview =
   | { kind: 'ok'; path: string; text: string; bytes: number; truncated: boolean }
   | { kind: 'image'; path: string; dataUrl: string; bytes: number }
@@ -528,6 +540,21 @@ export interface MuckaApi {
   onGitStatus(handler: (event: GitStatusEvent) => void): () => void
   onAgentStatus(handler: (event: AgentStatusEvent) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>
+
+  /** Read-only worktree access for Mucka — paths are relative to the agent's worktree and can't escape it. */
+  readWorktreeFile(
+    agentId: AgentId,
+    path: string,
+    startLine?: number,
+    maxLines?: number
+  ): Promise<WorktreeReadResult>
+  listWorktreeDir(agentId: AgentId, path: string): Promise<WorktreeReadResult>
+  getWorktreeDiff(
+    agentId: AgentId,
+    scope: WorktreeDiffScope,
+    path: string | null
+  ): Promise<WorktreeReadResult>
+  getWorktreeLog(agentId: AgentId, limit: number, branchOnly: boolean): Promise<WorktreeReadResult>
 
   /** Renderer → main: tell the OS shell (dock) about pending attention. */
   notifyAttention(count: number): void
