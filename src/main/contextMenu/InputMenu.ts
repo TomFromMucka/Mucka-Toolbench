@@ -1,5 +1,11 @@
 import { BrowserWindow, Menu, MenuItem, type WebContents, type WebFrameMain } from 'electron'
-import { getPassword, getUsername, hasCredential, listCredentials } from '../credentials/Credentials'
+import {
+  credentialsForHost,
+  getPassword,
+  getUsername,
+  hasCredential,
+  recordCredentialSite
+} from '../credentials/Credentials'
 
 /**
  * Right-click context menu for the cockpit window.
@@ -91,29 +97,44 @@ function sortLastUsedFirst<T extends { id: string }>(items: T[]): T[] {
   return reordered
 }
 
+function hostOf(frameURL: string): string {
+  try {
+    return new URL(frameURL).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 function buildCredentialItems(
   kind: FieldKind,
   webContents: WebContents,
   frameURL: string
 ): MenuItem[] {
   if (kind === null) return []
-  const all = listCredentials()
-  if (all.length === 0) return []
-  const sorted = sortLastUsedFirst(all)
+  const host = hostOf(frameURL)
+  // Only logins bound to this host, or not yet bound anywhere. A login
+  // saved for prod is not on the menu of a page that merely looks like
+  // prod.
+  const offered = credentialsForHost(host)
+  if (offered.length === 0) return []
+  const sorted = sortLastUsedFirst(offered)
 
   const items: MenuItem[] = []
   items.push(new MenuItem({ type: 'separator' }))
   items.push(
     new MenuItem({
-      label: kind === 'password' ? 'Insert password' : 'Insert username',
+      label: `${kind === 'password' ? 'Insert password' : 'Insert username'}${host ? ` — ${host}` : ''}`,
       enabled: false
     })
   )
   for (const cred of sorted) {
     const isLast = cred.id === lastUsedCredentialId
+    const unbound = cred.sites.length === 0
     items.push(
       new MenuItem({
-        label: `${isLast ? '· ' : '  '}${cred.label} — ${cred.username || '(no username)'}`,
+        label: `${isLast ? '· ' : '  '}${cred.label} — ${cred.username || '(no username)'}${
+          unbound ? '  (any site)' : ''
+        }`,
         click: async () => {
           const value =
             kind === 'password' ? getPassword(cred.id) : getUsername(cred.id)
@@ -121,6 +142,7 @@ function buildCredentialItems(
           if (!hasCredential(cred.id)) return
           await injectValue(webContents, frameURL, value)
           lastUsedCredentialId = cred.id
+          if (unbound && host) recordCredentialSite(cred.id, host)
         }
       })
     )
