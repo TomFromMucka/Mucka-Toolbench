@@ -211,8 +211,17 @@ export function AgentTerminal({
     const focusTerm = (): void => term.focus()
     host.addEventListener('mousedown', focusTerm)
 
+    // Live chunks can arrive while the scrollback replay is still being
+    // awaited (a reattach to a running shell). Hold them until the replay
+    // has been written so the pane doesn't show new output above old.
+    let replayDone = false
+    const heldChunks: string[] = []
     const offData = window.mucka.onPtyData((event) => {
       if (event.terminalId !== terminalId) return
+      if (!replayDone) {
+        heldChunks.push(event.data)
+        return
+      }
       term.write(event.data)
       onDataRef.current?.(event.data)
     })
@@ -260,6 +269,11 @@ export function AgentTerminal({
         term.write(RESET_INPUT_REPORTING)
         term.write(separator())
       }
+      replayDone = true
+      for (const chunk of heldChunks.splice(0)) {
+        term.write(chunk)
+        onDataRef.current?.(chunk)
+      }
       await window.mucka.spawnPty({
         terminalId,
         agentId,
@@ -276,8 +290,14 @@ export function AgentTerminal({
           window.mucka.writePty({ terminalId, data: cmd + '\r' })
         }, 250)
       }
-    })().catch(() => {
-      /* spawn errors surface as visible failures in the terminal */
+    })().catch((err: unknown) => {
+      if (cancelled) return
+      replayDone = true
+      const message = err instanceof Error ? err.message : String(err)
+      term.write(
+        `\r\n\x1b[38;5;208m[mucka] could not start this terminal — ${message}\x1b[0m\r\n` +
+          `\x1b[38;5;208m[mucka] check the worktree path in Settings → Agents, then stop and start the agent.\x1b[0m\r\n`
+      )
     })
 
     return () => {

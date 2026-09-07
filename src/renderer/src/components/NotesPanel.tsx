@@ -7,7 +7,7 @@ const PLACEHOLDER = `Type whatever you want here — todos, ideas, links, scratc
 Saves automatically. Mucka can append lines with the note tool.`
 
 export function NotesPanel({ size, onResize }: PanelSizeProps): React.JSX.Element {
-  const { text, setText, flush } = useNotesState()
+  const { text, setText, flush, saveError } = useNotesState()
   const taRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Flush on unmount + window blur — belt-and-braces for autosave.
@@ -36,11 +36,24 @@ export function NotesPanel({ size, onResize }: PanelSizeProps): React.JSX.Elemen
   return (
     <Clipboard
       title="Notes"
-      subtitle="scratchpad · autosaves"
+      subtitle={saveError ? 'scratchpad · NOT SAVED' : 'scratchpad · autosaves'}
       className="min-h-0"
       size={size}
       onResize={onResize}
     >
+      {saveError ? (
+        <div
+          className="border-b px-3 py-1 t-label-sm"
+          style={{
+            background: 'rgba(255, 78, 0, 0.12)',
+            color: 'var(--orange)',
+            borderColor: 'var(--border)'
+          }}
+          title={saveError}
+        >
+          Couldn&apos;t save — {saveError}. Your text is kept; ⌘S retries.
+        </div>
+      ) : null}
       <textarea
         ref={taRef}
         value={text}
