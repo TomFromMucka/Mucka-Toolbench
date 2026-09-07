@@ -223,7 +223,7 @@ function GitRow({ row, onRefreshAgent }: RowProps): React.JSX.Element {
         <button
           type="button"
           onClick={() => openUrl(pr.url)}
-          className="t-label-sm shrink-0 text-orange hover:underline"
+          className="t-label-sm shrink-0 text-dirty-grey underline underline-offset-2 hover:text-van-white"
           title={pr.url}
         >
           open

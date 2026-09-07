@@ -13,7 +13,7 @@ export interface ContextMenuItem {
   /** Optional keyboard hint shown at the right of the row. */
   shortcut?: string
   onClick: () => void
-  /** Renders in orange — destructive / red-team actions. */
+  /** Renders in the status red — destructive actions. */
   danger?: boolean
   disabled?: boolean
 }
@@ -121,7 +121,7 @@ export function ContextMenu({
             }}
             className="group flex w-full items-center justify-between rounded-sm px-2 py-[5px] text-left transition-colors hover:enabled:bg-van-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             style={{
-              color: danger ? 'var(--orange)' : undefined
+              color: danger ? 'var(--color-status-bad)' : undefined
             }}
           >
             <span>{label}</span>

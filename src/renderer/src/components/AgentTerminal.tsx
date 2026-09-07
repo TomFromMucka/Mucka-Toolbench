@@ -34,9 +34,9 @@ interface AgentTerminalProps {
 const THEME = {
   background: '#1a1612',
   foreground: '#f5f0e6',
-  cursor: '#ff7b3a',
+  cursor: '#eae9e8',
   cursorAccent: '#1a1612',
-  selectionBackground: '#ff4e0044',
+  selectionBackground: 'rgba(234, 233, 232, 0.25)',
   black: '#2a2520',
   red: '#a13a2a',
   green: '#7a9a5a',

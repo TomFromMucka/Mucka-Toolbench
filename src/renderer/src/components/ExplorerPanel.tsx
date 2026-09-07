@@ -95,7 +95,7 @@ function CollapsedRail({ onExpand }: { onExpand: () => void }): React.JSX.Elemen
         aria-label="Expand explorer"
         className="chamfer-sm grid size-8 place-items-center transition-colors hover:bg-van-white/10"
         style={{
-          color: 'var(--orange)',
+          color: 'var(--van-white)',
           background: 'rgba(234, 233, 232, 0.04)'
         }}
       >
@@ -129,7 +129,7 @@ function WorktreeSwitcher({
       className="flex items-center gap-2 border-b px-3 py-2"
       style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}
     >
-      <Icon icon={FolderOpen} size={14} strokeWidth={2.25} className="shrink-0 text-orange" />
+      <Icon icon={FolderOpen} size={14} strokeWidth={2.25} className="shrink-0 text-van-white/80" />
       <select
         value={selectedId ?? ''}
         onChange={(e) => onSelect(e.target.value as AgentId)}
@@ -177,7 +177,7 @@ function WorktreeHeader({ agent }: { agent: AgentConfig | null }): React.JSX.Ele
         color: 'var(--van-white)'
       }}
     >
-      <Icon icon={Folder} size={14} strokeWidth={2.25} className="shrink-0 text-orange" />
+      <Icon icon={Folder} size={14} strokeWidth={2.25} className="shrink-0 text-van-white/80" />
       <div className="min-w-0 flex-1">
         <div
           className="truncate"

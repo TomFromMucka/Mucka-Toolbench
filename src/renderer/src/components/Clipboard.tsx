@@ -129,7 +129,7 @@ export function Clipboard({
                     'grid size-5 place-items-center rounded-sm transition-colors',
                     active ? 'bg-van-white/20' : 'hover:bg-van-white/12'
                   )}
-                  style={{ color: active ? 'var(--orange)' : 'var(--van-white)' }}
+                  style={{ color: active ? 'var(--van-white)' : 'var(--dirty-grey)' }}
                 >
                   <Icon icon={opt.icon} size={11} strokeWidth={2.25} />
                 </button>
