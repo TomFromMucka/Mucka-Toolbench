@@ -64,10 +64,11 @@ const COLUMN_LABEL: Record<RoadmapColumn, string> = {
 const COLUMN_ACCENT: Record<RoadmapColumn, string> = {
   backlog: 'rgba(234, 233, 232, 0.45)',
   // Deep red, not the status red — that one sits close enough to the
-  // reserved orange to read as "Mucka is speaking" at dot size.
+  // reserved orange to read as "Mucka is speaking" at dot size. No lane
+  // gets the orange itself: a lane dot is chrome, not Mucka talking.
   issues: 'var(--red)',
-  next: 'var(--orange)',
-  doing: 'var(--orange)',
+  next: 'rgba(234, 233, 232, 0.7)',
+  doing: 'var(--van-white)',
   shipped: 'var(--color-status-ok, #5fb35f)',
   parked: 'rgba(234, 233, 232, 0.35)'
 }
@@ -293,7 +294,7 @@ function KanbanColumn({
       style={{
         background: 'var(--surface2)',
         borderRadius: 6,
-        boxShadow: isOver ? 'inset 0 0 0 1.5px var(--orange)' : 'none',
+        boxShadow: isOver ? 'inset 0 0 0 1.5px rgba(234, 233, 232, 0.6)' : 'none',
         transition: 'box-shadow 120ms ease'
       }}
     >
@@ -443,8 +444,8 @@ function KanbanCardChrome({
               key={t}
               className="chamfer-sm px-1 py-px text-[0.6rem]"
               style={{
-                background: 'rgba(255, 78, 0, 0.18)',
-                color: 'var(--orange)',
+                background: 'rgba(234, 233, 232, 0.10)',
+                color: 'var(--van-white)',
                 fontFamily: 'var(--font-soehne)'
               }}
             >

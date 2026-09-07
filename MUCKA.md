@@ -229,6 +229,13 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-09-03** — Brand orange back to its two meanings. Stripped it
+  from hover states, folder icons, active tab underlines, lane dots,
+  tag chips, drop-target rings, markdown links and bullets, the terminal
+  cursor and selection, focus rings and Settings badges. It remains on
+  Mucka's bubbles and confirm strip, attention states and error lines,
+  the status pills, and the primary CTA buttons the design system
+  defines as orange.
 - **2026-09-03** — Failures are visible. A terminal that can't spawn
   (pruned worktree, bad command) prints why in the pane instead of
   sitting blank; a notes save that fails flips the subtitle to *NOT

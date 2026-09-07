@@ -187,7 +187,7 @@ function TreeRow({
         onClick={handleClick}
         onContextMenu={(e) => onContextMenu(e, path, isDir)}
         title={path}
-        className="group flex w-full items-center gap-1.5 py-[3px] pr-2 text-left transition-colors hover:bg-orange/10"
+        className="group flex w-full items-center gap-1.5 py-[3px] pr-2 text-left transition-colors hover:bg-van-white/8"
         style={{
           paddingLeft: `${indent}px`,
           color: entry.isHidden
@@ -211,7 +211,7 @@ function TreeRow({
           strokeWidth={2.25}
           className="shrink-0"
           style={{
-            color: isDir ? 'var(--orange)' : 'rgba(234, 233, 232, 0.6)'
+            color: isDir ? 'rgba(234, 233, 232, 0.85)' : 'rgba(234, 233, 232, 0.6)'
           }}
         />
         <span
@@ -255,7 +255,7 @@ function RowStub({
         paddingLeft: `${indent}px`,
         fontSize: '12px',
         fontFamily: 'var(--font-soehne)',
-        color: tone === 'bad' ? 'var(--orange)' : 'var(--dirty-grey)'
+        color: tone === 'bad' ? 'var(--color-status-bad)' : 'var(--dirty-grey)'
       }}
     >
       {label}
