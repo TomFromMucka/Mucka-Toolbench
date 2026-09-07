@@ -19,6 +19,8 @@ export interface CredentialEntry {
   createdAt: number
   /** ms timestamp; bumped on edit. */
   updatedAt: number
+  /** Hosts this login is offered on. Empty = anywhere, until first used. */
+  sites: string[]
 }
 
 /** Public-safe view used by the renderer — no plaintext password. */
@@ -30,12 +32,20 @@ export interface CredentialSummary {
   passwordLast4: string
   createdAt: number
   updatedAt: number
+  /**
+   * Hosts the context menu offers this login on (`app.example.com`, or
+   * `*.vercel.app` for a family). Empty means "any site" — and the first
+   * host it's used on gets recorded, so a login stops being offered on
+   * pages it has no business on.
+   */
+  sites: string[]
 }
 
 export interface CredentialCreateInput {
   label: string
   username: string
   password: string
+  sites?: string[]
 }
 
 export interface CredentialUpdateInput {
@@ -44,4 +54,5 @@ export interface CredentialUpdateInput {
   username?: string
   /** Pass to change; omit to keep existing. */
   password?: string
+  sites?: string[]
 }

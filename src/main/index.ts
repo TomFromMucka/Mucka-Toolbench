@@ -276,10 +276,14 @@ function createWindow(): void {
   ptyManager = new PtyManager(mainWindow.webContents)
   // Claude Code reports its own activity + model + context usage through
   // ~/.claude/mucka-agent-state.sh; the stream can't be read reliably.
-  claudeStateWatcher = new ClaudeStateWatcher((event) => {
-    if (mainWindow.webContents.isDestroyed()) return
-    mainWindow.webContents.send('agent:status', event)
-  }, getAgentConfigs)
+  claudeStateWatcher = new ClaudeStateWatcher(
+    (event) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('agent:status', event)
+    },
+    getAgentConfigs,
+    (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
+  )
   claudeStateWatcher.start()
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
@@ -353,10 +357,35 @@ function createWindow(): void {
   }
 }
 
-function registerIpc(): void {
-  ipcMain.handle('agents:list', () => getAgentConfigs())
+/**
+ * Every channel below assumes the caller is the cockpit renderer. Only
+ * that window has a preload, so nothing else can reach ipcRenderer today
+ * — this pins that assumption down so a future view with a preload, or a
+ * subframe, can't drive PTY writes or file deletes.
+ */
+function fromCockpit(event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): boolean {
+  const wc = mainWindowRef?.webContents
+  if (!wc || event.sender !== wc) return false
+  const frame = event.senderFrame
+  return frame === null || frame === wc.mainFrame
+}
 
-  ipcMain.handle('agents:update', async (_event, patch: AgentUpdate) => {
+const guardedHandle: typeof ipcMain.handle = (channel, listener) =>
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!fromCockpit(event)) throw new Error(`ipc ${channel}: untrusted sender`)
+    return listener(event, ...args)
+  })
+
+const guardedOn: typeof ipcMain.on = (channel, listener) =>
+  ipcMain.on(channel, (event, ...args) => {
+    if (!fromCockpit(event)) return
+    listener(event, ...args)
+  })
+
+function registerIpc(): void {
+  guardedHandle('agents:list', () => getAgentConfigs())
+
+  guardedHandle('agents:update', async (_event, patch: AgentUpdate) => {
     const current = getAgentConfig(patch.id)
     if (!current) throw new Error(`Unknown agent: ${patch.id}`)
     const updated = {
@@ -420,7 +449,7 @@ function registerIpc(): void {
     return updated
   })
 
-  ipcMain.handle('agents:start', async (_event, agentId: AgentId) => {
+  guardedHandle('agents:start', async (_event, agentId: AgentId) => {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)
     // A previous session's last state ("waiting on Tom") would otherwise
@@ -449,7 +478,7 @@ function registerIpc(): void {
    * live shell, so a remount alone no longer restarts anything — anybody
    * who wants a fresh process has to come through here.
    */
-  ipcMain.handle('agents:restart', async (_event, agentId: AgentId) => {
+  guardedHandle('agents:restart', async (_event, agentId: AgentId) => {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)
     ptyManager?.killByAgent(agentId)
@@ -476,7 +505,7 @@ function registerIpc(): void {
    * session's prompt still in scrollback and pasted tickets into a shell
    * that was still booting.
    */
-  ipcMain.handle(
+  guardedHandle(
     'agents:await-claude',
     async (_event, agentId: AgentId, timeoutMs: number): Promise<boolean> => {
       if (!claudeStateWatcher) return false
@@ -495,7 +524,7 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('agents:stop', async (_event, agentId: AgentId) => {
+  guardedHandle('agents:stop', async (_event, agentId: AgentId) => {
     const current = getAgentConfig(agentId)
     if (!current) throw new Error(`Unknown agent: ${agentId}`)
     ptyManager?.killByAgent(agentId)
@@ -525,15 +554,15 @@ function registerIpc(): void {
     if (!cfg) throw new Error(`Unknown agent: ${agentId}`)
     return cfg.worktreePath
   }
-  ipcMain.handle(
+  guardedHandle(
     'worktree:read-file',
     (_event, agentId: AgentId, path: string, startLine?: number, maxLines?: number) =>
       readWorktreeFile(worktreeOf(agentId), String(path ?? ''), startLine, maxLines)
   )
-  ipcMain.handle('worktree:list-dir', (_event, agentId: AgentId, path: string) =>
+  guardedHandle('worktree:list-dir', (_event, agentId: AgentId, path: string) =>
     listWorktreeDir(worktreeOf(agentId), String(path ?? ''))
   )
-  ipcMain.handle(
+  guardedHandle(
     'worktree:diff',
     (_event, agentId: AgentId, scope: WorktreeDiffScope, path: string | null) =>
       readWorktreeDiff(
@@ -542,18 +571,18 @@ function registerIpc(): void {
         typeof path === 'string' ? path : null
       )
   )
-  ipcMain.handle(
+  guardedHandle(
     'worktree:log',
     (_event, agentId: AgentId, limit: number, branchOnly: boolean) =>
       readWorktreeLog(worktreeOf(agentId), Number(limit) || 20, branchOnly === true)
   )
 
-  ipcMain.handle('git:refresh', async (_event, agentId: AgentId) => {
+  guardedHandle('git:refresh', async (_event, agentId: AgentId) => {
     if (!gitService) throw new Error('git service not ready')
     return gitService.refreshOne(agentId)
   })
 
-  ipcMain.handle(
+  guardedHandle(
     'dialog:pickDirectory',
     async (_event, opts?: { defaultPath?: string }) => {
       const owner = mainWindowRef
@@ -571,31 +600,31 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('pty:spawn', (_event, req: PtySpawnRequest) => {
+  guardedHandle('pty:spawn', (_event, req: PtySpawnRequest) => {
     ptyManager?.spawn(req)
   })
 
-  ipcMain.on('pty:write', (_event, req: PtyWriteRequest) => {
+  guardedOn('pty:write', (_event, req: PtyWriteRequest) => {
     ptyManager?.write(req)
   })
 
-  ipcMain.on('pty:resize', (_event, req: PtyResizeRequest) => {
+  guardedOn('pty:resize', (_event, req: PtyResizeRequest) => {
     ptyManager?.resize(req)
   })
 
-  ipcMain.handle('pty:kill', (_event, terminalId: TerminalId) => {
+  guardedHandle('pty:kill', (_event, terminalId: TerminalId) => {
     ptyManager?.kill(terminalId)
   })
 
-  ipcMain.handle('pty:scrollback', (_event, terminalId: TerminalId) =>
+  guardedHandle('pty:scrollback', (_event, terminalId: TerminalId) =>
     scrollback.get(terminalId)
   )
 
-  ipcMain.handle('mucka:status', () => muckaStatus())
+  guardedHandle('mucka:status', () => muckaStatus())
 
-  ipcMain.handle('mucka:signedUrl', () => mintSignedUrl())
+  guardedHandle('mucka:signedUrl', () => mintSignedUrl())
 
-  ipcMain.handle('mucka:requestMic', async (): Promise<MicAccess> => {
+  guardedHandle('mucka:requestMic', async (): Promise<MicAccess> => {
     if (process.platform !== 'darwin') return 'granted'
     try {
       const ok = await systemPreferences.askForMediaAccess('microphone')
@@ -605,62 +634,62 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('mucka:openMicSettings', async () => {
+  guardedHandle('mucka:openMicSettings', async () => {
     if (process.platform !== 'darwin') return
     await shell.openExternal(
       'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
     )
   })
 
-  ipcMain.handle('vercel:status', () => vercelStatus())
+  guardedHandle('vercel:status', () => vercelStatus())
 
-  ipcMain.handle('vercel:get', (_event, agentId: AgentId) =>
+  guardedHandle('vercel:get', (_event, agentId: AgentId) =>
     vercelPoller?.get(agentId) ?? null
   )
 
-  ipcMain.handle('vercel:getAll', () => vercelPoller?.getAll() ?? {})
+  guardedHandle('vercel:getAll', () => vercelPoller?.getAll() ?? {})
 
-  ipcMain.handle('vercel:refresh', (_event, agentId: AgentId) =>
+  guardedHandle('vercel:refresh', (_event, agentId: AgentId) =>
     vercelPoller?.refreshOne(agentId) ?? null
   )
 
-  ipcMain.handle('github:status', () => githubStatus())
+  guardedHandle('github:status', () => githubStatus())
 
-  ipcMain.handle('github:get', (_event, agentId: AgentId) =>
+  guardedHandle('github:get', (_event, agentId: AgentId) =>
     githubPoller?.get(agentId) ?? null
   )
 
-  ipcMain.handle('github:getAll', () => githubPoller?.getAll() ?? {})
+  guardedHandle('github:getAll', () => githubPoller?.getAll() ?? {})
 
-  ipcMain.handle('github:refresh', (_event, agentId: AgentId) =>
+  guardedHandle('github:refresh', (_event, agentId: AgentId) =>
     githubPoller?.refreshOne(agentId) ?? null
   )
 
-  ipcMain.handle('sentry:status', () => sentryGetStatus())
+  guardedHandle('sentry:status', () => sentryGetStatus())
 
-  ipcMain.handle('sentry:list', () => sentryPoller?.getAll() ?? [])
+  guardedHandle('sentry:list', () => sentryPoller?.getAll() ?? [])
 
-  ipcMain.handle('sentry:refresh', () => sentryPoller?.refresh() ?? [])
+  guardedHandle('sentry:refresh', () => sentryPoller?.refresh() ?? [])
 
-  ipcMain.handle('sentry:get', (_event, issueId: string) => sentryGetIssue(issueId))
+  guardedHandle('sentry:get', (_event, issueId: string) => sentryGetIssue(issueId))
 
-  ipcMain.handle('sentry:untriaged', () => listUntriagedSentry())
+  guardedHandle('sentry:untriaged', () => listUntriagedSentry())
 
-  ipcMain.handle('sentry:status-changes', () => listSentryStatusChanges())
+  guardedHandle('sentry:status-changes', () => listSentryStatusChanges())
 
-  ipcMain.handle('sentry:ack-status', (_event, issueId: string) => {
+  guardedHandle('sentry:ack-status', (_event, issueId: string) => {
     ackSentryStatusChange(issueId)
   })
 
-  ipcMain.handle('sentry:health', () =>
+  guardedHandle('sentry:health', () =>
     sentryPoller?.getHealth() ?? { hasPolled: false, lastError: null, count: 0 }
   )
 
-  ipcMain.handle('sentry:archive', async (_event, issueId: string) => {
+  guardedHandle('sentry:archive', async (_event, issueId: string) => {
     await sentryArchiveIssue(issueId)
   })
 
-  ipcMain.handle(
+  guardedHandle(
     'sentry:triage',
     (
       _event,
@@ -690,7 +719,7 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle(
+  guardedHandle(
     'github:review-context',
     async (_event, agentId: AgentId): Promise<PrReviewContext> => {
       const summary = await (githubPoller?.refreshOne(agentId) ?? Promise.resolve(null))
@@ -748,12 +777,12 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('updater:version', () => updaterVersion())
-  ipcMain.handle('updater:check', () => updaterCheck())
-  ipcMain.handle('updater:download', () => updaterDownload())
-  ipcMain.handle('updater:install', () => updaterInstall())
+  guardedHandle('updater:version', () => updaterVersion())
+  guardedHandle('updater:check', () => updaterCheck())
+  guardedHandle('updater:download', () => updaterDownload())
+  guardedHandle('updater:install', () => updaterInstall())
 
-  ipcMain.handle(
+  guardedHandle(
     'github:review-submit',
     async (_event, input: PrReviewSubmission): Promise<PrReviewSubmitted> => {
       const summary = await (githubPoller?.refreshOne(input.agentId) ??
@@ -783,16 +812,16 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('notes:get', () => getValue(NOTES_KEY) ?? '')
+  guardedHandle('notes:get', () => getValue(NOTES_KEY) ?? '')
 
-  ipcMain.handle('notes:set', (_event, value: string) => {
+  guardedHandle('notes:set', (_event, value: string) => {
     setValue(NOTES_KEY, value)
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send('notes:update', value)
     }
   })
 
-  ipcMain.handle('notes:append', (_event, chunk: string) => {
+  guardedHandle('notes:append', (_event, chunk: string) => {
     const next = appendValue(NOTES_KEY, chunk)
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send('notes:update', next)
@@ -800,65 +829,65 @@ function registerIpc(): void {
     return next
   })
 
-  ipcMain.handle('events:list', (_event, limit?: number) => listEvents(limit ?? 100))
+  guardedHandle('events:list', (_event, limit?: number) => listEvents(limit ?? 100))
 
-  ipcMain.handle('mucka:text-status', () => muckaTextStatus())
-  ipcMain.handle('mucka:text-history', () => muckaTextListHistory())
-  ipcMain.handle('mucka:text-clear', () => muckaTextClearHistory())
-  ipcMain.handle('mucka:text-search', (_event, query: string, limit?: number) =>
+  guardedHandle('mucka:text-status', () => muckaTextStatus())
+  guardedHandle('mucka:text-history', () => muckaTextListHistory())
+  guardedHandle('mucka:text-clear', () => muckaTextClearHistory())
+  guardedHandle('mucka:text-search', (_event, query: string, limit?: number) =>
     muckaTextSearchHistory(typeof query === 'string' ? query : '', limit ?? 20)
   )
-  ipcMain.handle('mucka:text-abort', () => muckaTextAbortTurn())
-  ipcMain.handle('mucka:text-send', async (_event, text: string) => {
+  guardedHandle('mucka:text-abort', () => muckaTextAbortTurn())
+  guardedHandle('mucka:text-send', async (_event, text: string) => {
     await muckaTextSendMessage(text)
   })
-  ipcMain.on('mucka:text-tool-result', (_event, result: MuckaTextToolResult) => {
+  guardedOn('mucka:text-tool-result', (_event, result: MuckaTextToolResult) => {
     muckaTextAcceptToolResult(result)
   })
 
-  ipcMain.on('mucka:voice-transcript', (_event, input: VoiceTranscriptInput) => {
+  guardedOn('mucka:voice-transcript', (_event, input: VoiceTranscriptInput) => {
     if (!input || typeof input.text !== 'string') return
     if (input.role !== 'user' && input.role !== 'assistant') return
     muckaTextAppendVoice(input.role, input.text, input.ts)
   })
 
-  ipcMain.on('app:notify-attention', (_event, count: number) => {
+  guardedOn('app:notify-attention', (_event, count: number) => {
     applyAttentionToShell(typeof count === 'number' ? count : 0)
   })
 
-  ipcMain.handle('memory:list', (_event, query?: MemoryListQuery) =>
+  guardedHandle('memory:list', (_event, query?: MemoryListQuery) =>
     listMemories(query ?? {})
   )
 
-  ipcMain.handle('memory:get', (_event, topic: string) => getMemory(topic))
+  guardedHandle('memory:get', (_event, topic: string) => getMemory(topic))
 
-  ipcMain.handle('memory:remember', (_event, input: MemoryWriteInput) =>
+  guardedHandle('memory:remember', (_event, input: MemoryWriteInput) =>
     rememberMemory(input)
   )
 
-  ipcMain.handle('memory:forget', (_event, topic: string) => forgetMemory(topic))
+  guardedHandle('memory:forget', (_event, topic: string) => forgetMemory(topic))
 
-  ipcMain.handle('roadmap:list', () => roadmapList())
+  guardedHandle('roadmap:list', () => roadmapList())
 
-  ipcMain.handle('roadmap:create', (_event, input: RoadmapCreateInput) => {
+  guardedHandle('roadmap:create', (_event, input: RoadmapCreateInput) => {
     const card = roadmapCreate(input)
     afterRoadmapMutation()
     return card
   })
 
-  ipcMain.handle('roadmap:update', (_event, input: RoadmapUpdateInput) => {
+  guardedHandle('roadmap:update', (_event, input: RoadmapUpdateInput) => {
     const card = roadmapUpdate(input)
     afterRoadmapMutation()
     return card
   })
 
-  ipcMain.handle('roadmap:move', (_event, input: RoadmapMoveInput) => {
+  guardedHandle('roadmap:move', (_event, input: RoadmapMoveInput) => {
     const card = roadmapMove(input)
     afterRoadmapMutation()
     return card
   })
 
-  ipcMain.handle('roadmap:delete', (_event, id: string) => {
+  guardedHandle('roadmap:delete', (_event, id: string) => {
     const ok = roadmapDelete(id)
     if (ok) {
       void deleteCardAttachments(id)
@@ -867,7 +896,7 @@ function registerIpc(): void {
     return ok
   })
 
-  ipcMain.handle(
+  guardedHandle(
     'roadmap:attachImage',
     async (
       _event,
@@ -877,7 +906,7 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle(
+  guardedHandle(
     'broadcast:send',
     (_event, input: { text: string; agentIds?: AgentId[] }) => {
       const raw = typeof input?.text === 'string' ? input.text : ''
@@ -914,35 +943,35 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('fs:listDir', (_event, path: string) => fsListDir(path))
+  guardedHandle('fs:listDir', (_event, path: string) => fsListDir(path))
 
-  ipcMain.handle('fs:reveal', (_event, path: string) => revealInOs(path))
+  guardedHandle('fs:reveal', (_event, path: string) => revealInOs(path))
 
-  ipcMain.handle('fs:openPath', (_event, path: string) => openPathInOs(path))
+  guardedHandle('fs:openPath', (_event, path: string) => openPathInOs(path))
 
-  ipcMain.handle('fs:readFile', (_event, path: string) => fsReadFilePreview(path))
-  ipcMain.handle('fs:writeFile', (_event, path: string, content: string) =>
+  guardedHandle('fs:readFile', (_event, path: string) => fsReadFilePreview(path))
+  guardedHandle('fs:writeFile', (_event, path: string, content: string) =>
     fsWriteTextFile(path, typeof content === 'string' ? content : '')
   )
 
-  ipcMain.handle(
+  guardedHandle(
     'fs:createFile',
     (_event, parentPath: string, name: string) => fsCreateFile(parentPath, name)
   )
 
-  ipcMain.handle(
+  guardedHandle(
     'fs:createFolder',
     (_event, parentPath: string, name: string) => fsCreateFolder(parentPath, name)
   )
 
-  ipcMain.handle(
+  guardedHandle(
     'fs:rename',
     (_event, fromPath: string, toName: string) => fsRename(fromPath, toName)
   )
 
-  ipcMain.handle('fs:delete', (_event, path: string) => fsDelete(path))
+  guardedHandle('fs:delete', (_event, path: string) => fsDelete(path))
 
-  ipcMain.handle(
+  guardedHandle(
     'mucka:cockpit-doc',
     (_event, section?: string): { text: string; sections: string[]; found: boolean } => {
       const doc = readCockpitDoc()
@@ -962,7 +991,7 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle(
+  guardedHandle(
     'mucka:product-doc',
     (_event, section?: string): { text: string; sections: string[]; found: boolean } => {
       const doc = readProductDoc()
@@ -982,64 +1011,64 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('secrets:list', () => listSecretStatuses())
-  ipcMain.handle('secrets:set', (_event, id: SecretId, value: string) => {
+  guardedHandle('secrets:list', () => listSecretStatuses())
+  guardedHandle('secrets:set', (_event, id: SecretId, value: string) => {
     setSecret(id, value)
     return listSecretStatuses()
   })
-  ipcMain.handle('secrets:clear', (_event, id: SecretId) => {
+  guardedHandle('secrets:clear', (_event, id: SecretId) => {
     clearSecret(id)
     return listSecretStatuses()
   })
-  ipcMain.handle('secrets:test', (_event, id: SecretId) => testSecret(id))
+  guardedHandle('secrets:test', (_event, id: SecretId) => testSecret(id))
 
-  ipcMain.handle('credentials:list', () => listCredentials())
-  ipcMain.handle('credentials:create', (_event, input: CredentialCreateInput) => {
+  guardedHandle('credentials:list', () => listCredentials())
+  guardedHandle('credentials:create', (_event, input: CredentialCreateInput) => {
     createCredential(input)
     return listCredentials()
   })
-  ipcMain.handle('credentials:update', (_event, input: CredentialUpdateInput) => {
+  guardedHandle('credentials:update', (_event, input: CredentialUpdateInput) => {
     updateCredential(input)
     return listCredentials()
   })
-  ipcMain.handle('credentials:delete', (_event, id: string) => {
+  guardedHandle('credentials:delete', (_event, id: string) => {
     deleteCredential(id)
     return listCredentials()
   })
 
-  ipcMain.handle('fs:watch', (_event, path: string) => fsWatch(path))
-  ipcMain.handle('fs:unwatch', (_event, path: string) => fsUnwatch(path))
+  guardedHandle('fs:watch', (_event, path: string) => fsWatch(path))
+  guardedHandle('fs:unwatch', (_event, path: string) => fsUnwatch(path))
 
-  ipcMain.handle('browser:list', () => browserListTabs())
-  ipcMain.handle('browser:open', (_event, input: BrowserOpenTabInput) =>
+  guardedHandle('browser:list', () => browserListTabs())
+  guardedHandle('browser:open', (_event, input: BrowserOpenTabInput) =>
     browserOpenTab(input)
   )
-  ipcMain.handle('browser:close', (_event, tabId: BrowserTabId) =>
+  guardedHandle('browser:close', (_event, tabId: BrowserTabId) =>
     browserCloseTab(tabId)
   )
-  ipcMain.handle('browser:switch', (_event, tabId: BrowserTabId) =>
+  guardedHandle('browser:switch', (_event, tabId: BrowserTabId) =>
     browserSwitch(tabId)
   )
-  ipcMain.handle('browser:navigate', (_event, tabId: BrowserTabId, url: string) =>
+  guardedHandle('browser:navigate', (_event, tabId: BrowserTabId, url: string) =>
     browserNavigate(tabId, url)
   )
-  ipcMain.handle('browser:back', (_event, tabId: BrowserTabId) =>
+  guardedHandle('browser:back', (_event, tabId: BrowserTabId) =>
     browserGoBack(tabId)
   )
-  ipcMain.handle('browser:forward', (_event, tabId: BrowserTabId) =>
+  guardedHandle('browser:forward', (_event, tabId: BrowserTabId) =>
     browserGoForward(tabId)
   )
-  ipcMain.handle('browser:reload', (_event, tabId: BrowserTabId) =>
+  guardedHandle('browser:reload', (_event, tabId: BrowserTabId) =>
     browserReload(tabId)
   )
-  ipcMain.handle('browser:set-bounds', (_event, input: BrowserSetSlotBoundsInput) =>
+  guardedHandle('browser:set-bounds', (_event, input: BrowserSetSlotBoundsInput) =>
     browserSetBounds(input)
   )
-  ipcMain.handle(
+  guardedHandle(
     'browser:set-zoom',
     (_event, slotId: BrowserSlotId, factor: number) => browserSetZoom(slotId, factor)
   )
-  ipcMain.handle('browser:raise', (_event, slotId: BrowserSlotId) =>
+  guardedHandle('browser:raise', (_event, slotId: BrowserSlotId) =>
     browserRaiseSlot(slotId)
   )
 }
