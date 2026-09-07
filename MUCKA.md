@@ -232,8 +232,9 @@ shared primitives in `components/ui/`:
 - **2026-09-07** — Electron 39 → 44.1.1, which clears the last
   `npm audit` advisory (extract-zip in Electron's own installer).
   better-sqlite3 12 would not compile against the new V8, so it moved to
-  13.0.3; node-pty rebuilt cleanly. `npm audit` is now clean. The
-  installed app is still the previous build until the next
+  13.0.3; node-pty rebuilt cleanly. `npm audit` is down to one low
+  (esbuild's dev server on Windows, via electron-vite — not reachable
+  here). The installed app is still the previous build until the next
   `npm run install:mac`.
 - **2026-09-03** — Brand orange back to its two meanings. Stripped it
   from hover states, folder icons, active tab underlines, lane dots,
