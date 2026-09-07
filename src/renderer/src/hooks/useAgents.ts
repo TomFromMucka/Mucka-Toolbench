@@ -13,9 +13,12 @@ export function useAgents(): UseAgentsResult {
   const [loading, setLoading] = useState(true)
 
   const reload = useCallback(async () => {
-    const list = await window.mucka.listAgents()
-    setAgents(list)
-    setLoading(false)
+    try {
+      const list = await window.mucka.listAgents()
+      setAgents(list)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
