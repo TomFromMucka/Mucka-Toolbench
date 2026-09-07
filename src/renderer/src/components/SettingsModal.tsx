@@ -379,10 +379,19 @@ interface CredDraft {
   label: string
   username: string
   password: string
+  /** Comma-separated hosts, as typed. */
+  sites: string
 }
 
 function emptyDraft(): CredDraft {
-  return { label: '', username: '', password: '' }
+  return { label: '', username: '', password: '', sites: '' }
+}
+
+function splitSites(raw: string): string[] {
+  return raw
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
 }
 
 function CredentialsTab(): React.JSX.Element {
@@ -405,7 +414,12 @@ function CredentialsTab(): React.JSX.Element {
   const startEdit = (cred: CredentialSummary): void => {
     setAdding(false)
     setEditingId(cred.id)
-    setDraft({ label: cred.label, username: cred.username, password: '' })
+    setDraft({
+      label: cred.label,
+      username: cred.username,
+      password: '',
+      sites: cred.sites.join(', ')
+    })
   }
 
   const cancel = (): void => {
@@ -423,7 +437,8 @@ function CredentialsTab(): React.JSX.Element {
         const patch: Parameters<typeof window.mucka.updateCredential>[0] = {
           id: editingId,
           label: draft.label,
-          username: draft.username
+          username: draft.username,
+          sites: splitSites(draft.sites)
         }
         if (draft.password.length > 0) patch.password = draft.password
         const next = await window.mucka.updateCredential(patch)
@@ -433,7 +448,8 @@ function CredentialsTab(): React.JSX.Element {
         const next = await window.mucka.createCredential({
           label: draft.label,
           username: draft.username,
-          password: draft.password
+          password: draft.password,
+          sites: splitSites(draft.sites)
         })
         setCreds(next)
       }
@@ -465,7 +481,9 @@ function CredentialsTab(): React.JSX.Element {
         password, if it&apos;s a password field) is typed in. Works on
         cross-origin sites too — the cockpit is doing the injection at
         the Electron layer, not the iframe&apos;s sandbox. Encrypted via
-        your OS keychain.
+        your OS keychain. Each login is only offered on the sites listed
+        against it; a login with no sites is offered anywhere until its
+        first use, which binds it to that host.
       </p>
 
       <ul className="space-y-2">
@@ -499,6 +517,9 @@ function CredentialsTab(): React.JSX.Element {
                     ) : (
                       <span className="text-ink-faint"> · (no password)</span>
                     )}
+                  </div>
+                  <div className="truncate font-sans text-[0.74rem] text-ink-faint">
+                    {cred.sites.length > 0 ? cred.sites.join(', ') : 'any site — binds on first use'}
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1">
@@ -605,6 +626,17 @@ function CredentialForm({
             onChange={(e) => setDraft({ ...draft, password: e.target.value })}
           />
         </div>
+      </div>
+      <div>
+        <label className={LABEL}>Sites (hosts, comma-separated — blank = any, binds on first use)</label>
+        <input
+          className={FIELD}
+          value={draft.sites}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setDraft({ ...draft, sites: e.target.value })}
+          placeholder="app.example.com, *.vercel.app, localhost"
+        />
       </div>
       <div className="flex justify-end gap-2 pt-1">
         <button
@@ -744,9 +776,13 @@ interface AgentsTabProps {
 function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Element {
   const [drafts, setDrafts] = useState<DraftRow[]>(() => agents.map(toDraft))
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Agents reload in the background (a poll, a Mucka tool). Adopt the new
+  // rows only while nothing here is edited — otherwise a reload mid-edit
+  // would throw away what Tom has typed.
   useEffect(() => {
-    setDrafts(agents.map(toDraft))
+    setDrafts((prev) => (prev.some((d) => d.dirty) ? prev : agents.map(toDraft)))
   }, [agents])
 
   const dirtyCount = drafts.filter((d) => d.dirty).length
@@ -774,6 +810,7 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
 
   async function handleSave(): Promise<void> {
     setSaving(true)
+    setSaveError(null)
     try {
       for (const d of drafts) {
         if (!d.dirty) continue
@@ -791,6 +828,8 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
         })
       }
       onClose()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
@@ -948,10 +987,15 @@ function AgentsTab({ agents, onSave, onClose }: AgentsTabProps): React.JSX.Eleme
       </ul>
 
       <div className="mt-5 flex items-center justify-end gap-2 border-t border-ink/15 pt-3">
-        <span className="mr-auto text-[0.78rem] text-ink-soft font-sans">
-          {dirtyCount === 0
-            ? 'No changes'
-            : `${dirtyCount} agent${dirtyCount === 1 ? '' : 's'} changed — saving will restart their shells`}
+        <span
+          className="mr-auto text-[0.78rem] font-sans"
+          style={saveError ? { color: 'var(--orange)' } : undefined}
+        >
+          {saveError
+            ? `Couldn't save — ${saveError}`
+            : dirtyCount === 0
+              ? 'No changes'
+              : `${dirtyCount} agent${dirtyCount === 1 ? '' : 's'} changed — saving will restart their shells`}
         </span>
         <button
           type="button"
