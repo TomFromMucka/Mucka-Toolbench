@@ -88,14 +88,30 @@ nothing built earlier contradicts them:
   failing test, the job stops at evidence and says so.
 - **No-go areas stop at evidence:** payments, migrations, permissions,
   voice. The full list comes from the Codex Sentry-fixer spec
-  (`docs/sentry-groundwork-rules.md` in Mucka Pro, being written).
+  (`docs/sentry-groundwork-rules.md` in Mucka Pro, PR #3259).
 - Nothing reaches a customer or production without Tom's sign-off. A
   ticket reply is still sent with `scripts/ticket.ts reply --send`.
 - Ticket work stays local, because tickets carry customer data. Sentry
   groundwork needs only code and Sentry, so it could later run in the
   cloud.
-- Default stop point: to be decided. Options are evidence only, or a draft
-  PR when reproduced.
+
+**Stop point — decided 2026-10-06: supervised scope.** Mucka Pro's
+`docs/sentry-groundwork-rules.md` (PR #3259) governs *unattended* fix
+attempts, which are only allowed in allowlisted pure web helpers. Jobs is
+supervised: Tom signs off before anything ships. So a Jobs agent may draft
+a fix anywhere outside the no-go areas, once a test reproduces the bug.
+The no-go areas still stop at evidence in Jobs too.
+
+Two gaps the #3259 review found, which the build must close:
+
+- **Production reads are named, not open-ended.** Ticket groundwork reads
+  the live database (`scripts/ticket.ts`, and the account's settings).
+  Each job kind lists the reads it is allowed to make. Anything else is a
+  question to Tom, not a read.
+- **An independent review before sign-off.** A drafted fix gets a second
+  agent's review: a fresh session that sees the evidence and the diff,
+  but not the first agent's reasoning. Its verdict goes on the Evidence
+  tab. Tom's sign-off is the final check, not the only one.
 
 ## Slices
 
