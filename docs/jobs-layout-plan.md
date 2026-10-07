@@ -112,13 +112,29 @@ Two gaps the #3259 review found, which the build must close:
   agent's review: a fresh session that sees the evidence and the diff,
   but not the first agent's reasoning. Its verdict goes on the Evidence
   tab. Tom's sign-off is the final check, not the only one.
+- **A scout pass before that review.** A cheap model reads the diff first
+  and flags anything suspicious for the independent review to dig into.
+  Spotify's judge vetoes about a quarter of agent sessions this way before
+  a human sees them; the point is to spend Tom's attention only on work
+  that has already survived two looks.
+
+**The Rule of Two (added 2026-10-07).** A job may have at most two of:
+reading untrusted input, reaching sensitive systems, and making changes.
+A support ticket is untrusted input, because a customer can write
+instructions into it, so a ticket job never also holds both production
+access and the ability to change code. In practice: the cockpit fetches
+the named production reads for a ticket job and hands them over, and the
+job itself has no database credentials. If a ticket needs a code fix, that
+becomes a separate job whose input is Tom's own summary, not the ticket
+text. Source: "How to build an AI-native software factory" (The AI
+Thinker), which takes it from Meta's agent security guidance.
 
 ## Slices
 
 Ship in slices with a commit between each, and pause for Tom's feedback
 after the first visible change.
 
-### Slice 1 — Needs you, with answer buttons (all layouts)
+### Slice 1 — Needs you, with answer buttons (all layouts) (built 2026-10-07)
 
 This is the first build because it helps in 4 and 6 today, and Jobs reuses
 it unchanged.
@@ -195,7 +211,7 @@ pending question. The summary comes from a cheap model (Haiku) run on the
 `UserPromptSubmit` prompt. Shown on each terminal header in 4 and 6, and on
 job cards in Jobs.
 
-### Slice 3 — The Jobs layout shell
+### Slice 3 — The Jobs layout shell (built 2026-10-07)
 
 Add Jobs as a third value of `TerminalCount` (or a separate layout mode),
 with the five-column grid above. To start with, each running agent is a
@@ -203,26 +219,50 @@ job, so this needs no new data model. The explorer follows the selection,
 the right column is reused, and the terminal switches per job with
 mount-once hiding.
 
-### Slice 4 — Jobs as their own records
+### Slice 4 — Jobs as their own records (in progress)
 
-- A `jobs` table in sqlite: source, title, stage, the agent and worktree
-  doing it, timestamps.
-- One short-lived worktree per job, built on the existing
-  `slot/<name>` parking.
-- Two warm spares kept on `origin/main` so a new job doesn't wait for an
-  install.
-- ⌘N new job in plan mode.
-- Sign-off ends with the `/coach finish` ritual.
+Built (2026-10-07):
+- **+ New job / ⌘N** creates a job: a fresh worktree in `<repo>-jobs/` on a
+  `job/<date-time>` branch off the latest main, with `.env`, `.env.local`
+  and `CLAUDE.local.md` copied in and `node_modules` cloned copy-on-write
+  from any checkout installed from the same lockfile. Its terminal opens
+  with Claude running in Tom's normal mode, and Tom starts the job by
+  talking to it. Jobs are rows in a `jobs` table.
+- **Fresh per job, not a pool** (decided with Tom). Measured on the 64GB
+  M5 Pro: the clone takes ~13s and next to no disk; each job gets a clean
+  folder and its own Claude history; Claude's memory is per repo, so
+  nothing is lost; there's no six-job ceiling.
+
+Still to build:
+- A job's status and questions reaching the board and Needs you (job
+  terminals carry `$MUCKA_JOB`; the hooks and watchers need to follow it).
+- Titling a job from Tom's first message.
+- Pre-approving Claude's "trust this folder?" for job folders.
+- Sign-off: Ship / Amend / Dismiss, then removing the job's worktree and
+  branch. Removing a worktree deletes a folder, so it asks Tom each time.
+- **Job metrics.** Each job records what it cost (Claude Code reports it to
+  the status line), whether it ended in a merged PR, and whether that PR
+  was later reverted. The article's measure is "sessions that end in a
+  merged PR" and "cost per merged PR", with revert rate alongside, so it's
+  visible which kinds of job are worth handing over.
 
 Agent count stops being tied to screen seats. Ten is a screen limit, not a
 job limit.
 
 ### Slice 5 — Intake
 
-New Sentry issues become jobs, building on `SentryPoller`, which already
-triages and spots escalations. Then support tickets, building on
-`scripts/ticket.ts` and the `support-reply` skill. Groundwork follows the
-rules above.
+**Toil first.** The first automatic intake is work where "done" can be
+checked without judgement:
+- dependency and security bumps flagged by `npm audit`
+- CI failing on main
+- flaky tests
+- stale feature flags
+
+These fit the unattended rules in Mucka Pro's
+`docs/sentry-groundwork-rules.md` and earn trust cheaply. Then new Sentry
+issues, building on `SentryPoller`, which already triages and spots
+escalations. Support tickets come last, under the Rule of Two above,
+building on `scripts/ticket.ts` and the `support-reply` skill.
 
 ### Later — cloud
 
