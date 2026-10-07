@@ -160,6 +160,8 @@ const sentrySource = (issue: SentryIssue): string => `sentry:${issue.shortId}`
 /** How often to look for removed folders, and (every fourth pass) PR changes. */
 const SWEEP_MS = 15_000
 const PR_EVERY = 4
+/** A finished job leaves the board once its Claude stops, or after this at most. */
+const FINISHED_GRACE_MS = 5 * 60_000
 
 export interface JobManagerDeps {
   listAgents: () => AgentConfig[]
@@ -179,6 +181,7 @@ export class JobManager {
   private promptWatcher: FSWatcher | null = null
   private sweepTimer: NodeJS.Timeout | null = null
   private sweeps = 0
+  private readonly leaving = new Map<JobId, NodeJS.Timeout>()
 
   constructor(deps: JobManagerDeps) {
     this.listAgents = deps.listAgents
@@ -204,23 +207,50 @@ export class JobManager {
 
   /**
    * `/coach job-done` removes the job's folder and branch itself, from
-   * inside the job's own Claude. That's the signal the job is done: the
-   * card says so and keeps the terminal, so Tom can read the report.
+   * inside the job's own Claude. That's the signal the job is done. One
+   * last PR lookup records how it ended (a PR can open and merge between
+   * two polls), then the card leaves the board once Claude has finished
+   * its closing report.
    */
   private noticeRemovedFolders(): void {
     let changed = false
     for (const job of listOpenJobs()) {
+      if (job.state === 'finished' && !this.leaving.has(job.id)) {
+        // Left over from before a restart: nothing left to read.
+        this.leaveSoon(job.id, 0)
+        continue
+      }
       if (job.state !== 'ready' || existsSync(job.worktreePath)) continue
       updateJob(job.id, { state: 'finished', detail: 'Finished. Folder and branch removed.' })
+      this.leaveSoon(job.id, FINISHED_GRACE_MS)
       changed = true
     }
     if (changed) this.push()
   }
 
+  private leaveSoon(id: JobId, afterMs: number): void {
+    const existing = this.leaving.get(id)
+    if (existing) clearTimeout(existing)
+    this.leaving.set(
+      id,
+      setTimeout(() => {
+        void this.refreshPrs(id).finally(() => this.close(id))
+      }, afterMs)
+    )
+  }
+
+  /** A job's Claude has stopped. A finished job can go now. */
+  onJobIdle(id: JobId): void {
+    if (getJob(id)?.state === 'finished') this.leaveSoon(id, 3_000)
+  }
+
   /** Look up each job's PR. Quietly skips when GitHub isn't set up. */
   async refreshPrs(only?: JobId): Promise<void> {
+    // Finished jobs too: the branch is gone locally but GitHub still
+    // knows its PR, and that's how the job ended.
     const jobs = listOpenJobs().filter(
-      (j) => j.state === 'ready' && (only === undefined || j.id === only)
+      (j) =>
+        (j.state === 'ready' || j.state === 'finished') && (only === undefined || j.id === only)
     )
     if (jobs.length === 0) return
     let repo: ReturnType<typeof readGitHubOrigin>
@@ -366,6 +396,8 @@ export class JobManager {
     this.promptWatcher = null
     if (this.sweepTimer) clearInterval(this.sweepTimer)
     this.sweepTimer = null
+    for (const timer of this.leaving.values()) clearTimeout(timer)
+    this.leaving.clear()
   }
 
   list(): Job[] {
@@ -577,6 +609,9 @@ export class JobManager {
   close(id: JobId): void {
     const job = getJob(id)
     if (!job || job.state !== 'finished') return
+    const timer = this.leaving.get(id)
+    if (timer) clearTimeout(timer)
+    this.leaving.delete(id)
     this.killTerminal(job.terminalId)
     closeJob(id)
     this.push()

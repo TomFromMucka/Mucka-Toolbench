@@ -129,6 +129,8 @@ export function JobsLayout({
   const laneOfJob = (job: Job): Lane => {
     if (job.state === 'setting-up') return 'working'
     if (job.state === 'failed') return 'check'
+    // On its way off the board: nothing left for Tom to look at.
+    if (job.state === 'finished') return 'idle'
     if (placeOf(job.id) !== null) return 'waiting'
     if (WORKING.includes(jobStatusFor(job.id))) return 'working'
     return job.title === 'New job' ? 'idle' : 'check'

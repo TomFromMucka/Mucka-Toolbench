@@ -293,7 +293,10 @@ function createWindow(): void {
     undefined,
     (event) => {
       // A job that's just stopped may have opened or merged its PR.
-      if (event.status === 'idle') void jobManager?.refreshPrs(event.jobId)
+      if (event.status === 'idle') {
+        void jobManager?.refreshPrs(event.jobId)
+        jobManager?.onJobIdle(event.jobId)
+      }
       if (mainWindow.webContents.isDestroyed()) return
       mainWindow.webContents.send('job:status', event)
     }
