@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -6,6 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import type { AgentId, TerminalId } from '@shared/types'
 import { requestPreviewNavigation } from '../state/previewBus'
+import { useFocusRequests } from '../state/NeedsYouContext'
 
 interface AgentTerminalProps {
   terminalId: TerminalId
@@ -338,6 +339,20 @@ export function AgentTerminal({
     })
     return () => window.cancelAnimationFrame(handle)
   }, [isActive, terminalId])
+
+  useFocusRequests(
+    useCallback(
+      (requested: TerminalId) => {
+        if (requested !== terminalId) return
+        // Let the panel switch tabs first, so the terminal is visible to focus.
+        window.requestAnimationFrame(() => {
+          hostRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+          termRef.current?.focus()
+        })
+      },
+      [terminalId]
+    )
+  )
 
   return <div ref={hostRef} className="size-full bg-[#1a1612]" />
 }

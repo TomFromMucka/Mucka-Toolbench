@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentId, AgentUpdate } from '@shared/types'
 import { MuckaTopBanner } from '../components/MuckaTopBanner'
 import { AgentGrid } from '../components/AgentGrid'
@@ -14,6 +14,7 @@ import { useGitStatus } from '../hooks/useGitStatus'
 import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { useAgentsState } from '../state/AgentsContext'
 import { useLayout, useVisibleAgents } from '../state/LayoutContext'
+import { useNeedsYou } from '../state/NeedsYouContext'
 
 const STORAGE_COLLAPSED = 'explorer.collapsed'
 const STORAGE_AGENT = 'explorer.selectedAgent'
@@ -76,10 +77,27 @@ export function Workstation(): React.JSX.Element {
     return agents[0]?.id ?? null
   }, [agents, explorerAgentId])
 
+  const { queue, focusTerminal } = useNeedsYou()
+  const lastJumpRef = useRef<AgentId | null>(null)
+
+  // ⌘J walks the queue. Answering an agent drops it out, so repeated
+  // presses work through the blocked ones; an agent that's only waiting
+  // for its next prompt stays put, so step past whoever we jumped to last.
+  const jumpToNext = useCallback((): void => {
+    if (queue.length === 0) return
+    const last = queue.findIndex((e) => e.agentId === lastJumpRef.current)
+    const next = queue[(last + 1) % queue.length]
+    lastJumpRef.current = next.agentId
+    focusTerminal(next.terminalId ?? next.agentId)
+  }, [queue, focusTerminal])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key === ',') {
+      if (mod && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault()
+        jumpToNext()
+      } else if (mod && e.key === ',') {
         e.preventDefault()
         setSettingsOpen(true)
       } else if (mod && (e.key === 'm' || e.key === 'M')) {
@@ -91,7 +109,7 @@ export function Workstation(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, toggleMucka])
+  }, [settingsOpen, toggleMucka, jumpToNext])
 
   const handleSave = useCallback(
     async (patch: AgentUpdate) => {

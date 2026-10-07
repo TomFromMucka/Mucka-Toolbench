@@ -90,6 +90,7 @@ import {
 } from './mucka/MuckaTextAgent'
 import { PtyManager } from './pty/PtyManager'
 import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
+import { PendingWatcher } from './claude/PendingWatcher'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
@@ -187,6 +188,8 @@ import type {
 import type {
   AgentId,
   AgentUpdate,
+  PendingAnswer,
+  PendingAnswerResult,
   PtyResizeRequest,
   PtySpawnRequest,
   PtyWriteRequest,
@@ -197,6 +200,7 @@ const NOTES_KEY = 'notes'
 
 let ptyManager: PtyManager | null = null
 let claudeStateWatcher: ClaudeStateWatcher | null = null
+let pendingWatcher: PendingWatcher | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
@@ -285,6 +289,17 @@ function createWindow(): void {
     (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
   )
   claudeStateWatcher.start()
+  // What each Claude is blocked on, from the PermissionRequest hook in
+  // scripts/claude-hooks/mucka-pending.sh. Answers go back the same way.
+  pendingWatcher = new PendingWatcher(
+    (items) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('pending:update', items)
+    },
+    getAgentConfigs,
+    (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
+  )
+  pendingWatcher.start()
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
@@ -331,6 +346,8 @@ function createWindow(): void {
     ptyManager = null
     claudeStateWatcher?.dispose()
     claudeStateWatcher = null
+    pendingWatcher?.dispose()
+    pendingWatcher = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {
       app.dock.setBadge('')
@@ -384,6 +401,11 @@ const guardedOn: typeof ipcMain.on = (channel, listener) =>
 
 function registerIpc(): void {
   guardedHandle('agents:list', () => getAgentConfigs())
+
+  guardedHandle('pending:list', () => pendingWatcher?.list() ?? [])
+  guardedHandle('pending:answer', (_event, answer: PendingAnswer): PendingAnswerResult =>
+    pendingWatcher ? pendingWatcher.answer(answer) : { ok: false, reason: 'stale' }
+  )
 
   guardedHandle('agents:update', async (_event, patch: AgentUpdate) => {
     const current = getAgentConfig(patch.id)

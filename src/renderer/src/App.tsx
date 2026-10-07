@@ -7,6 +7,7 @@ import { AttentionNotifier } from './state/AttentionNotifier'
 import { EventsProvider } from './state/EventsContext'
 import { LayoutProvider } from './state/LayoutContext'
 import { NotesProvider } from './state/NotesContext'
+import { NeedsYouProvider } from './state/NeedsYouContext'
 import { VercelProvider } from './state/VercelContext'
 import { GitHubProvider } from './state/GitHubContext'
 
@@ -15,6 +16,7 @@ function App(): React.JSX.Element {
     <AgentsProvider>
       <LayoutProvider>
         <AgentStatusProvider>
+          <NeedsYouProvider>
           <NotesProvider>
             <EventsProvider>
               <VercelProvider>
@@ -29,6 +31,7 @@ function App(): React.JSX.Element {
               </VercelProvider>
             </EventsProvider>
           </NotesProvider>
+          </NeedsYouProvider>
         </AgentStatusProvider>
       </LayoutProvider>
     </AgentsProvider>

@@ -246,6 +246,66 @@ export interface AgentStatusEvent {
   model?: string | null
 }
 
+/* ─── Needs you: what a cockpit-launched Claude is waiting on ────────── */
+
+export interface PendingQuestionOption {
+  label: string
+  description: string | null
+}
+
+export interface PendingQuestion {
+  question: string
+  header: string | null
+  options: PendingQuestionOption[]
+  multiSelect: boolean
+}
+
+/**
+ * One Claude blocked on Tom, as reported by the PermissionRequest hook
+ * (`scripts/claude-hooks/mucka-pending.sh`). Keyed by terminal, not agent:
+ * an agent's split tabs each run their own Claude.
+ */
+export interface PendingItem {
+  id: string
+  agentId: AgentId
+  terminalId: TerminalId
+  kind: 'permission' | 'question'
+  tool: string
+  /** What Claude wants to do, in one line: the command, the file, the URL. */
+  summary: string
+  /**
+   * The "Yes, and don't ask again" option, when Claude offered one, worded
+   * from what it would allow. Null when Claude offered nothing to remember.
+   */
+  alwaysLabel: string | null
+  /** Empty for a permission prompt. */
+  questions: PendingQuestion[]
+  /** Epoch ms when Claude started waiting. */
+  since: number
+}
+
+export type PendingAnswer =
+  | {
+      id: string
+      terminalId: TerminalId
+      kind: 'permission'
+      behavior: 'allow' | 'deny'
+      always: boolean
+    }
+  | {
+      id: string
+      terminalId: TerminalId
+      kind: 'question'
+      /** Question text → chosen option label. */
+      answers: Record<string, string>
+    }
+
+/**
+ * `stale` means Claude stopped waiting before the answer landed, usually
+ * because Tom answered in the terminal first. Nothing was sent.
+ */
+export type PendingAnswerResult = { ok: true } | { ok: false; reason: 'stale' | 'invalid' }
+
 /* ─── Mucka PM agent ─────────────────────────────────────────────────── */
 
 export type MuckaStatus =
@@ -545,6 +605,10 @@ export interface MuckaApi {
   refreshGit(agentId: AgentId): Promise<GitStatus>
   onGitStatus(handler: (event: GitStatusEvent) => void): () => void
   onAgentStatus(handler: (event: AgentStatusEvent) => void): () => void
+  /** Everything a cockpit-launched Claude is currently waiting on Tom for. */
+  listPending(): Promise<PendingItem[]>
+  onPendingUpdate(handler: (items: PendingItem[]) => void): () => void
+  answerPending(answer: PendingAnswer): Promise<PendingAnswerResult>
   getScrollback(terminalId: TerminalId): Promise<string>
 
   /** Read-only worktree access for Mucka — paths are relative to the agent's worktree and can't escape it. */

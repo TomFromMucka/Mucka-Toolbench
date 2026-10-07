@@ -3,6 +3,9 @@ import type {
   AgentConfig,
   AgentId,
   AgentStatusEvent,
+  PendingAnswer,
+  PendingAnswerResult,
+  PendingItem,
   AgentUpdate,
   CockpitDocPayload,
   Memory,
@@ -120,6 +123,15 @@ const muckaApi: MuckaApi = {
     ipcRenderer.on('agent:status', listener)
     return () => ipcRenderer.off('agent:status', listener)
   },
+
+  listPending: () => ipcRenderer.invoke('pending:list') as Promise<PendingItem[]>,
+  onPendingUpdate: (handler: (items: PendingItem[]) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, items: PendingItem[]) => handler(items)
+    ipcRenderer.on('pending:update', listener)
+    return () => ipcRenderer.off('pending:update', listener)
+  },
+  answerPending: (answer: PendingAnswer) =>
+    ipcRenderer.invoke('pending:answer', answer) as Promise<PendingAnswerResult>,
 
   getScrollback: (terminalId: TerminalId) =>
     ipcRenderer.invoke('pty:scrollback', terminalId) as Promise<string>,

@@ -4,6 +4,7 @@ import { Clipboard } from './Clipboard'
 import type { PanelSize } from './panelSize'
 import { AgentTerminalPanel } from './AgentTerminalPanel'
 import { GitStatusBadges } from './GitStatusBadges'
+import { useNeedsYou } from '../state/NeedsYouContext'
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
   idle: 'idle',
@@ -55,21 +56,30 @@ export function AgentClipboard({
   size = 'mid',
   onResize
 }: AgentClipboardProps): React.JSX.Element {
+  const place = useNeedsYou().placeOf(agent.id)
   return (
     <Clipboard
       title={agent.displayName}
       subtitle={<GitStatusBadges status={gitStatus} fallbackLabel={agent.branch} />}
-      attention={
-        agent.needsAttention ||
-        agent.status === 'awaiting-input' ||
-        agent.status === 'blocked'
-      }
+      // One glow at a time: with ten agents, several glowing clipboards
+      // meant scanning the grid to find who'd waited longest. The rest of
+      // the queue carries its place number instead.
+      attention={place === 1}
       bodyClassName="bg-surface-2"
       className="min-h-0"
       size={size}
       onResize={onResize}
       rightSlot={
         <span className="flex min-w-0 items-center gap-2">
+          {place !== null && place > 1 ? (
+            <span
+              className="chamfer-sm px-1.5 py-0.5 font-mono text-[0.65rem]"
+              title={`Waiting on you: number ${place} in the queue (⌘J)`}
+              style={{ boxShadow: 'inset 0 0 0 1px var(--orange)', color: 'var(--orange)' }}
+            >
+              {place}
+            </span>
+          ) : null}
           {config.running && model ? (
             <span
               className="chamfer-sm max-w-[9rem] truncate px-1.5 py-0.5 text-[0.65rem]"
