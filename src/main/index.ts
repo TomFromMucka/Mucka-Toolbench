@@ -317,6 +317,9 @@ function createWindow(): void {
       mainWindow.webContents.send('jobs:update', jobs)
     },
     killTerminal: (terminalId) => ptyManager?.kill(terminalId),
+    getSentryIssue: async (issueId) =>
+      sentryPoller?.getAll().find((i) => i.id === issueId) ??
+      (await sentryGetIssue(issueId).catch(() => null)),
     confirm: async (message, detail, confirmLabel) => {
       const { response } = await dialog.showMessageBox(mainWindow, {
         type: 'warning',
@@ -442,6 +445,18 @@ function registerIpc(): void {
   guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))
   guardedHandle('jobs:dismiss', (_event, id: string) => jobManager?.dismiss(id) ?? false)
   guardedHandle('jobs:close', (_event, id: string) => jobManager?.close(id))
+  guardedHandle('jobs:start-sentry', (_event, issueId: string) => {
+    if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+    return jobManager.startSentryById(issueId)
+  })
+  guardedHandle('jobs:auto-get', () => {
+    if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+    return jobManager.autoStatus()
+  })
+  guardedHandle('jobs:auto-set', (_event, enabled: boolean) => {
+    if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+    return jobManager.setAuto(enabled)
+  })
 
   guardedHandle('pending:list', () => pendingWatcher?.list() ?? [])
   guardedHandle('pending:answer', (_event, answer: PendingAnswer): PendingAnswerResult =>
@@ -766,6 +781,8 @@ function registerIpc(): void {
       }
     ) => {
       recordSentryTriage(input)
+      // A ticket is the signal to start work, if Tom has auto-start on.
+      if (input.verdict === 'ticket') void jobManager?.onSentryTicket(input.issueId)
       const record = getSentryTriage(input.issueId)
       const label = record ? `${record.shortId} ${record.title.slice(0, 70)}` : input.issueId
       logEvent({

@@ -62,7 +62,8 @@ or "Tom, eyes here".
   branch), *Dismiss* (asks first, says what would be lost).
 - **Intake** lists unresolved Sentry issues in the terminal's font.
   *Start job* opens a job whose Claude begins with the issue and the
-  groundwork rules.
+  groundwork rules. With auto on (header switch), an issue Mucka triages
+  as a ticket starts its own job, 3 open at most, the rest queued.
 
 **Needs you (all layouts).** One queue of agents' and jobs' permission
 prompts and questions, blocked first then oldest. Answered with buttons

@@ -186,6 +186,17 @@ export interface Job {
   createdAt: number
 }
 
+/** Whether Sentry tickets start jobs by themselves, and how far that has got. */
+export interface JobsAutoStatus {
+  enabled: boolean
+  /** Most Sentry jobs open at once; the rest wait in `queued`. */
+  cap: number
+  /** Open jobs started from Sentry, by hand or automatically. */
+  open: number
+  /** Sentry issue ids waiting for a free place, oldest first. */
+  queued: string[]
+}
+
 /** What a job started from Intake opens with. */
 export interface JobBrief {
   title: string
@@ -690,6 +701,10 @@ export interface MuckaApi {
   dismissJob(id: JobId): Promise<boolean>
   /** Take a finished job's card off the board. */
   closeJob(id: JobId): Promise<void>
+  /** Start a job on a Sentry issue, briefed with it. Returns its existing job if it has one. */
+  startSentryJob(issueId: string): Promise<Job>
+  getJobsAuto(): Promise<JobsAutoStatus>
+  setJobsAuto(enabled: boolean): Promise<JobsAutoStatus>
   onJobsUpdate(handler: (jobs: Job[]) => void): () => void
   onJobStatus(handler: (event: JobStatusEvent) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>

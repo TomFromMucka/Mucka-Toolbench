@@ -11,7 +11,17 @@ import {
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import type { AgentConfig, Job, JobBrief, JobId, JobPr } from '@shared/types'
+import type {
+  AgentConfig,
+  Job,
+  JobBrief,
+  JobId,
+  JobPr,
+  JobsAutoStatus,
+  SentryIssue
+} from '@shared/types'
+import { getValue, setValue } from '../db/kv'
+import { sentryBrief } from './sentryBrief'
 import { closePullRequest, latestPullRequestForBranch, readGitHubOrigin } from '../github/GitHub'
 import {
   closeJob,
@@ -136,6 +146,17 @@ function titleFrom(prompt: string): string | null {
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1).trimEnd()}…` : line
 }
 
+/**
+ * Sentry tickets start jobs by themselves, at most this many open at once.
+ * Tom sees ~5 new issues a day; Mucka's triage passes the real ones on.
+ * The cap is backpressure: a job counts until he's signed it off, so a
+ * noisy day queues up rather than burying him.
+ */
+const AUTO_CAP = 3
+const AUTO_KEY = 'jobs.autoSentry'
+const QUEUE_KEY = 'jobs.autoSentryQueue'
+const sentrySource = (issue: SentryIssue): string => `sentry:${issue.shortId}`
+
 /** How often to look for removed folders, and (every fourth pass) PR changes. */
 const SWEEP_MS = 15_000
 const PR_EVERY = 4
@@ -146,6 +167,7 @@ export interface JobManagerDeps {
   killTerminal: (terminalId: string) => void
   /** Ask Tom in a native dialog. Resolves true only on the confirm button. */
   confirm: (message: string, detail: string, confirmLabel: string) => Promise<boolean>
+  getSentryIssue: (issueId: string) => Promise<SentryIssue | null>
 }
 
 export class JobManager {
@@ -153,6 +175,7 @@ export class JobManager {
   private readonly emit: (jobs: Job[]) => void
   private readonly killTerminal: (terminalId: string) => void
   private readonly confirm: JobManagerDeps['confirm']
+  private readonly getSentryIssue: JobManagerDeps['getSentryIssue']
   private promptWatcher: FSWatcher | null = null
   private sweepTimer: NodeJS.Timeout | null = null
   private sweeps = 0
@@ -162,6 +185,7 @@ export class JobManager {
     this.emit = deps.emit
     this.killTerminal = deps.killTerminal
     this.confirm = deps.confirm
+    this.getSentryIssue = deps.getSentryIssue
     try {
       mkdirSync(PROMPTS_DIR, { recursive: true })
       this.promptWatcher = watch(PROMPTS_DIR, () => this.titleFromPrompts())
@@ -261,6 +285,80 @@ export class JobManager {
       changed = true
     }
     if (changed) this.push()
+  }
+
+  /** Start a job briefed with a Sentry issue, or return the one it already has. */
+  async startFromSentry(issue: SentryIssue): Promise<Job> {
+    const existing = listOpenJobs().find((j) => j.source === sentrySource(issue))
+    if (existing) return existing
+    this.setQueue(this.queue().filter((id) => id !== issue.id))
+    return this.create({
+      title: `${issue.shortId}: ${issue.title}`,
+      prompt: sentryBrief(issue),
+      source: sentrySource(issue)
+    })
+  }
+
+  async startSentryById(issueId: string): Promise<Job> {
+    const issue = await this.getSentryIssue(issueId)
+    if (!issue) throw new Error(`Sentry issue ${issueId} isn't in the latest list.`)
+    return this.startFromSentry(issue)
+  }
+
+  autoStatus(): JobsAutoStatus {
+    return {
+      enabled: getValue(AUTO_KEY) !== 'off',
+      cap: AUTO_CAP,
+      open: this.openSentryJobs(),
+      queued: this.queue()
+    }
+  }
+
+  setAuto(enabled: boolean): JobsAutoStatus {
+    setValue(AUTO_KEY, enabled ? 'on' : 'off')
+    if (enabled) void this.drainQueue()
+    this.push()
+    return this.autoStatus()
+  }
+
+  /** Mucka ruled a Sentry issue worth fixing. Start on it, or queue it. */
+  async onSentryTicket(issueId: string): Promise<void> {
+    if (!this.autoStatus().enabled) return
+    const issue = await this.getSentryIssue(issueId)
+    if (!issue || listOpenJobs().some((j) => j.source === sentrySource(issue))) return
+    if (this.openSentryJobs() >= AUTO_CAP) {
+      if (!this.queue().includes(issueId)) this.setQueue([...this.queue(), issueId])
+      this.push()
+      return
+    }
+    await this.startFromSentry(issue).catch(() => undefined)
+  }
+
+  private async drainQueue(): Promise<void> {
+    if (!this.autoStatus().enabled) return
+    while (this.openSentryJobs() < AUTO_CAP) {
+      const [next, ...rest] = this.queue()
+      if (next === undefined) return
+      this.setQueue(rest)
+      await this.onSentryTicket(next)
+    }
+  }
+
+  private openSentryJobs(): number {
+    return listOpenJobs().filter((j) => j.source?.startsWith('sentry:')).length
+  }
+
+  private queue(): string[] {
+    try {
+      const parsed: unknown = JSON.parse(getValue(QUEUE_KEY) ?? '[]')
+      return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+    } catch {
+      return []
+    }
+  }
+
+  private setQueue(ids: string[]): void {
+    setValue(QUEUE_KEY, JSON.stringify(ids))
   }
 
   dispose(): void {
@@ -471,6 +569,7 @@ export class JobManager {
       closeJob(id)
     }
     this.push()
+    void this.drainQueue()
     return problems.length === 0
   }
 
@@ -481,6 +580,7 @@ export class JobManager {
     this.killTerminal(job.terminalId)
     closeJob(id)
     this.push()
+    void this.drainQueue()
   }
 
   private progress(id: JobId, detail: string): void {

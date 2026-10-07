@@ -274,6 +274,15 @@ message (passed through the environment, not typed). Tickets join next.
 The banner's Needs you cards stay, restyled to look like Claude's own
 prompt, with each option's explanation.
 
+**Auto-start (Tom's call, 2026-10-07: up to a draft fix).** When Mucka's
+triage rules a Sentry issue a *ticket*, a job starts on it by itself and
+goes as far as a draft fix under the supervised scope; nothing is pushed
+until Tom presses Ship. About five new issues arrive a day, so at most 3
+Sentry jobs are open at once. A job counts until it's signed off, and the
+rest queue in Intake, so a noisy day backs up instead of burying Tom. The
+issue's text is fenced as untrusted data in the brief, because the job
+can run with nobody watching. A switch in the Intake header turns it off.
+
 **Toil first.** The first automatic intake is work where "done" can be
 checked without judgement:
 - dependency and security bumps flagged by `npm audit`

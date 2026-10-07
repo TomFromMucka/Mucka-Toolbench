@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Job, SentryHealth, SentryIssue, SentryStatus } from '@shared/types'
+import type { Job, JobsAutoStatus, SentryHealth, SentryIssue, SentryStatus } from '@shared/types'
 import { useJobs } from '../state/JobsContext'
 import { Clipboard } from './Clipboard'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
@@ -7,7 +7,9 @@ import { TERMINAL_FONT, THEME } from './terminalTheme'
 /**
  * Work coming in, before it's a job. Sentry first (the poller already
  * keeps the unresolved list); support tickets join it later. Each item
- * can start a job whose Claude opens already briefed on it.
+ * can start a job whose Claude opens already briefed on it, and with
+ * auto on, a Sentry issue Mucka rules a ticket starts one by itself
+ * (JobManager caps how many are open and queues the rest).
  *
  * Styled like the terminal next to it, because that's where the work
  * goes: Tom reads it the way he'll read the job.
@@ -23,27 +25,6 @@ function ago(ms: number, now: number): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-function day(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
-}
-
-/** Claude's opening message for a job started from a Sentry issue. */
-function sentryBrief(issue: SentryIssue): string {
-  return [
-    `Sentry issue ${issue.shortId} in ${issue.project}: ${issue.title}`,
-    issue.detail ? `Message: ${issue.detail}` : null,
-    issue.culprit ? `Where: ${issue.culprit}` : null,
-    `${issue.count} events, ${issue.userCount} users affected. First seen ${day(issue.firstSeen)}, last seen ${day(issue.lastSeen)} (UTC).`,
-    issue.permalink,
-    '',
-    'Do the groundwork in docs/sentry-groundwork-rules.md: read the issue and its latest events, find the cause, and reproduce it with a failing test before changing anything.',
-    'Once a failing test reproduces it, draft the fix, unless it touches payments, migrations, permissions or voice. For those, stop at the evidence and tell me.',
-    'When you need a decision from me, ask with AskUserQuestion.'
-  ]
-    .filter((l): l is string => l !== null)
-    .join('\n')
-}
-
 const sourceOf = (issue: SentryIssue): string => `sentry:${issue.shortId}`
 
 export function IntakePanel({
@@ -52,7 +33,8 @@ export function IntakePanel({
   /** Show a job on the board and in the terminal column. */
   onSelect: (jobId: string) => void
 }): React.JSX.Element {
-  const { jobs, createJob } = useJobs()
+  const { jobs } = useJobs()
+  const [auto, setAuto] = useState<JobsAutoStatus | null>(null)
   const [issues, setIssues] = useState<SentryIssue[]>([])
   const [status, setStatus] = useState<SentryStatus | null>(null)
   const [health, setHealth] = useState<SentryHealth | null>(null)
@@ -65,6 +47,7 @@ export function IntakePanel({
     if (!api) return Promise.resolve()
     return api.getSentryStatus().then(async (s) => {
       setStatus(s)
+      setAuto(await api.getJobsAuto())
       if (s.kind !== 'ok') return
       const [list, h] = await Promise.all([api.listSentryIssues(), api.getSentryHealth()])
       setIssues([...list].sort((a, b) => b.lastSeen - a.lastSeen))
@@ -77,9 +60,12 @@ export function IntakePanel({
     void load()
     const timer = setInterval(() => void load(), POLL_MS)
     const off = window.mucka?.onSentryNewIssue(() => void load())
+    // The queue moves when jobs open and close.
+    const offJobs = window.mucka?.onJobsUpdate(() => void window.mucka.getJobsAuto().then(setAuto))
     return () => {
       clearInterval(timer)
       off?.()
+      offJobs?.()
     }
   }, [load])
 
@@ -87,11 +73,7 @@ export function IntakePanel({
     setStarting(issue.id)
     setError(null)
     try {
-      const job = await createJob({
-        title: `${issue.shortId}: ${issue.title}`,
-        prompt: sentryBrief(issue),
-        source: sourceOf(issue)
-      })
+      const job = await window.mucka.startSentryJob(issue.id)
       onSelect(job.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -115,7 +97,29 @@ export function IntakePanel({
             : 'Nothing unresolved in Sentry.'
 
   return (
-    <Clipboard title="Intake" subtitle={error ?? 'Sentry · unresolved'} bodyClassName="min-h-0">
+    <Clipboard
+      title="Intake"
+      subtitle={error ?? 'Sentry · unresolved'}
+      bodyClassName="min-h-0"
+      rightSlot={
+        auto ? (
+          <button
+            type="button"
+            onClick={() => void window.mucka.setJobsAuto(!auto.enabled).then(setAuto)}
+            className="px-1.5 hover:bg-[rgba(234,233,232,0.1)]"
+            style={{ fontFamily: TERMINAL_FONT, fontSize: 11, color: 'var(--dirty-grey)' }}
+            title={
+              auto.enabled
+                ? `Sentry issues Mucka rules a ticket start a job by themselves, ${auto.cap} open at most. Click to stop.`
+                : 'Click to let Sentry tickets start jobs by themselves.'
+            }
+          >
+            auto {auto.enabled ? 'on' : 'off'} · {auto.open}/{auto.cap}
+            {auto.queued.length > 0 ? ` · ${auto.queued.length} queued` : ''}
+          </button>
+        ) : null
+      }
+    >
       <div
         className="flex h-full min-h-0 flex-col overflow-y-auto"
         style={{
@@ -168,6 +172,14 @@ export function IntakePanel({
                 <div className="mt-1 flex gap-1">
                   {job ? (
                     <TermButton onClick={() => onSelect(job.id)}>→ open its job</TermButton>
+                  ) : auto?.queued.includes(issue.id) ? (
+                    <TermButton
+                      disabled={starting !== null}
+                      onClick={() => void start(issue)}
+                      title="Queued to start by itself when a place frees up. Click to start it now."
+                    >
+                      queued · start now
+                    </TermButton>
                   ) : (
                     <TermButton
                       disabled={starting !== null}
