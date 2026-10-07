@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
-import type { Agent, AgentConfig, AgentId, AgentStatus, GitStatus } from '@shared/types'
+import type { Agent, AgentConfig, AgentStatus, GitStatus, Job } from '@shared/types'
 import { AgentClipboard } from '../components/AgentClipboard'
+import { AgentTerminal } from '../components/AgentTerminal'
+import { Button } from '../components/ui/Button'
 import { Clipboard } from '../components/Clipboard'
 import { NeedsYouCard } from '../components/NeedsYouCard'
 import { useAgentSlots } from '../hooks/useAgentSlots'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useAgentStatuses } from '../state/AgentStatusContext'
 import { useGitHubState } from '../state/GitHubContext'
+import { useJobs } from '../state/JobsContext'
 import { useFocusRequests, useNeedsYou } from '../state/NeedsYouContext'
 
 /**
- * The Jobs layout's middle three columns: who needs Tom, a board of what
- * every agent is on, and the selected job's terminal at full size.
+ * The Jobs layout's middle three columns: who needs Tom, a board of the
+ * work in flight, and the selected job's terminal.
  *
- * Until jobs exist as their own records (slice 4 of
- * docs/jobs-layout-plan.md), each agent is a job, its branch or PR is the
- * job's title, and Claude's reported status decides its lane.
+ * Two kinds of card share the board. A job (docs/jobs-layout-plan.md) is
+ * started with "+ New job": its own fresh worktree and a terminal with
+ * Claude already running. An agent is one of the fixed seats from the 4
+ * and 6 layouts, shown here so nothing in flight disappears, titled by
+ * its PR or branch and laned by Claude's reported status.
  */
 
 type Lane = 'waiting' | 'working' | 'check' | 'idle'
@@ -48,8 +53,9 @@ interface JobsLayoutProps {
   agents: AgentConfig[]
   gitStatus: GitStatusMap
   restartVersion: Partial<Record<Agent['id'], number>>
-  selected: AgentId | null
-  onSelect: (agentId: AgentId) => void
+  /** An agent id or a job id. */
+  selected: string | null
+  onSelect: (id: string) => void
 }
 
 export function JobsLayout({
@@ -63,7 +69,30 @@ export function JobsLayout({
   const { statusFor } = useAgentStatuses()
   const { summaries } = useGitHubState()
   const slotFor = useAgentSlots(gitStatus, restartVersion)
+  const { jobs, createJob } = useJobs()
   const [now, setNow] = useState(() => Date.now())
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+
+  const newJob = useCallback(async (): Promise<void> => {
+    setStarting(true)
+    setStartError(null)
+    try {
+      const job = await createJob()
+      onSelect(job.id)
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setStarting(false)
+    }
+  }, [createJob, onSelect])
+
+  // ⌘N from the workstation.
+  useEffect(() => {
+    const onNew = (): void => void newJob()
+    window.addEventListener('mucka:new-job', onNew)
+    return () => window.removeEventListener('mucka:new-job', onNew)
+  }, [newJob])
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000)
@@ -75,10 +104,15 @@ export function JobsLayout({
   useFocusRequests(
     useCallback(
       (terminalId: string) => {
+        const job = jobs.find((j) => j.terminalId === terminalId)
+        if (job) {
+          onSelect(job.id)
+          return
+        }
         const agentId = agents.find((a) => a.id === terminalId.split(':')[0])?.id
         if (agentId) onSelect(agentId)
       },
-      [agents, onSelect]
+      [agents, jobs, onSelect]
     )
   )
 
@@ -120,7 +154,23 @@ export function JobsLayout({
         </div>
       </Clipboard>
 
-      <Clipboard title="Job board" subtitle="what everyone is on" bodyClassName="min-h-0">
+      <Clipboard
+        title="Job board"
+        subtitle={startError ?? 'what everyone is on'}
+        bodyClassName="min-h-0"
+        rightSlot={
+          <Button
+            variant="primary"
+            size="sm"
+            trailingIcon={null}
+            disabled={starting}
+            onClick={() => void newJob()}
+            title="A fresh worktree off the latest main, with Claude ready in its terminal (⌘N)"
+          >
+            {starting ? 'Starting…' : '+ New job'}
+          </Button>
+        }
+      >
         <div className="grid h-full min-h-0 grid-cols-4 gap-2 overflow-y-auto p-2">
           {LANES.map(({ lane, title, empty }) => {
             const list = byLane.get(lane) ?? []
@@ -133,7 +183,17 @@ export function JobsLayout({
                   <span>{title}</span>
                   <span>{list.length}</span>
                 </div>
-                {list.length === 0 ? (
+                {lane === 'working'
+                  ? jobs.map((job) => (
+                      <NewJobCard
+                        key={job.id}
+                        job={job}
+                        selected={job.id === current}
+                        onSelect={() => onSelect(job.id)}
+                      />
+                    ))
+                  : null}
+                {list.length === 0 && !(lane === 'working' && jobs.length > 0) ? (
                   <span className="t-body-sm px-1 text-dirty-grey">{empty}</span>
                 ) : (
                   list.map((cfg) => (
@@ -164,6 +224,18 @@ export function JobsLayout({
         keeps each terminal its real size, so it doesn't refit to zero.
       */}
       <div className="grid min-h-0 min-w-0">
+        {jobs.map((job) => (
+          <div
+            key={job.id}
+            className={clsx(
+              'col-start-1 row-start-1 grid min-h-0 min-w-0',
+              job.id !== current && 'pointer-events-none invisible'
+            )}
+            aria-hidden={job.id !== current}
+          >
+            <JobTerminal job={job} />
+          </div>
+        ))}
         {agents.map((cfg) => {
           const slot = slotFor(cfg)
           if (!slot) return null
@@ -269,5 +341,68 @@ function JobCard({
         <span className="t-body-sm truncate text-dirty-grey">{meta.join(' · ')}</span>
       ) : null}
     </button>
+  )
+}
+
+function jobDetail(job: Job): string {
+  if (job.state === 'failed') return job.detail ?? 'Setup failed.'
+  if (job.state === 'setting-up') return job.detail ?? 'Setting up…'
+  if (job.detail === 'needs-install') return 'Installing dependencies first'
+  return job.branch
+}
+
+function NewJobCard({
+  job,
+  selected,
+  onSelect
+}: {
+  job: Job
+  selected: boolean
+  onSelect: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="chamfer-sm flex flex-col gap-1 px-2.5 py-2 text-left"
+      style={{
+        background: 'var(--surface2)',
+        boxShadow: selected ? 'inset 0 0 0 1px var(--van-white)' : 'inset 0 0 0 1px var(--border)'
+      }}
+      title={job.worktreePath}
+    >
+      <span className="t-label-sm text-dirty-grey">Job</span>
+      <span className="t-body-sm line-clamp-2 text-van-white">{job.title}</span>
+      <span
+        className={clsx(
+          't-body-sm truncate',
+          job.state === 'failed' ? 'text-status-bad' : 'text-dirty-grey'
+        )}
+      >
+        {jobDetail(job)}
+      </span>
+    </button>
+  )
+}
+
+/** A job's own terminal, with Claude started in its worktree. */
+function JobTerminal({ job }: { job: Job }): React.JSX.Element {
+  return (
+    <Clipboard title={job.title} subtitle={job.branch} bodyClassName="bg-surface-2 min-h-0">
+      {job.state === 'ready' ? (
+        <AgentTerminal terminalId={job.terminalId} jobId={job.id} />
+      ) : (
+        <div className="grid h-full place-items-center p-6">
+          <span
+            className={clsx(
+              't-body-md text-center',
+              job.state === 'failed' ? 'text-status-bad' : 'text-dirty-grey'
+            )}
+          >
+            {jobDetail(job)}
+          </span>
+        </div>
+      )}
+    </Clipboard>
   )
 }

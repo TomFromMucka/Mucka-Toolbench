@@ -19,6 +19,11 @@ interface ExplorerPanelProps {
   onToggle: () => void
   selectedAgentId: AgentId | null
   onSelectAgent: (id: AgentId) => void
+  /**
+   * A job's worktree to show instead of the selected agent's. Set in the
+   * Jobs layout when the job on screen is a job rather than an agent.
+   */
+  job?: { worktreePath: string; branch: string } | null
 }
 
 function lastSegment(path: string): string {
@@ -32,14 +37,17 @@ export function ExplorerPanel({
   collapsed,
   onToggle,
   selectedAgentId,
-  onSelectAgent
+  onSelectAgent,
+  job = null
 }: ExplorerPanelProps): React.JSX.Element {
   const selected = useMemo(
     () => agents.find((a) => a.id === selectedAgentId) ?? agents[0] ?? null,
     [agents, selectedAgentId]
   )
 
-  const tree = useFileTree(selected?.worktreePath ?? null)
+  const shown =
+    job ?? (selected ? { worktreePath: selected.worktreePath, branch: selected.branch } : null)
+  const tree = useFileTree(shown?.worktreePath ?? null)
 
   if (collapsed) {
     return <CollapsedRail onExpand={onToggle} />
@@ -62,17 +70,14 @@ export function ExplorerPanel({
       }
       className="min-h-0"
     >
-      <div
-        className="flex h-full min-h-0 flex-col"
-        style={{ background: 'var(--surface)' }}
-      >
+      <div className="flex h-full min-h-0 flex-col" style={{ background: 'var(--surface)' }}>
         <WorktreeSwitcher
           agents={agents}
           selectedId={selected?.id ?? null}
           onSelect={onSelectAgent}
         />
 
-        <WorktreeHeader agent={selected} />
+        <WorktreeHeader worktree={shown} />
 
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
           <FileTree api={tree} />
@@ -158,13 +163,14 @@ function WorktreeSwitcher({
   )
 }
 
-function WorktreeHeader({ agent }: { agent: AgentConfig | null }): React.JSX.Element {
-  if (!agent) {
+function WorktreeHeader({
+  worktree
+}: {
+  worktree: { worktreePath: string; branch: string } | null
+}): React.JSX.Element {
+  if (!worktree) {
     return (
-      <div
-        className="px-3 py-2 t-body-md"
-        style={{ color: 'var(--dirty-grey)' }}
-      >
+      <div className="px-3 py-2 t-body-md" style={{ color: 'var(--dirty-grey)' }}>
         No worktrees configured.
       </div>
     )
@@ -188,22 +194,22 @@ function WorktreeHeader({ agent }: { agent: AgentConfig | null }): React.JSX.Ele
             letterSpacing: '0.03em',
             textTransform: 'uppercase'
           }}
-          title={agent.worktreePath}
+          title={worktree.worktreePath}
         >
-          {lastSegment(agent.worktreePath)}
+          {lastSegment(worktree.worktreePath)}
         </div>
         <div
           className="truncate t-label-sm"
           style={{ color: 'var(--dirty-grey)' }}
-          title={agent.worktreePath}
+          title={worktree.worktreePath}
         >
-          {agent.branch}
+          {worktree.branch}
         </div>
       </div>
       <button
         type="button"
         title="Reveal in Finder"
-        onClick={() => void window.mucka.revealInOs(agent.worktreePath)}
+        onClick={() => void window.mucka.revealInOs(worktree.worktreePath)}
         className="grid size-6 place-items-center rounded-sm transition-colors hover:bg-van-white/15"
         style={{ color: 'var(--van-white)' }}
         aria-label="Reveal in Finder"

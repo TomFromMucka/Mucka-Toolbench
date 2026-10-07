@@ -13,6 +13,7 @@ import type {
 } from '@shared/types'
 import { SECRET_DEFS } from '@shared/secrets'
 import { getAgentConfig } from '../config/agents'
+import { jobShell } from '../jobs/JobManager'
 import { scrollback } from '../scrollback/Scrollback'
 
 /**
@@ -36,15 +37,40 @@ function agentShellEnv(): NodeJS.ProcessEnv {
 
 interface TerminalPty {
   terminalId: TerminalId
-  agentId: AgentId
+  /** Null for a job's terminal. */
+  agentId: AgentId | null
   proc: IPty
   /** What this proc was actually spawned with — see `spawn`. */
   signature: string
 }
 
 /** Identifies the shell a spawn request is asking for. */
-function signatureFor(cfg: AgentConfig): string {
-  return JSON.stringify([cfg.command, cfg.args, cfg.worktreePath])
+interface ShellSpec {
+  command: string
+  args: string[]
+  cwd: string
+  /** Tells the hooks which agent or job this Claude belongs to. */
+  owner: { MUCKA_AGENT: string } | { MUCKA_JOB: string }
+}
+
+function signatureFor(spec: ShellSpec): string {
+  return JSON.stringify([spec.command, spec.args, spec.cwd])
+}
+
+function specFor(req: PtySpawnRequest): ShellSpec {
+  if (req.jobId !== undefined) {
+    const shell = jobShell(req.jobId)
+    if (!shell) throw new Error(`Job ${req.jobId} isn't ready for a terminal yet`)
+    return { ...shell, owner: { MUCKA_JOB: req.jobId } }
+  }
+  const cfg: AgentConfig | undefined = getAgentConfig(req.agentId)
+  if (!cfg) throw new Error(`Unknown agent: ${req.agentId}`)
+  return {
+    command: cfg.command,
+    args: cfg.args,
+    cwd: cfg.worktreePath,
+    owner: { MUCKA_AGENT: cfg.id }
+  }
 }
 
 /**
@@ -67,10 +93,8 @@ export class PtyManager {
   }
 
   spawn(req: PtySpawnRequest): void {
-    const cfg = getAgentConfig(req.agentId)
-    if (!cfg) throw new Error(`Unknown agent: ${req.agentId}`)
-
-    const signature = signatureFor(cfg)
+    const spec = specFor(req)
+    const signature = signatureFor(spec)
     const existing = this.ptys.get(req.terminalId)
     if (existing) {
       // The renderer remounts a terminal for purely visual reasons — a
@@ -86,22 +110,22 @@ export class PtyManager {
       this.kill(req.terminalId)
     }
 
-    const proc = pty.spawn(cfg.command, cfg.args, {
+    const proc = pty.spawn(spec.command, spec.args, {
       name: 'xterm-256color',
       cols: Math.max(20, req.cols),
       rows: Math.max(5, req.rows),
-      cwd: cfg.worktreePath,
+      cwd: spec.cwd,
       env: {
         ...agentShellEnv(),
         TERM: 'xterm-256color',
-        MUCKA_AGENT: cfg.id,
+        ...spec.owner,
         MUCKA_TERMINAL: req.terminalId
       }
     })
 
     const entry: TerminalPty = {
       terminalId: req.terminalId,
-      agentId: req.agentId,
+      agentId: req.agentId ?? null,
       proc,
       signature
     }

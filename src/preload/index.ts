@@ -3,6 +3,7 @@ import type {
   AgentConfig,
   AgentId,
   AgentStatusEvent,
+  Job,
   PendingAnswer,
   PendingAnswerResult,
   PendingItem,
@@ -132,6 +133,14 @@ const muckaApi: MuckaApi = {
   },
   answerPending: (answer: PendingAnswer) =>
     ipcRenderer.invoke('pending:answer', answer) as Promise<PendingAnswerResult>,
+
+  listJobs: () => ipcRenderer.invoke('jobs:list') as Promise<Job[]>,
+  createJob: () => ipcRenderer.invoke('jobs:create') as Promise<Job>,
+  onJobsUpdate: (handler: (jobs: Job[]) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, jobs: Job[]) => handler(jobs)
+    ipcRenderer.on('jobs:update', listener)
+    return () => ipcRenderer.off('jobs:update', listener)
+  },
 
   getScrollback: (terminalId: TerminalId) =>
     ipcRenderer.invoke('pty:scrollback', terminalId) as Promise<string>,

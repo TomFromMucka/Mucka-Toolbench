@@ -144,11 +144,38 @@ export interface AgentConfig {
  * configured cwd. `agentId` is only used to look up the cwd/command at
  * spawn time; subsequent IPC is keyed by `terminalId`.
  */
-export interface PtySpawnRequest {
+/** A terminal belongs to exactly one agent or one job. */
+export type PtySpawnRequest = {
   terminalId: TerminalId
-  agentId: AgentId
   cols: number
   rows: number
+} & ({ agentId: AgentId; jobId?: never } | { jobId: JobId; agentId?: never })
+
+/* ─── Jobs: work with its own worktree, not a seat ───────────────────── */
+
+export type JobId = string
+
+/**
+ * A piece of work with its own fresh worktree and its own Claude terminal.
+ * Created with "+ New job" in the Jobs layout; see docs/jobs-layout-plan.md.
+ */
+export interface Job {
+  id: JobId
+  /** What the job is. "New job" until Tom's first message names it. */
+  title: string
+  branch: string
+  worktreePath: string
+  /** The job's Claude terminal. */
+  terminalId: TerminalId
+  /**
+   * setting-up: worktree being created and filled.
+   * ready: terminal can start.
+   * failed: setup stopped; `detail` says why.
+   */
+  state: 'setting-up' | 'ready' | 'failed'
+  /** One line on what setup is doing, or why it failed. */
+  detail: string | null
+  createdAt: number
 }
 
 /** Main → renderer: a chunk of terminal output. */
@@ -609,6 +636,15 @@ export interface MuckaApi {
   listPending(): Promise<PendingItem[]>
   onPendingUpdate(handler: (items: PendingItem[]) => void): () => void
   answerPending(answer: PendingAnswer): Promise<PendingAnswerResult>
+  /** Open jobs, oldest first. */
+  listJobs(): Promise<Job[]>
+  /**
+   * Start a job: a fresh worktree off the latest main and its own Claude
+   * terminal. Resolves at once in `setting-up`; progress arrives through
+   * `onJobsUpdate`.
+   */
+  createJob(): Promise<Job>
+  onJobsUpdate(handler: (jobs: Job[]) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>
 
   /** Read-only worktree access for Mucka — paths are relative to the agent's worktree and can't escape it. */

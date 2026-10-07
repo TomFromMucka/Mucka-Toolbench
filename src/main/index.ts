@@ -91,6 +91,7 @@ import {
 import { PtyManager } from './pty/PtyManager'
 import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
 import { PendingWatcher } from './claude/PendingWatcher'
+import { JobManager } from './jobs/JobManager'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
@@ -201,6 +202,7 @@ const NOTES_KEY = 'notes'
 let ptyManager: PtyManager | null = null
 let claudeStateWatcher: ClaudeStateWatcher | null = null
 let pendingWatcher: PendingWatcher | null = null
+let jobManager: JobManager | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
@@ -300,6 +302,10 @@ function createWindow(): void {
     (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
   )
   pendingWatcher.start()
+  jobManager = new JobManager(getAgentConfigs, (jobs) => {
+    if (mainWindow.webContents.isDestroyed()) return
+    mainWindow.webContents.send('jobs:update', jobs)
+  })
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
@@ -348,6 +354,7 @@ function createWindow(): void {
     claudeStateWatcher = null
     pendingWatcher?.dispose()
     pendingWatcher = null
+    jobManager = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {
       app.dock.setBadge('')
@@ -401,6 +408,12 @@ const guardedOn: typeof ipcMain.on = (channel, listener) =>
 
 function registerIpc(): void {
   guardedHandle('agents:list', () => getAgentConfigs())
+
+  guardedHandle('jobs:list', () => jobManager?.list() ?? [])
+  guardedHandle('jobs:create', () => {
+    if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+    return jobManager.create()
+  })
 
   guardedHandle('pending:list', () => pendingWatcher?.list() ?? [])
   guardedHandle('pending:answer', (_event, answer: PendingAnswer): PendingAnswerResult =>
