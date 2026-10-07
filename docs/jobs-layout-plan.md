@@ -247,8 +247,12 @@ Built (2026-10-07):
   after a native dialog that names what would be lost. Each job's PR is
   polled every minute, and again whenever its Claude stops.
 
+- **No "trust this folder?" prompt in jobs, and nothing to build for it.**
+  Tested on Claude Code 2.1.292: a worktree inherits trust from its repo's
+  main checkout. `~/Mucka-Pro` is trusted, so every job folder is too.
+  (A worktree of an untrusted repo does ask.)
+
 Still to build:
-- Pre-approving Claude's "trust this folder?" for job folders.
 - **Job metrics.** Each job records what it cost (Claude Code reports it to
   the status line), whether it ended in a merged PR, and whether that PR
   was later reverted. The article's measure is "sessions that end in a
