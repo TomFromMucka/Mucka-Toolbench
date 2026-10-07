@@ -23,7 +23,6 @@ import type {
 import { getValue, setValue } from '../db/kv'
 import { logEvent } from '../events/Events'
 import { sentryBrief } from './sentryBrief'
-import { closePullRequest, latestPullRequestForBranch, readGitHubOrigin } from '../github/GitHub'
 import {
   closeJob,
   getJob,
@@ -111,6 +110,61 @@ async function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<str
       .pop()
     throw new Error(`git ${args[0]}: ${why ?? (err instanceof Error ? err.message : String(err))}`)
   }
+}
+
+const GH_PATHS = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']
+
+/**
+ * Run the gh CLI, as Tom does in his terminals, and return stdout. The
+ * cockpit's own GITHUB_TOKEN / GH_TOKEN are stripped first: gh prefers
+ * them over its login, and the stored one can be stale (a 401 here is
+ * how jobs lost sight of their PRs).
+ */
+async function gh(cwd: string, args: string[]): Promise<string> {
+  const bin = GH_PATHS.find((p) => existsSync(p))
+  if (!bin) throw new Error('the gh CLI is not installed (brew install gh, then gh auth login)')
+  const env = { ...process.env }
+  delete env.GH_TOKEN
+  delete env.GITHUB_TOKEN
+  try {
+    const { stdout } = await execFileAsync(bin, args, { cwd, env, timeout: 30_000 })
+    return stdout.trim()
+  } catch (err) {
+    const stderr =
+      typeof err === 'object' && err !== null && 'stderr' in err && typeof err.stderr === 'string'
+        ? err.stderr.trim().split('\n').pop()
+        : null
+    throw new Error(
+      `gh ${args[0]} ${args[1] ?? ''}: ${stderr || (err instanceof Error ? err.message : String(err))}`
+    )
+  }
+}
+
+/** The newest PR from a branch, in any state, via `gh pr list`. */
+async function prForBranch(root: string, branch: string): Promise<JobPr | null> {
+  const out = await gh(root, [
+    'pr',
+    'list',
+    '--head',
+    branch,
+    '--state',
+    'all',
+    '--limit',
+    '1',
+    '--json',
+    'number,url,state,isDraft,autoMergeRequest'
+  ])
+  const parsed: unknown = JSON.parse(out || '[]')
+  const first: unknown = Array.isArray(parsed) ? parsed[0] : undefined
+  if (typeof first !== 'object' || first === null) return null
+  const num = 'number' in first && typeof first.number === 'number' ? first.number : null
+  const url = 'url' in first && typeof first.url === 'string' ? first.url : null
+  const raw = 'state' in first && typeof first.state === 'string' ? first.state : ''
+  const draft = 'isDraft' in first && first.isDraft === true
+  const auto = 'autoMergeRequest' in first && first.autoMergeRequest !== null
+  if (num === null || url === null) return null
+  const state = raw === 'MERGED' ? 'merged' : raw === 'CLOSED' ? 'closed' : draft ? 'draft' : 'open'
+  return { number: num, url, state, autoMerge: auto }
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -273,30 +327,18 @@ export class JobManager {
         (j.state === 'ready' || j.state === 'finished') && (only === undefined || j.id === only)
     )
     if (jobs.length === 0) return
-    let repo: ReturnType<typeof readGitHubOrigin>
+    let root: string
     try {
-      repo = readGitHubOrigin(await this.repoRoot())
+      root = await this.repoRoot()
     } catch (err) {
       this.reportPrProblem(err)
-      return
-    }
-    if (!repo) {
-      this.reportPrProblem(new Error("the jobs repo's origin isn't a GitHub URL"))
       return
     }
     let changed = false
     for (const job of jobs) {
       let pr: JobPr | null
       try {
-        const found = await latestPullRequestForBranch(repo, job.branch)
-        pr = found
-          ? {
-              number: found.pr.number,
-              url: found.pr.url,
-              state: found.pr.state,
-              autoMerge: found.autoMerge
-            }
-          : null
+        pr = await prForBranch(root, job.branch)
       } catch (err) {
         this.reportPrProblem(err)
         return
@@ -611,9 +653,9 @@ export class JobManager {
     this.killTerminal(job.terminalId)
     const problems: string[] = []
     if (openPr) {
-      const repo = readGitHubOrigin(root)
-      if (repo)
-        await closePullRequest(repo, openPr.number).catch((e: unknown) => problems.push(String(e)))
+      await gh(root, ['pr', 'close', String(openPr.number)]).catch((e: unknown) =>
+        problems.push(e instanceof Error ? e.message : String(e))
+      )
     }
     if (existsSync(job.worktreePath)) {
       await git(root, ['worktree', 'remove', '--force', job.worktreePath]).catch((e: unknown) =>
