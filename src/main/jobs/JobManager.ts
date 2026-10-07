@@ -21,6 +21,7 @@ import type {
   SentryIssue
 } from '@shared/types'
 import { getValue, setValue } from '../db/kv'
+import { logEvent } from '../events/Events'
 import { sentryBrief } from './sentryBrief'
 import { closePullRequest, latestPullRequestForBranch, readGitHubOrigin } from '../github/GitHub'
 import {
@@ -182,6 +183,8 @@ export class JobManager {
   private sweepTimer: NodeJS.Timeout | null = null
   private sweeps = 0
   private readonly leaving = new Map<JobId, NodeJS.Timeout>()
+  /** Last PR-lookup failure reported, so a persistent one is said once, not every minute. */
+  private prProblem: string | null = null
 
   constructor(deps: JobManagerDeps) {
     this.listAgents = deps.listAgents
@@ -239,6 +242,23 @@ export class JobManager {
     )
   }
 
+  /**
+   * A job's card can't show its PR, and metrics can't tell it merged,
+   * while lookups fail. Say why on the job sheet, once per distinct reason.
+   */
+  private reportPrProblem(err: unknown): void {
+    const why = err instanceof Error ? err.message : String(err)
+    if (why === this.prProblem) return
+    this.prProblem = why
+    console.warn('[jobs] PR lookup failed:', why)
+    logEvent({
+      source: 'system',
+      kind: 'jobs.pr_lookup_failed',
+      message: `Jobs can't see their PRs on GitHub: ${why}`,
+      tone: 'bad'
+    })
+  }
+
   /** A job's Claude has stopped. A finished job can go now. */
   onJobIdle(id: JobId): void {
     if (getJob(id)?.state === 'finished') this.leaveSoon(id, 3_000)
@@ -256,10 +276,14 @@ export class JobManager {
     let repo: ReturnType<typeof readGitHubOrigin>
     try {
       repo = readGitHubOrigin(await this.repoRoot())
-    } catch {
+    } catch (err) {
+      this.reportPrProblem(err)
       return
     }
-    if (!repo) return
+    if (!repo) {
+      this.reportPrProblem(new Error("the jobs repo's origin isn't a GitHub URL"))
+      return
+    }
     let changed = false
     for (const job of jobs) {
       let pr: JobPr | null
@@ -273,9 +297,11 @@ export class JobManager {
               autoMerge: found.autoMerge
             }
           : null
-      } catch {
+      } catch (err) {
+        this.reportPrProblem(err)
         return
       }
+      this.prProblem = null
       if (JSON.stringify(pr) === JSON.stringify(job.pr)) continue
       updateJob(job.id, { pr })
       changed = true
