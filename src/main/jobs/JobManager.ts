@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, copyFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { AgentConfig, Job, JobId } from '@shared/types'
-import { getJob, insertJob, listOpenJobs, terminalIdForJob, updateJob } from '../db/jobs'
+import { closeJob, getJob, insertJob, listOpenJobs, terminalIdForJob, updateJob } from '../db/jobs'
 
 /**
  * What a job's terminal runs: Claude straight away, in Tom's normal mode,
@@ -14,7 +14,7 @@ export function jobShell(id: JobId): { command: string; args: string[]; cwd: str
   const job = getJob(id)
   if (!job || job.state !== 'ready') return null
   const shell = process.env.SHELL?.includes('zsh') ? process.env.SHELL : '/bin/zsh'
-  const install = job.detail === 'needs-install' ? 'npm ci && npm audit; ' : ''
+  const install = job.needsInstall ? 'npm ci && npm audit; ' : ''
   return {
     command: shell,
     args: ['-l', '-i', '-c', `${install}claude; exec ${shell} -l`],
@@ -39,10 +39,30 @@ const execFileAsync = promisify(execFile)
 /** Local files a worktree needs that git doesn't carry. */
 const LOCAL_FILES = ['.env', '.env.local', 'CLAUDE.local.md']
 
+/**
+ * Run git and return stdout. On failure, throw with git's own last line
+ * of stderr: Node's message is just "Command failed: <the command>",
+ * which says nothing about why.
+ */
 async function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, { cwd, timeout: timeoutMs })
-  return stdout.trim()
+  try {
+    const { stdout } = await execFileAsync('git', args, { cwd, timeout: timeoutMs })
+    return stdout.trim()
+  } catch (err) {
+    const stderr =
+      typeof err === 'object' && err !== null && 'stderr' in err && typeof err.stderr === 'string'
+        ? err.stderr
+        : ''
+    const why = stderr
+      .trim()
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
+      .pop()
+    throw new Error(`git ${args[0]}: ${why ?? (err instanceof Error ? err.message : String(err))}`)
+  }
 }
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /** `2026-10-07 13:42` → `1007-1342`, unique among existing folders. */
 function jobSlug(jobsDir: string, now: Date): string {
@@ -118,6 +138,7 @@ export class JobManager {
       terminalId: terminalIdForJob(id),
       state: 'setting-up',
       detail: 'Fetching the latest main…',
+      needsInstall: false,
       createdAt: Date.now()
     }
     insertJob(job)
@@ -126,11 +147,43 @@ export class JobManager {
     return job
   }
 
+  /**
+   * Bring origin/main up to date. Best effort: every worktree of the repo
+   * shares one git store, so a fetch running elsewhere at the same moment
+   * (an agent, the git poller) can hold the ref lock. Retry briefly, and
+   * if it still fails, say so and start from the main we last fetched.
+   */
+  private async fetchMain(root: string): Promise<string | null> {
+    let last = ''
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await git(root, ['fetch', 'origin', 'main'], 120_000)
+        return null
+      } catch (err) {
+        last = err instanceof Error ? err.message : String(err)
+        await sleep(1500)
+      }
+    }
+    return last
+  }
+
   private async setUp(job: Job, root: string): Promise<void> {
     try {
-      await git(root, ['fetch', 'origin', 'main'], 120_000)
+      const fetchProblem = await this.fetchMain(root)
       this.progress(job.id, 'Creating the worktree…')
-      await git(root, ['worktree', 'add', '-b', job.branch, job.worktreePath, 'origin/main'])
+      // A retry after a half-finished attempt may find the branch already made.
+      const branchExists = await git(root, ['rev-parse', '--verify', '--quiet', job.branch])
+        .then(() => true)
+        .catch(() => false)
+      await git(
+        root,
+        branchExists
+          ? ['worktree', 'add', job.worktreePath, job.branch]
+          : ['worktree', 'add', '-b', job.branch, job.worktreePath, 'origin/main']
+      )
+      const caveat = fetchProblem
+        ? `Started from the last fetched main, because fetching failed (${fetchProblem})`
+        : null
 
       this.progress(job.id, 'Copying local settings…')
       this.copyLocalFiles(root, job.worktreePath)
@@ -142,16 +195,43 @@ export class JobManager {
         await execFileAsync('cp', ['-Rc', source, join(job.worktreePath, 'node_modules')], {
           timeout: 300_000
         })
-        updateJob(job.id, { state: 'ready', detail: null })
+        updateJob(job.id, { state: 'ready', detail: caveat })
       } else {
         // No checkout has dependencies for this lockfile, so the terminal
         // installs them first, where Tom can see it.
-        updateJob(job.id, { state: 'ready', detail: 'needs-install' })
+        updateJob(job.id, { state: 'ready', detail: caveat, needsInstall: true })
       }
     } catch (err) {
       const message = err instanceof Error ? err.message.split('\n')[0] : String(err)
       updateJob(job.id, { state: 'failed', detail: `Setup failed: ${message}` })
     }
+    this.push()
+  }
+
+  async retry(id: JobId): Promise<void> {
+    const job = getJob(id)
+    if (!job || job.state !== 'failed') return
+    if (existsSync(job.worktreePath)) {
+      updateJob(id, {
+        detail: `Setup failed part-way and left ${job.worktreePath} behind. Remove that folder, then try again.`
+      })
+      this.push()
+      return
+    }
+    updateJob(id, { state: 'setting-up', detail: 'Trying again…' })
+    this.push()
+    await this.setUp(job, await this.repoRoot())
+  }
+
+  /**
+   * Take a failed job off the board. Only before it has a folder: once a
+   * worktree exists, removing it deletes files, and that's sign-off's job,
+   * with Tom's yes.
+   */
+  discard(id: JobId): void {
+    const job = getJob(id)
+    if (!job || job.state !== 'failed' || existsSync(job.worktreePath)) return
+    closeJob(id)
     this.push()
   }
 

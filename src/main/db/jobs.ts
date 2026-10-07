@@ -8,6 +8,7 @@ interface JobRow {
   worktree_path: string
   state: string
   detail: string | null
+  needs_install: number
   closed: number
   created_at: number
   updated_at: number
@@ -26,6 +27,7 @@ function rowToJob(row: JobRow): Job {
     terminalId: terminalIdForJob(row.id),
     state: row.state === 'ready' || row.state === 'failed' ? row.state : 'setting-up',
     detail: row.detail,
+    needsInstall: row.needs_install === 1,
     createdAt: row.created_at
   }
 }
@@ -54,12 +56,19 @@ export function insertJob(job: Job): void {
 
 export function updateJob(
   id: JobId,
-  patch: Partial<Pick<Job, 'title' | 'state' | 'detail'>>
+  patch: Partial<Pick<Job, 'title' | 'state' | 'detail' | 'needsInstall'>>
 ): void {
   const current = getJob(id)
   if (!current) return
   const next = { ...current, ...patch }
   getDb()
-    .prepare(`UPDATE jobs SET title = ?, state = ?, detail = ?, updated_at = ? WHERE id = ?`)
-    .run(next.title, next.state, next.detail, Date.now(), id)
+    .prepare(
+      `UPDATE jobs SET title = ?, state = ?, detail = ?, needs_install = ?, updated_at = ? WHERE id = ?`
+    )
+    .run(next.title, next.state, next.detail, next.needsInstall ? 1 : 0, Date.now(), id)
+}
+
+/** Take a job off the board. The row stays, for history and metrics. */
+export function closeJob(id: JobId): void {
+  getDb().prepare(`UPDATE jobs SET closed = 1, updated_at = ? WHERE id = ?`).run(Date.now(), id)
 }

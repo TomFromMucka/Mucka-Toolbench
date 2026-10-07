@@ -414,6 +414,8 @@ function registerIpc(): void {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     return jobManager.create()
   })
+  guardedHandle('jobs:retry', (_event, id: string) => jobManager?.retry(id))
+  guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))
 
   guardedHandle('pending:list', () => pendingWatcher?.list() ?? [])
   guardedHandle('pending:answer', (_event, answer: PendingAnswer): PendingAnswerResult =>

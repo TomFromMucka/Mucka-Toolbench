@@ -197,4 +197,10 @@ function migrate(d: DatabaseType): void {
   if (!sentryCols.has('status_checked_at')) {
     d.exec(`ALTER TABLE sentry_issues ADD COLUMN status_checked_at INTEGER`)
   }
+  const jobCols = new Set(
+    d.prepare<[], { name: string }>(`PRAGMA table_info(jobs)`).all().map((c) => c.name)
+  )
+  if (!jobCols.has('needs_install')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN needs_install INTEGER NOT NULL DEFAULT 0`)
+  }
 }

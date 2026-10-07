@@ -173,8 +173,10 @@ export interface Job {
    * failed: setup stopped; `detail` says why.
    */
   state: 'setting-up' | 'ready' | 'failed'
-  /** One line on what setup is doing, or why it failed. */
+  /** One line on what setup is doing, why it failed, or a caveat once ready. */
   detail: string | null
+  /** No checkout had matching dependencies, so the terminal installs first. */
+  needsInstall: boolean
   createdAt: number
 }
 
@@ -644,6 +646,10 @@ export interface MuckaApi {
    * `onJobsUpdate`.
    */
   createJob(): Promise<Job>
+  /** Run a failed job's setup again. */
+  retryJob(id: JobId): Promise<void>
+  /** Take a failed job off the board. Refused once it has a folder. */
+  discardJob(id: JobId): Promise<void>
   onJobsUpdate(handler: (jobs: Job[]) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>
 

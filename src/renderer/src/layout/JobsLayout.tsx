@@ -347,7 +347,8 @@ function JobCard({
 function jobDetail(job: Job): string {
   if (job.state === 'failed') return job.detail ?? 'Setup failed.'
   if (job.state === 'setting-up') return job.detail ?? 'Setting up…'
-  if (job.detail === 'needs-install') return 'Installing dependencies first'
+  if (job.detail) return job.detail
+  if (job.needsInstall) return 'Installing dependencies first'
   return job.branch
 }
 
@@ -387,20 +388,47 @@ function NewJobCard({
 
 /** A job's own terminal, with Claude started in its worktree. */
 function JobTerminal({ job }: { job: Job }): React.JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const act = (run: (id: string) => Promise<void>): void => {
+    setBusy(true)
+    void run(job.id).finally(() => setBusy(false))
+  }
   return (
     <Clipboard title={job.title} subtitle={job.branch} bodyClassName="bg-surface-2 min-h-0">
       {job.state === 'ready' ? (
         <AgentTerminal terminalId={job.terminalId} jobId={job.id} />
       ) : (
-        <div className="grid h-full place-items-center p-6">
+        <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
           <span
             className={clsx(
-              't-body-md text-center',
+              't-body-md max-w-[40rem] text-center',
               job.state === 'failed' ? 'text-status-bad' : 'text-dirty-grey'
             )}
           >
             {jobDetail(job)}
           </span>
+          {job.state === 'failed' ? (
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                trailingIcon={null}
+                disabled={busy}
+                onClick={() => act((id) => window.mucka.retryJob(id))}
+              >
+                Try again
+              </Button>
+              <Button
+                variant="tertiary"
+                size="sm"
+                trailingIcon={null}
+                disabled={busy}
+                onClick={() => act((id) => window.mucka.discardJob(id))}
+              >
+                Remove
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </Clipboard>
