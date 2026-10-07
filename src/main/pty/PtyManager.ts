@@ -27,7 +27,8 @@ const WITHHELD_ENV = new Set<string>([
   'GH_TOKEN'
 ])
 
-function agentShellEnv(): NodeJS.ProcessEnv {
+/** The process env minus the cockpit's own secrets, for anything it launches. */
+export function agentShellEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (!WITHHELD_ENV.has(key)) env[key] = value

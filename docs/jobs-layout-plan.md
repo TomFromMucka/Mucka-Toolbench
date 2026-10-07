@@ -279,6 +279,19 @@ message (passed through the environment, not typed). Tickets join next.
 The banner's Needs you cards stay, restyled to look like Claude's own
 prompt, with each option's explanation.
 
+**Tickets (Tom's calls, 2026-10-08): scout, then fix; reply after it's live.**
+Intake polls `scripts/ticket.ts list --json` (Mucka Pro #3323) every five
+minutes from a read-only `scout` checkout on the latest main. Every
+ticket that arrives after the first look gets a brief from a scout Claude
+run `--restricted --strict-mcp-config --permission-mode dontAsk`, with
+Read/Grep/Glob and only `ticket.ts show` allowed. That gives it customer
+text plus production reads, but no way to change code or reach anyone.
+Measured: ~$0.18 and half a minute a ticket. Tickets already open at the
+first look wait for a click, so the backlog isn't billed at once. Next:
+*Start fix* (a job from the brief, with ticket and production tools
+denied in its folder), then a support-reply draft once the fix is live,
+for Tom to sign off before it's sent.
+
 **Auto-start (Tom's call, 2026-10-07: up to a draft fix).** When Mucka's
 triage rules a Sentry issue a *ticket*, a job starts on it by itself and
 goes as far as a draft fix under the supervised scope; nothing is pushed

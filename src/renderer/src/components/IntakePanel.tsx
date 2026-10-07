@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Job, JobsAutoStatus, SentryHealth, SentryIssue, SentryStatus } from '@shared/types'
+import type {
+  Job,
+  JobsAutoStatus,
+  SentryHealth,
+  SentryIssue,
+  SentryStatus,
+  Ticket,
+  TicketsState
+} from '@shared/types'
 import { useJobs } from '../state/JobsContext'
 import { Clipboard } from './Clipboard'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
@@ -41,6 +49,7 @@ export function IntakePanel({
   const [starting, setStarting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [tickets, setTickets] = useState<TicketsState | null>(null)
 
   const load = useCallback((): Promise<void> => {
     const api = window.mucka
@@ -62,10 +71,13 @@ export function IntakePanel({
     const off = window.mucka?.onSentryNewIssue(() => void load())
     // The queue moves when jobs open and close.
     const offJobs = window.mucka?.onJobsUpdate(() => void window.mucka.getJobsAuto().then(setAuto))
+    void window.mucka?.listTickets().then(setTickets)
+    const offTickets = window.mucka?.onTicketsUpdate(setTickets)
     return () => {
       clearInterval(timer)
       off?.()
       offJobs?.()
+      offTickets?.()
     }
   }, [load])
 
@@ -99,7 +111,7 @@ export function IntakePanel({
   return (
     <Clipboard
       title="Intake"
-      subtitle={error ?? 'Sentry · unresolved'}
+      subtitle={error ?? 'tickets · sentry'}
       bodyClassName="min-h-0"
       rightSlot={
         auto ? (
@@ -130,10 +142,17 @@ export function IntakePanel({
           lineHeight: 1.45
         }}
       >
+        <Section label="tickets" note={tickets?.error ?? null} />
+        {tickets === null ? (
+          <Dim>Loading…</Dim>
+        ) : tickets.tickets.length === 0 && !tickets.error ? (
+          <Dim>{tickets.polledAt ? 'No open tickets.' : 'Looking at the ticket list…'}</Dim>
+        ) : (
+          tickets.tickets.map((t) => <TicketRow key={t.reference} ticket={t} now={now} />)
+        )}
+        <Section label="sentry" note={null} />
         {issues.length === 0 ? (
-          <span className="px-3 py-3" style={{ color: 'var(--dirty-grey)' }}>
-            {empty}
-          </span>
+          <Dim>{empty}</Dim>
         ) : (
           issues.map((issue) => {
             const job = jobFor(issue)
@@ -205,6 +224,91 @@ export function IntakePanel({
         )}
       </div>
     </Clipboard>
+  )
+}
+
+function Section({ label, note }: { label: string; note: string | null }): React.JSX.Element {
+  return (
+    <div className="px-3 pt-3 pb-1" style={{ color: 'var(--dirty-grey)' }}>
+      ── {label} ──{note ? <span style={{ color: THEME.brightRed }}> {note}</span> : null}
+    </div>
+  )
+}
+
+function Dim({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <span className="px-3 py-2" style={{ color: 'var(--dirty-grey)' }}>
+      {children}
+    </span>
+  )
+}
+
+/**
+ * One open ticket. The brief comes from the read-only scout; Tom reads it
+ * here rather than the customer's own text.
+ */
+function TicketRow({ ticket, now }: { ticket: Ticket; now: number }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const scout = (): void => void window.mucka.scoutTicket(ticket.reference)
+  const who = [ticket.business, ticket.category].filter(Boolean).join(' · ')
+  return (
+    <div
+      className="flex flex-col gap-0.5 px-3 py-2.5"
+      style={{ borderBottom: `1px solid ${THEME.black}` }}
+    >
+      <div className="flex items-baseline gap-2">
+        <span style={{ fontWeight: 700 }}>{ticket.reference}</span>
+        <span style={{ color: ticket.status === 'open' ? THEME.yellow : 'var(--dirty-grey)' }}>
+          {ticket.status.replace('_', ' ')}
+        </span>
+        <span className="ml-auto shrink-0" style={{ color: 'var(--dirty-grey)' }}>
+          {ago(ticket.updatedAt, now)}
+        </span>
+      </div>
+      <span className="line-clamp-2 break-words">{ticket.subject}</span>
+      {who ? (
+        <span className="truncate" style={{ color: 'var(--dirty-grey)' }}>
+          {who}
+        </span>
+      ) : null}
+      <div className="mt-1 flex gap-1">
+        {ticket.briefState === 'ready' ? (
+          <TermButton onClick={() => setOpen((v) => !v)}>{open ? '▾ brief' : '▸ brief'}</TermButton>
+        ) : ticket.briefState === 'queued' || ticket.briefState === 'running' ? (
+          <span className="px-1.5" style={{ color: 'var(--dirty-grey)' }}>
+            {ticket.briefState === 'running' ? 'scouting…' : 'queued for the scout'}
+          </span>
+        ) : (
+          <TermButton
+            onClick={scout}
+            title="A read-only Claude reads the ticket and the code, and writes a brief"
+          >
+            {ticket.briefState === 'failed' ? '↻ scout again' : '▶ scout'}
+          </TermButton>
+        )}
+        {ticket.briefState === 'ready' ? (
+          <TermButton onClick={scout} title="Write the brief again from the ticket as it is now">
+            ↻
+          </TermButton>
+        ) : null}
+        {ticket.briefCost !== null ? (
+          <span className="ml-auto px-1.5" style={{ color: 'var(--dirty-grey)' }}>
+            ${ticket.briefCost.toFixed(2)}
+          </span>
+        ) : null}
+      </div>
+      {ticket.briefState === 'failed' && ticket.briefError ? (
+        <span style={{ color: THEME.brightRed }}>{ticket.briefError}</span>
+      ) : null}
+      {open && ticket.brief ? (
+        <pre
+          className="mt-1 whitespace-pre-wrap break-words px-2 py-1.5"
+          style={{ background: THEME.black, fontFamily: 'inherit' }}
+        >
+          {ticket.brief}
+        </pre>
+      ) : null}
+    </div>
   )
 }
 

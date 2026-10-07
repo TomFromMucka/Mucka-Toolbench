@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   copyFileSync,
+  writeFileSync,
   watch,
   type FSWatcher
 } from 'node:fs'
@@ -613,6 +614,39 @@ export class JobManager {
     if (!job || job.state !== 'failed' || existsSync(job.worktreePath)) return
     closeJob(id)
     this.push()
+  }
+
+  /**
+   * A checkout of the latest main that nothing edits, for the ticket scout
+   * to read and to run `scripts/ticket.ts` from. `<repo>-jobs/scout`,
+   * moved to origin/main on every call, with dependencies cloned from a
+   * checkout installed from the same lockfile (never installed here).
+   */
+  async scoutCheckout(): Promise<string> {
+    const root = await this.repoRoot()
+    const dir = join(dirname(root), `${basename(root)}-jobs`, 'scout')
+    const fetchProblem = await this.fetchMain(root)
+    if (!existsSync(dir)) {
+      mkdirSync(dirname(dir), { recursive: true })
+      await git(root, ['worktree', 'add', '--detach', dir, 'origin/main'])
+      this.copyLocalFiles(root, dir)
+    } else {
+      await git(dir, ['checkout', '--quiet', '--detach', 'origin/main'])
+    }
+    const lock = readIfExists(join(dir, 'package-lock.json'))
+    const stamp = join(dir, 'node_modules', '.scout-lock')
+    if (lock !== null && readIfExists(stamp) !== lock) {
+      const source = await this.matchingNodeModules(root, dir)
+      if (!source) {
+        throw new Error(
+          `no checkout has dependencies for main's lockfile yet${fetchProblem ? `, and ${fetchProblem}` : ''}`
+        )
+      }
+      await execFileAsync('rm', ['-rf', join(dir, 'node_modules')])
+      await execFileAsync('cp', ['-Rc', source, join(dir, 'node_modules')], { timeout: 300_000 })
+      writeFileSync(stamp, lock)
+    }
+    return dir
   }
 
   /**

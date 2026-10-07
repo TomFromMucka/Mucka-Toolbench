@@ -6,6 +6,7 @@ import type {
   Job,
   JobBrief,
   JobsAutoStatus,
+  TicketsState,
   JobStatusEvent,
   PendingAnswer,
   PendingAnswerResult,
@@ -146,6 +147,14 @@ const muckaApi: MuckaApi = {
   startSentryJob: (issueId: string) =>
     ipcRenderer.invoke('jobs:start-sentry', issueId) as Promise<Job>,
   getJobsAuto: () => ipcRenderer.invoke('jobs:auto-get') as Promise<JobsAutoStatus>,
+  listTickets: () => ipcRenderer.invoke('tickets:list') as Promise<TicketsState>,
+  scoutTicket: (reference: string) =>
+    ipcRenderer.invoke('tickets:scout', reference) as Promise<void>,
+  onTicketsUpdate: (handler: (state: TicketsState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: TicketsState): void => handler(state)
+    ipcRenderer.on('tickets:update', listener)
+    return () => ipcRenderer.off('tickets:update', listener)
+  },
   setJobsAuto: (enabled: boolean) =>
     ipcRenderer.invoke('jobs:auto-set', enabled) as Promise<JobsAutoStatus>,
   onJobsUpdate: (handler: (jobs: Job[]) => void) => {

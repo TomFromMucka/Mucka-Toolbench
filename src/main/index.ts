@@ -88,10 +88,11 @@ import {
   unbindMuckaTextBroadcaster,
   abortTurn as muckaTextAbortTurn
 } from './mucka/MuckaTextAgent'
-import { PtyManager } from './pty/PtyManager'
+import { PtyManager, agentShellEnv } from './pty/PtyManager'
 import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
 import { PendingWatcher } from './claude/PendingWatcher'
 import { JobManager } from './jobs/JobManager'
+import { TicketWatcher } from './tickets/TicketWatcher'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
@@ -204,6 +205,7 @@ let ptyManager: PtyManager | null = null
 let claudeStateWatcher: ClaudeStateWatcher | null = null
 let pendingWatcher: PendingWatcher | null = null
 let jobManager: JobManager | null = null
+let ticketWatcher: TicketWatcher | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
@@ -335,6 +337,18 @@ function createWindow(): void {
       return response === 1
     }
   })
+  ticketWatcher = new TicketWatcher({
+    scoutCheckout: () => {
+      if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+      return jobManager.scoutCheckout()
+    },
+    env: agentShellEnv,
+    emit: (state) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('tickets:update', state)
+    }
+  })
+  ticketWatcher.start()
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
@@ -385,6 +399,8 @@ function createWindow(): void {
     pendingWatcher = null
     jobManager?.dispose()
     jobManager = null
+    ticketWatcher?.stop()
+    ticketWatcher = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {
       app.dock.setBadge('')
@@ -452,6 +468,11 @@ function registerIpc(): void {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     return jobManager.startSentryById(issueId)
   })
+  guardedHandle('tickets:list', () => {
+    if (!ticketWatcher) throw new Error('The cockpit window is not ready yet.')
+    return ticketWatcher.state()
+  })
+  guardedHandle('tickets:scout', (_event, reference: string) => ticketWatcher?.scout(reference))
   guardedHandle('jobs:auto-get', () => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     return jobManager.autoStatus()

@@ -186,6 +186,40 @@ export interface Job {
   createdAt: number
 }
 
+/* ─── Support tickets in Intake ─────────────────────────────────────── */
+
+/**
+ * An open support ticket, from Mucka Pro's `scripts/ticket.ts list --json`.
+ * The brief is written by a read-only scout Claude (no code edits), so a
+ * fix job can work from it without reading customer text or touching
+ * production itself: the Rule of Two in docs/jobs-layout-plan.md.
+ */
+export interface Ticket {
+  /** e.g. TKT-1467 */
+  reference: string
+  subject: string
+  status: string
+  priority: string | null
+  category: string | null
+  business: string | null
+  raiser: string | null
+  createdAt: number
+  updatedAt: number
+  brief: string | null
+  /** none: not scouted. queued / running: on its way. */
+  briefState: 'none' | 'queued' | 'running' | 'ready' | 'failed'
+  briefError: string | null
+  /** What the scout cost, in dollars. */
+  briefCost: number | null
+}
+
+export interface TicketsState {
+  tickets: Ticket[]
+  /** Why the last look at the ticket list failed, if it did. */
+  error: string | null
+  polledAt: number | null
+}
+
 /** Whether Sentry tickets start jobs by themselves, and how far that has got. */
 export interface JobsAutoStatus {
   enabled: boolean
@@ -704,6 +738,10 @@ export interface MuckaApi {
   /** Start a job on a Sentry issue, briefed with it. Returns its existing job if it has one. */
   startSentryJob(issueId: string): Promise<Job>
   getJobsAuto(): Promise<JobsAutoStatus>
+  listTickets(): Promise<TicketsState>
+  /** Write (or rewrite) a ticket's brief with the read-only scout. */
+  scoutTicket(reference: string): Promise<void>
+  onTicketsUpdate(handler: (state: TicketsState) => void): () => void
   setJobsAuto(enabled: boolean): Promise<JobsAutoStatus>
   onJobsUpdate(handler: (jobs: Job[]) => void): () => void
   onJobStatus(handler: (event: JobStatusEvent) => void): () => void

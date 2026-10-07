@@ -58,6 +58,24 @@ function migrate(d: DatabaseType): void {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS tickets (
+      reference TEXT PRIMARY KEY,
+      subject TEXT NOT NULL,
+      status TEXT NOT NULL,
+      priority TEXT,
+      category TEXT,
+      business TEXT,
+      raiser TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      first_seen INTEGER NOT NULL,
+      brief TEXT,
+      brief_state TEXT NOT NULL DEFAULT 'none',
+      brief_error TEXT,
+      brief_cost REAL,
+      brief_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS kv (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
