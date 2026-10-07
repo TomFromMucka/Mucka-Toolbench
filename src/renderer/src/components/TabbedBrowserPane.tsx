@@ -209,6 +209,11 @@ export function TabbedBrowserPane({
       ro.disconnect()
       window.removeEventListener('resize', push)
       window.removeEventListener('scroll', push, true)
+      // The browser is a native view drawn over the page, not part of it.
+      // When this pane goes away (a layout without the right column) the
+      // view would stay where it was, painting over whatever replaced it,
+      // so hide it. A remount or a preset change pushes real bounds again.
+      void window.mucka.setBrowserBounds({ slotId, x: 0, y: 0, width: 0, height: 0 })
     }
   }, [slotId, preset, deviceW, deviceH])
 

@@ -156,7 +156,7 @@ export function Workstation(): React.JSX.Element {
             explorerCollapsed ? EXPLORER_WIDTH_COLLAPSED : EXPLORER_WIDTH_EXPANDED
           } ${
             isJobs
-              ? '0.95fr 1.35fr 2.2fr 1.1fr'
+              ? '1fr 1.8fr 1.5fr 1.1fr'
               : showRightColumn
                 ? '2fr 1.1fr 1.2fr'
                 : '3.2fr 1.1fr'
