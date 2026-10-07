@@ -57,9 +57,10 @@ or "Tom, eyes here".
   latest `origin/main` (env files copied, `node_modules` cloned
   copy-on-write) and opens Claude in it. The card takes its title from
   Tom's first message and its lane from what Claude reports.
-- Sign-off bar under each job's terminal: *Ship* (PR with auto-merge),
-  *Amend*, *Finish* once merged (`/coach job-done` removes the folder and
-  branch), *Dismiss* (asks first, says what would be lost).
+- Sign-off bar under each job's terminal: *Job done* (Claude checks for
+  loose ends, lands the PR with auto-merge, then `/coach job-done` removes
+  the folder and branch), *Amend*, *Dismiss* (asks first, says what would
+  be lost).
 - **Intake** lists unresolved Sentry issues in the terminal's font.
   *Start job* opens a job whose Claude begins with the issue and the
   groundwork rules. With auto on (header switch), an issue Mucka triages
@@ -265,7 +266,8 @@ shared primitives in `components/ui/`:
 
 - **2026-10-07** — Jobs: Intake (Sentry issues, one click to a briefed
   job) replaces the Needs you column; Needs you cards look like Claude's
-  own prompt; a job you answered moves back to On the tools.
+  own prompt; a job you answered moves back to On the tools; Ship and
+  Finish merge into one Job done button.
 
 - **2026-10-07** — Jobs layout and the Needs you queue: a third layout
   where each job is a fresh worktree with its own Claude terminal and a

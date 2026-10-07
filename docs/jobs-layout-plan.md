@@ -246,6 +246,11 @@ Built (2026-10-07):
   report until he closes the card. *Dismiss* throws an unmerged job away
   after a native dialog that names what would be lost. Each job's PR is
   polled every minute, and again whenever its Claude stops.
+- **Ship and Finish became one *Job done* button** (Tom, later the same
+  day: shipping tends to happen in the conversation anyway). It asks the
+  job's Claude to check for loose ends and stop if there are any;
+  otherwise to open the PR with auto-merge if there isn't one, wait for
+  the merge, and run `/coach job-done`.
 
 - **No "trust this folder?" prompt in jobs, and nothing to build for it.**
   Tested on Claude Code 2.1.292: a worktree inherits trust from its repo's
@@ -277,7 +282,7 @@ prompt, with each option's explanation.
 **Auto-start (Tom's call, 2026-10-07: up to a draft fix).** When Mucka's
 triage rules a Sentry issue a *ticket*, a job starts on it by itself and
 goes as far as a draft fix under the supervised scope; nothing is pushed
-until Tom presses Ship. About five new issues arrive a day, so at most 3
+until Tom presses Job done. About five new issues arrive a day, so at most 3
 Sentry jobs are open at once. A job counts until it's signed off, and the
 rest queue in Intake, so a noisy day backs up instead of burying Tom. The
 issue's text is fenced as untrusted data in the brief, because the job

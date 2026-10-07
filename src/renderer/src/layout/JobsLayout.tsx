@@ -350,7 +350,7 @@ function JobCard({
 function prLine(job: Job): string | null {
   const pr = job.pr
   if (!pr) return null
-  if (pr.state === 'merged') return `PR #${pr.number} merged · ready to finish`
+  if (pr.state === 'merged') return `PR #${pr.number} merged`
   if (pr.state === 'closed') return `PR #${pr.number} closed`
   return `PR #${pr.number} · ${pr.autoMerge ? 'merges when checks pass' : 'open, auto-merge off'}`
 }
@@ -421,16 +421,20 @@ function NewJobCard({
 }
 
 /**
- * Ship and Finish are instructions to the job's own Claude, typed into its
- * terminal the way Tom would. The work happens where he can watch it, and
- * the skill's own checks apply. `/coach job-done` is in Mucka Pro's
- * worktree-coach skill.
+ * Job done is an instruction to the job's own Claude, typed into its
+ * terminal the way Tom would, so the wrap-up happens where he can watch it
+ * and the skill's own checks apply. Shipping itself tends to happen in the
+ * conversation, so this one button covers whatever's left: it stops on
+ * loose ends, otherwise lands the PR and runs `/coach job-done` (Mucka
+ * Pro's worktree-coach skill), which removes the folder once merged.
  */
-const SHIP_PROMPT =
-  'Ship this job. Commit anything outstanding with a clear message, then push and open a PR ' +
-  "with /coach pr if there isn't one yet. Then turn on auto-merge with " +
-  '`gh pr merge --squash --auto --delete-branch`, and reply with the PR link.'
-const FINISH_PROMPT = '/coach job-done'
+const JOB_DONE_PROMPT = [
+  'Wrap this job up.',
+  'First check for loose ends: uncommitted work, failing tests or typecheck, anything I asked for that is not done, or an open question. If there are any, list them and stop.',
+  "Otherwise, if there's no PR yet, commit, push and open one with /coach pr, and turn on auto-merge with `gh pr merge --squash --auto --delete-branch`.",
+  'Wait for it to merge with `gh pr checks --watch`. If a check fails, read the failure and tell me rather than going on.',
+  'Once it has merged, run /coach job-done.'
+].join('\n')
 
 /** A job's own terminal, with Claude started in its worktree, and its sign-off bar. */
 function JobTerminal({
@@ -538,7 +542,6 @@ function SignOffBar({
   }
   const pr = job.pr
   const merged = pr?.state === 'merged'
-  const inFlight = pr !== null && (pr.state === 'open' || pr.state === 'draft')
 
   return (
     <Bar
@@ -548,57 +551,43 @@ function SignOffBar({
             {prLine(job)}
           </a>
         ) : (
-          (notNow ?? 'Ship when it’s ready: PR, then merged once checks pass.')
+          (notNow ?? 'When it’s finished: Job done checks for loose ends, lands it and tidies up.')
         )
       }
     >
-      {merged ? (
+      <Button
+        variant="primary"
+        size="sm"
+        trailingIcon={null}
+        disabled={notNow !== null}
+        title={
+          notNow ??
+          'Claude checks for loose ends, opens the PR with auto-merge if needed, waits for the merge, then runs /coach job-done'
+        }
+        onClick={() => tell(JOB_DONE_PROMPT)}
+      >
+        Job done
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        trailingIcon={null}
+        title="Put the cursor in the terminal to tell Claude what to change"
+        onClick={() => focusTerminal(job.terminalId)}
+      >
+        Amend
+      </Button>
+      {merged ? null : (
         <Button
-          variant="primary"
+          variant="tertiary"
           size="sm"
           trailingIcon={null}
-          disabled={notNow !== null}
-          title={
-            notNow ?? 'Checks it landed, stops its dev server, then removes the folder and branch'
-          }
-          onClick={() => tell(FINISH_PROMPT)}
+          disabled={busy}
+          title="Close its PR and delete its folder and branch. Asks first."
+          onClick={dismiss}
         >
-          Finish
+          Dismiss
         </Button>
-      ) : (
-        <>
-          {!inFlight || !pr.autoMerge ? (
-            <Button
-              variant="primary"
-              size="sm"
-              trailingIcon={null}
-              disabled={notNow !== null}
-              title={notNow ?? 'Commit, push, open the PR and turn on auto-merge'}
-              onClick={() => tell(SHIP_PROMPT)}
-            >
-              Ship
-            </Button>
-          ) : null}
-          <Button
-            variant="secondary"
-            size="sm"
-            trailingIcon={null}
-            title="Put the cursor in the terminal to tell Claude what to change"
-            onClick={() => focusTerminal(job.terminalId)}
-          >
-            Amend
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            trailingIcon={null}
-            disabled={busy}
-            title="Close its PR and delete its folder and branch. Asks first."
-            onClick={dismiss}
-          >
-            Dismiss
-          </Button>
-        </>
       )}
     </Bar>
   )
