@@ -14,6 +14,16 @@ import { promisify } from 'node:util'
 import type { AgentConfig, Job, JobId } from '@shared/types'
 import { closeJob, getJob, insertJob, listOpenJobs, terminalIdForJob, updateJob } from '../db/jobs'
 
+/** Claude Code files a folder's conversations under its path with every other character as `-`. */
+function hasClaudeHistory(folder: string): boolean {
+  const dir = join(homedir(), '.claude', 'projects', folder.replace(/[^A-Za-z0-9-]/g, '-'))
+  try {
+    return readdirSync(dir).some((f) => f.endsWith('.jsonl'))
+  } catch {
+    return false
+  }
+}
+
 /**
  * What a job's terminal runs: Claude straight away, in Tom's normal mode,
  * then an ordinary login shell when he quits it. Null until the worktree
@@ -24,9 +34,13 @@ export function jobShell(id: JobId): { command: string; args: string[]; cwd: str
   if (!job || job.state !== 'ready') return null
   const shell = process.env.SHELL?.includes('zsh') ? process.env.SHELL : '/bin/zsh'
   const install = job.needsInstall ? 'npm ci && npm audit; ' : ''
+  // After a cockpit restart the job's terminal comes back. Claude keeps
+  // one history per folder and a job has its own folder, so `--continue`
+  // always picks up this job's conversation rather than starting over.
+  const claude = hasClaudeHistory(job.worktreePath) ? 'claude --continue' : 'claude'
   return {
     command: shell,
-    args: ['-l', '-i', '-c', `${install}claude; exec ${shell} -l`],
+    args: ['-l', '-i', '-c', `${install}${claude}; exec ${shell} -l`],
     cwd: job.worktreePath
   }
 }
