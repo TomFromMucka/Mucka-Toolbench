@@ -209,4 +209,8 @@ function migrate(d: DatabaseType): void {
     d.exec(`ALTER TABLE jobs ADD COLUMN pr_state TEXT`)
     d.exec(`ALTER TABLE jobs ADD COLUMN pr_auto_merge INTEGER NOT NULL DEFAULT 0`)
   }
+  if (!jobCols.has('source')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN source TEXT`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN brief TEXT`)
+  }
 }

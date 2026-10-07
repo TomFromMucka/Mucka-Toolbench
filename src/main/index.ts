@@ -189,6 +189,7 @@ import type {
 import type {
   AgentId,
   AgentUpdate,
+  JobBrief,
   PendingAnswer,
   PendingAnswerResult,
   PtyResizeRequest,
@@ -433,9 +434,9 @@ function registerIpc(): void {
   guardedHandle('agents:list', () => getAgentConfigs())
 
   guardedHandle('jobs:list', () => jobManager?.list() ?? [])
-  guardedHandle('jobs:create', () => {
+  guardedHandle('jobs:create', (_event, brief?: JobBrief) => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
-    return jobManager.create()
+    return jobManager.create(brief)
   })
   guardedHandle('jobs:retry', (_event, id: string) => jobManager?.retry(id))
   guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))

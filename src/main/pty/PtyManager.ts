@@ -51,6 +51,7 @@ interface ShellSpec {
   cwd: string
   /** Tells the hooks which agent or job this Claude belongs to. */
   owner: { MUCKA_AGENT: string } | { MUCKA_JOB: string }
+  env?: Record<string, string>
 }
 
 function signatureFor(spec: ShellSpec): string {
@@ -93,9 +94,12 @@ export class PtyManager {
   }
 
   spawn(req: PtySpawnRequest): void {
-    // A finished job's folder is gone, so there's no shell to ask for, but
-    // its Claude may still be on screen with the report Tom wants to read.
-    if (req.jobId !== undefined && this.ptys.has(req.terminalId) && jobShell(req.jobId) === null) {
+    // A job's terminal only ever runs one shell, so a live one is always
+    // the right one. Its command does change over the job's life (`claude`
+    // becomes `claude --continue` once there's history, and a finished
+    // job has no folder left to ask for), and comparing it would kill a
+    // working Claude whenever the layout remounted its terminal.
+    if (req.jobId !== undefined && this.ptys.has(req.terminalId)) {
       this.resize({ terminalId: req.terminalId, cols: req.cols, rows: req.rows })
       return
     }
@@ -125,6 +129,7 @@ export class PtyManager {
         ...agentShellEnv(),
         TERM: 'xterm-256color',
         ...spec.owner,
+        ...spec.env,
         MUCKA_TERMINAL: req.terminalId
       }
     })

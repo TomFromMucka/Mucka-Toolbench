@@ -11,9 +11,17 @@ import {
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import type { AgentConfig, Job, JobId, JobPr } from '@shared/types'
+import type { AgentConfig, Job, JobBrief, JobId, JobPr } from '@shared/types'
 import { closePullRequest, latestPullRequestForBranch, readGitHubOrigin } from '../github/GitHub'
-import { closeJob, getJob, insertJob, listOpenJobs, terminalIdForJob, updateJob } from '../db/jobs'
+import {
+  closeJob,
+  getJob,
+  getJobBrief,
+  insertJob,
+  listOpenJobs,
+  terminalIdForJob,
+  updateJob
+} from '../db/jobs'
 
 /** Claude Code files a folder's conversations under its path with every other character as `-`. */
 function hasClaudeHistory(folder: string): boolean {
@@ -30,7 +38,9 @@ function hasClaudeHistory(folder: string): boolean {
  * then an ordinary login shell when he quits it. Null until the worktree
  * is ready.
  */
-export function jobShell(id: JobId): { command: string; args: string[]; cwd: string } | null {
+export function jobShell(
+  id: JobId
+): { command: string; args: string[]; cwd: string; env: Record<string, string> } | null {
   const job = getJob(id)
   if (!job || job.state !== 'ready') return null
   const shell = process.env.SHELL?.includes('zsh') ? process.env.SHELL : '/bin/zsh'
@@ -38,11 +48,17 @@ export function jobShell(id: JobId): { command: string; args: string[]; cwd: str
   // After a cockpit restart the job's terminal comes back. Claude keeps
   // one history per folder and a job has its own folder, so `--continue`
   // always picks up this job's conversation rather than starting over.
-  const claude = hasClaudeHistory(job.worktreePath) ? 'claude --continue' : 'claude'
+  // A job from Intake opens with its brief as Claude's first message. It
+  // goes in through the environment, so no quoting can mangle it, and it
+  // is only used before the conversation exists.
+  const resume = hasClaudeHistory(job.worktreePath)
+  const brief = resume ? null : getJobBrief(id)
+  const claude = resume ? 'claude --continue' : brief ? 'claude "$MUCKA_JOB_BRIEF"' : 'claude'
   return {
     command: shell,
     args: ['-l', '-i', '-c', `${install}${claude}; exec ${shell} -l`],
-    cwd: job.worktreePath
+    cwd: job.worktreePath,
+    env: brief ? { MUCKA_JOB_BRIEF: brief } : {}
   }
 }
 
@@ -288,7 +304,7 @@ export class JobManager {
    * runs in the background and pushes the job list as it goes, so the
    * card shows progress and the terminal opens the moment it's ready.
    */
-  async create(): Promise<Job> {
+  async create(brief?: JobBrief): Promise<Job> {
     const root = await this.repoRoot()
     const jobsDir = join(dirname(root), `${basename(root)}-jobs`)
     mkdirSync(jobsDir, { recursive: true })
@@ -296,7 +312,7 @@ export class JobManager {
     const id: JobId = `job-${slug}`
     const job: Job = {
       id,
-      title: UNTITLED,
+      title: brief?.title ?? UNTITLED,
       branch: `job/${slug}`,
       worktreePath: join(jobsDir, id),
       terminalId: terminalIdForJob(id),
@@ -304,9 +320,10 @@ export class JobManager {
       detail: 'Fetching the latest main…',
       needsInstall: false,
       pr: null,
+      source: brief?.source ?? null,
       createdAt: Date.now()
     }
-    insertJob(job)
+    insertJob(job, brief?.prompt ?? null)
     this.push()
     void this.setUp(job, root)
     return job

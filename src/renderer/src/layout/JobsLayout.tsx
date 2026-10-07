@@ -5,7 +5,7 @@ import { AgentClipboard } from '../components/AgentClipboard'
 import { AgentTerminal } from '../components/AgentTerminal'
 import { Button } from '../components/ui/Button'
 import { Clipboard } from '../components/Clipboard'
-import { NeedsYouCard } from '../components/NeedsYouCard'
+import { IntakePanel } from '../components/IntakePanel'
 import { useAgentSlots } from '../hooks/useAgentSlots'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useAgentStatuses } from '../state/AgentStatusContext'
@@ -15,8 +15,8 @@ import { useFocusRequests, useNeedsYou } from '../state/NeedsYouContext'
 import { submitPromptAndEnter } from '../mucka/dispatch'
 
 /**
- * The Jobs layout's middle three columns: who needs Tom, a board of the
- * work in flight, and the selected job's terminal.
+ * The Jobs layout's middle three columns: work coming in, a board of
+ * the work in flight, and the selected job's terminal.
  *
  * Two kinds of card share the board. A job (docs/jobs-layout-plan.md) is
  * started with "+ New job": its own fresh worktree and a terminal with
@@ -66,12 +66,11 @@ export function JobsLayout({
   selected,
   onSelect
 }: JobsLayoutProps): React.JSX.Element {
-  const { queue, placeOf } = useNeedsYou()
+  const { placeOf } = useNeedsYou()
   const { statusFor } = useAgentStatuses()
   const { summaries } = useGitHubState()
   const slotFor = useAgentSlots(gitStatus, restartVersion)
   const { jobs, jobStatusFor, createJob } = useJobs()
-  const [now, setNow] = useState(() => Date.now())
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -94,11 +93,6 @@ export function JobsLayout({
     window.addEventListener('mucka:new-job', onNew)
     return () => window.removeEventListener('mucka:new-job', onNew)
   }, [newJob])
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(timer)
-  }, [])
 
   // ⌘J and "Open terminal" name a terminal; in this layout that also means
   // "make that agent the job on screen". Split tabs are `<agent>:t<n>`.
@@ -151,24 +145,13 @@ export function JobsLayout({
 
   return (
     <>
-      <Clipboard title="Needs you" subtitle="blocked first, oldest first" bodyClassName="min-h-0">
-        <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto p-2">
-          {queue.length === 0 ? (
-            <span className="t-body-sm px-1 py-2 text-dirty-grey">
-              Nobody is waiting on you. Questions and permission prompts land here as they come in.
-            </span>
-          ) : (
-            queue.map((entry, i) => (
-              <NeedsYouCard
-                key={entry.pending?.id ?? entry.key}
-                entry={entry}
-                place={i + 1}
-                now={now}
-              />
-            ))
-          )}
-        </div>
-      </Clipboard>
+      {/*
+        Intake, not a Needs-you column: with many jobs running, a question
+        needs the context its terminal gives (each option's explanation,
+        typing an answer), and the Waiting lane, ⌘J and the banner already
+        lead there. Tom's call, 2026-10-07.
+      */}
+      <IntakePanel onSelect={onSelect} />
 
       <Clipboard
         title="Job board"

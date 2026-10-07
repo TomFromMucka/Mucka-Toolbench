@@ -4,6 +4,7 @@ import type {
   AgentId,
   AgentStatusEvent,
   Job,
+  JobBrief,
   JobStatusEvent,
   PendingAnswer,
   PendingAnswerResult,
@@ -136,7 +137,7 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('pending:answer', answer) as Promise<PendingAnswerResult>,
 
   listJobs: () => ipcRenderer.invoke('jobs:list') as Promise<Job[]>,
-  createJob: () => ipcRenderer.invoke('jobs:create') as Promise<Job>,
+  createJob: (brief?: JobBrief) => ipcRenderer.invoke('jobs:create', brief) as Promise<Job>,
   retryJob: (id: string) => ipcRenderer.invoke('jobs:retry', id) as Promise<void>,
   discardJob: (id: string) => ipcRenderer.invoke('jobs:discard', id) as Promise<void>,
   dismissJob: (id: string) => ipcRenderer.invoke('jobs:dismiss', id) as Promise<boolean>,

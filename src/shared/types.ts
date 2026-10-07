@@ -181,7 +181,17 @@ export interface Job {
   needsInstall: boolean
   /** The PR from the job's branch, once there is one. */
   pr: JobPr | null
+  /** Where it came from, e.g. `sentry:MUCKA-WEB-38`. Null for one Tom started. */
+  source: string | null
   createdAt: number
+}
+
+/** What a job started from Intake opens with. */
+export interface JobBrief {
+  title: string
+  /** Claude's opening message. */
+  prompt: string
+  source: string
 }
 
 export interface JobPr {
@@ -667,7 +677,7 @@ export interface MuckaApi {
    * terminal. Resolves at once in `setting-up`; progress arrives through
    * `onJobsUpdate`.
    */
-  createJob(): Promise<Job>
+  createJob(brief?: JobBrief): Promise<Job>
   /** Run a failed job's setup again. */
   retryJob(id: JobId): Promise<void>
   /** Take a failed job off the board. Refused once it has a folder. */

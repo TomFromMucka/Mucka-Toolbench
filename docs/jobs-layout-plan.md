@@ -264,6 +264,16 @@ job limit.
 
 ### Slice 5 — Intake
 
+**Started 2026-10-07: Intake replaces the Needs you column in Jobs.** Tom's
+call: with many jobs running, a question needs the context its terminal
+gives (each option's explanation, typing an answer), and the Waiting lane,
+⌘J and the banner already lead there. The column now lists unresolved
+Sentry issues in the terminal's font. *Start job* opens a fresh job whose
+Claude starts with the issue and the groundwork rules as its first
+message (passed through the environment, not typed). Tickets join next.
+The banner's Needs you cards stay, restyled to look like Claude's own
+prompt, with each option's explanation.
+
 **Toil first.** The first automatic intake is work where "done" can be
 checked without judgement:
 - dependency and security bumps flagged by `npm audit`

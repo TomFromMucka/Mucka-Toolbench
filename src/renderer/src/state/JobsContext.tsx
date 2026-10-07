@@ -1,12 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import type { AgentStatus, Job, JobId, JobStatusEvent } from '@shared/types'
+import type { AgentStatus, Job, JobBrief, JobId, JobStatusEvent } from '@shared/types'
 
 interface JobsValue {
   jobs: Job[]
   /** What the job's Claude last reported. Idle until it reports anything. */
   jobStatusFor: (id: JobId) => AgentStatus
-  /** Start a job. Resolves with it in `setting-up`, or throws why it couldn't start. */
-  createJob: () => Promise<Job>
+  /**
+   * Start a job, optionally with a brief that becomes its Claude's first
+   * message. Resolves with it in `setting-up`, or throws why it couldn't start.
+   */
+  createJob: (brief?: JobBrief) => Promise<Job>
 }
 
 const Ctx = createContext<JobsValue | null>(null)
@@ -41,8 +44,8 @@ export function JobsProvider({ children }: { children: React.ReactNode }): React
     }
   }, [])
 
-  const createJob = useCallback(async (): Promise<Job> => {
-    const job = await window.mucka.createJob()
+  const createJob = useCallback(async (brief?: JobBrief): Promise<Job> => {
+    const job = await window.mucka.createJob(brief)
     setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev : [...prev, job]))
     return job
   }, [])

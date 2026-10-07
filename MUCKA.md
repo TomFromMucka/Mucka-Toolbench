@@ -50,7 +50,7 @@ or "Tom, eyes here".
 - Per-agent git badges (branch · ahead/behind · dirty/untracked).
 
 **Jobs layout (third choice under Settings → Agents → *Layout*).**
-- Five columns: Files (folded until clicked), Needs you, Job board,
+- Five columns: Files (folded until clicked), Intake, Job board,
   the selected job's terminal, and the six-up right column. The 4 and 6
   layouts are unchanged.
 - **+ New job** (`⌘N`) makes a fresh worktree in `<repo>-jobs/` off the
@@ -60,6 +60,9 @@ or "Tom, eyes here".
 - Sign-off bar under each job's terminal: *Ship* (PR with auto-merge),
   *Amend*, *Finish* once merged (`/coach job-done` removes the folder and
   branch), *Dismiss* (asks first, says what would be lost).
+- **Intake** lists unresolved Sentry issues in the terminal's font.
+  *Start job* opens a job whose Claude begins with the issue and the
+  groundwork rules.
 
 **Needs you (all layouts).** One queue of agents' and jobs' permission
 prompts and questions, blocked first then oldest. Answered with buttons
@@ -258,6 +261,10 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-10-07** — Jobs: Intake (Sentry issues, one click to a briefed
+  job) replaces the Needs you column; Needs you cards look like Claude's
+  own prompt; a job you answered moves back to On the tools.
 
 - **2026-10-07** — Jobs layout and the Needs you queue: a third layout
   where each job is a fresh worktree with its own Claude terminal and a
