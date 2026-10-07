@@ -47,6 +47,17 @@ function migrate(d: DatabaseType): void {
       pinned INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      branch TEXT NOT NULL,
+      worktree_path TEXT NOT NULL,
+      state TEXT NOT NULL,
+      detail TEXT,
+      closed INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS kv (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -185,5 +196,17 @@ function migrate(d: DatabaseType): void {
   // never checked goes to the front of the queue.
   if (!sentryCols.has('status_checked_at')) {
     d.exec(`ALTER TABLE sentry_issues ADD COLUMN status_checked_at INTEGER`)
+  }
+  const jobCols = new Set(
+    d.prepare<[], { name: string }>(`PRAGMA table_info(jobs)`).all().map((c) => c.name)
+  )
+  if (!jobCols.has('needs_install')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN needs_install INTEGER NOT NULL DEFAULT 0`)
+  }
+  if (!jobCols.has('pr_number')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_number INTEGER`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_url TEXT`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_state TEXT`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_auto_merge INTEGER NOT NULL DEFAULT 0`)
   }
 }

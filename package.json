@@ -19,7 +19,8 @@
     "build:mac": "electron-vite build && electron-builder --mac",
     "install:mac": "bash scripts/install-mac.sh",
     "release:mac": "bash scripts/release-mac.sh",
-    "mucka:sync": "tsx scripts/mucka-sync.ts"
+    "mucka:sync": "tsx scripts/mucka-sync.ts",
+    "hooks:install": "node scripts/install-claude-hooks.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.258",

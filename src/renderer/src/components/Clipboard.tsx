@@ -23,6 +23,13 @@ interface ClipboardProps {
    *  live content — terminals especially — keeps running. */
   size?: PanelSize
   onResize?: (size: PanelSize) => void
+  /**
+   * Makes the whole header band one button, e.g. the explorer folding
+   * itself away. Don't combine with clickable controls in `rightSlot`.
+   */
+  onHeaderClick?: () => void
+  /** What the header button does, for the tooltip and screen readers. */
+  headerClickLabel?: string
 }
 
 const SIZE_OPTIONS: { value: PanelSize; icon: typeof Equal; label: string }[] = [
@@ -46,7 +53,9 @@ export function Clipboard({
   className,
   bodyClassName,
   size = 'mid',
-  onResize
+  onResize,
+  onHeaderClick,
+  headerClickLabel
 }: ClipboardProps): React.JSX.Element {
   const isMin = size === 'min'
   return (
@@ -61,7 +70,25 @@ export function Clipboard({
       title={isMin && onResize ? 'Click to restore' : undefined}
     >
       <header
-        className="flex items-center gap-2 py-2"
+        className={clsx(
+          'flex items-center gap-2 py-2',
+          onHeaderClick && 'cursor-pointer transition-colors hover:brightness-125'
+        )}
+        onClick={onHeaderClick}
+        onKeyDown={
+          onHeaderClick
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onHeaderClick()
+                }
+              }
+            : undefined
+        }
+        role={onHeaderClick ? 'button' : undefined}
+        tabIndex={onHeaderClick ? 0 : undefined}
+        title={headerClickLabel}
+        aria-label={headerClickLabel}
         style={{
           background: 'var(--charcoal)',
           color: 'var(--van-white)',
@@ -97,8 +124,10 @@ export function Clipboard({
           </span>
         ) : null}
         {rightSlot ? (
+          // ml-auto keeps the slot at the far right even when there's no
+          // subtitle to fill the space between it and the title.
           <div
-            className="shrink-0"
+            className="ml-auto shrink-0"
             style={{
               fontFamily: 'var(--font-soehne), system-ui, sans-serif',
               fontSize: '11px',

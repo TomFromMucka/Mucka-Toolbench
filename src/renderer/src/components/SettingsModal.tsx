@@ -17,7 +17,7 @@ import {
   type SecretTestResult
 } from '@shared/secrets'
 import type { CredentialSummary } from '@shared/credentials'
-import { useLayout, type TerminalCount } from '../state/LayoutContext'
+import { useLayout, type LayoutMode } from '../state/LayoutContext'
 import { Clipboard } from './Clipboard'
 
 interface SettingsModalProps {
@@ -663,7 +663,7 @@ function CredentialForm({
 /* ─── Agents tab ─────────────────────────────────────────────────────── */
 
 const LAYOUT_CHOICES: {
-  count: TerminalCount
+  count: LayoutMode
   title: string
   note: string
   shape: string
@@ -679,11 +679,17 @@ const LAYOUT_CHOICES: {
     title: '6 terminals',
     note: 'Wider bench — hides the previews, Vercel and git column.',
     shape: '▛▀▜\n▙▄▟'
+  },
+  {
+    count: 'jobs',
+    title: 'Jobs',
+    note: 'Who needs you, a board of what each agent is on, and one job’s terminal at full size.',
+    shape: '▌▐█▐\n▌▐█▐'
   }
 ]
 
 function LayoutSection(): React.JSX.Element {
-  const { terminalCount, setTerminalCount } = useLayout()
+  const { layout, setLayout } = useLayout()
 
   return (
     <section className="mb-5 border-b border-ink/15 pb-4">
@@ -691,18 +697,19 @@ function LayoutSection(): React.JSX.Element {
         Layout
       </h3>
       <p className="mb-2 font-[var(--font-hand)] text-[0.92rem] text-ink-soft">
-        How many agent terminals sit on the bench. Six only fits by giving
-        up the right-hand column — terminals keep running either way, so
-        switching back and forth is free.
+        How the bench is laid out. Six only fits by giving up the right-hand
+        column. Jobs shows one agent’s terminal at a time, next to who needs
+        you and what everyone is on. Terminals keep running in every layout,
+        so switching is free.
       </p>
       <div className="flex gap-2">
         {LAYOUT_CHOICES.map((choice) => {
-          const active = choice.count === terminalCount
+          const active = choice.count === layout
           return (
             <button
               key={choice.count}
               type="button"
-              onClick={() => setTerminalCount(choice.count)}
+              onClick={() => setLayout(choice.count)}
               className={clsx(
                 'flex flex-1 items-start gap-3 rounded-sm border p-3 text-left',
                 active

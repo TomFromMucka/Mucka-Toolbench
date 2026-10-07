@@ -197,6 +197,17 @@ in sync with reality without anyone having to remember to "tell" her.
   statusline and the UserPromptSubmit / Notification / Stop hooks feed,
   and which `ClaudeStateWatcher` reads. Extend that instead of adding
   another regex.
+- **Needs-you answers go through the PermissionRequest hook, never
+  keystrokes.** `scripts/claude-hooks/mucka-pending.sh` (installed by
+  `npm run hooks:install`) records what each cockpit terminal's Claude is
+  blocked on and waits for `PendingWatcher` to write the answer.
+  Permission prompts *and* `AskUserQuestion` both arrive there, and the
+  terminal keeps showing the dialog and taking keys while the hook waits,
+  so Tom can always answer in either place. Measured on Claude Code
+  2.1.292. Don't move questions to a PreToolUse hook: the question isn't
+  drawn until PreToolUse returns, so a wait there hides it from the
+  terminal. Don't write answers into the PTY either: a key that lands
+  after the prompt is gone types into Claude's input box.
 - **`spawnPty` is attach-or-create, and restarting is explicit.**
   `PtyManager.spawn` compares the request against the live proc's
   signature (command + args + cwd): same shell → reattach and resize;

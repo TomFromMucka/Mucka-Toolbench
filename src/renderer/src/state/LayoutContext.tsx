@@ -9,11 +9,22 @@ import { useAgentsState } from './AgentsContext'
  */
 export type TerminalCount = 4 | 6
 
+/**
+ * The cockpit's shape. The two grids give every agent a seat on screen.
+ * Jobs gives the screen to work instead: who needs Tom, a board of what
+ * each agent is on, and one job's terminal at full size
+ * (docs/jobs-layout-plan.md).
+ */
+export type LayoutMode = TerminalCount | 'jobs'
+
 const STORAGE_KEY = 'layout.terminalCount'
 
 interface LayoutValue {
+  layout: LayoutMode
+  setLayout: (next: LayoutMode) => void
+  isJobs: boolean
+  /** Agents with a place in this layout. Jobs lists them all, like six-up. */
   terminalCount: TerminalCount
-  setTerminalCount: (next: TerminalCount) => void
   /** Agent-grid columns — each column is a stack of two clipboards. */
   agentColumns: 2 | 3
   /** False in 6-up: browser previews, Vercel and git are hidden. */
@@ -22,9 +33,11 @@ interface LayoutValue {
 
 const Ctx = createContext<LayoutValue | null>(null)
 
-function readCount(): TerminalCount {
+function readLayout(): LayoutMode {
   try {
-    return localStorage.getItem(STORAGE_KEY) === '6' ? 6 : 4
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored === 'jobs') return 'jobs'
+    return stored === '6' ? 6 : 4
   } catch {
     return 4
   }
@@ -35,29 +48,31 @@ export function LayoutProvider({
 }: {
   children: React.ReactNode
 }): React.JSX.Element {
-  const [terminalCount, setCount] = useState<TerminalCount>(readCount)
+  const [layout, setLayoutState] = useState<LayoutMode>(readLayout)
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, String(terminalCount))
+      localStorage.setItem(STORAGE_KEY, String(layout))
     } catch {
       /* storage disabled */
     }
-  }, [terminalCount])
+  }, [layout])
 
-  const setTerminalCount = useCallback((next: TerminalCount) => {
-    setCount(next)
+  const setLayout = useCallback((next: LayoutMode) => {
+    setLayoutState(next)
   }, [])
 
-  const value = useMemo<LayoutValue>(
-    () => ({
+  const value = useMemo<LayoutValue>(() => {
+    const terminalCount: TerminalCount = layout === 4 ? 4 : 6
+    return {
+      layout,
+      setLayout,
+      isJobs: layout === 'jobs',
       terminalCount,
-      setTerminalCount,
       agentColumns: terminalCount === 6 ? 3 : 2,
-      showRightColumn: terminalCount === 4
-    }),
-    [terminalCount, setTerminalCount]
-  )
+      showRightColumn: layout === 4
+    }
+  }, [layout, setLayout])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

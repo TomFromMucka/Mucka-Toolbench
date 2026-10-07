@@ -90,6 +90,8 @@ import {
 } from './mucka/MuckaTextAgent'
 import { PtyManager } from './pty/PtyManager'
 import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
+import { PendingWatcher } from './claude/PendingWatcher'
+import { JobManager } from './jobs/JobManager'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
@@ -187,6 +189,8 @@ import type {
 import type {
   AgentId,
   AgentUpdate,
+  PendingAnswer,
+  PendingAnswerResult,
   PtyResizeRequest,
   PtySpawnRequest,
   PtyWriteRequest,
@@ -197,6 +201,8 @@ const NOTES_KEY = 'notes'
 
 let ptyManager: PtyManager | null = null
 let claudeStateWatcher: ClaudeStateWatcher | null = null
+let pendingWatcher: PendingWatcher | null = null
+let jobManager: JobManager | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
@@ -282,9 +288,46 @@ function createWindow(): void {
       mainWindow.webContents.send('agent:status', event)
     },
     getAgentConfigs,
-    (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
+    (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false,
+    undefined,
+    (event) => {
+      // A job that's just stopped may have opened or merged its PR.
+      if (event.status === 'idle') void jobManager?.refreshPrs(event.jobId)
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('job:status', event)
+    }
   )
   claudeStateWatcher.start()
+  // What each Claude is blocked on, from the PermissionRequest hook in
+  // scripts/claude-hooks/mucka-pending.sh. Answers go back the same way.
+  pendingWatcher = new PendingWatcher(
+    (items) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('pending:update', items)
+    },
+    getAgentConfigs,
+    (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
+  )
+  pendingWatcher.start()
+  jobManager = new JobManager({
+    listAgents: getAgentConfigs,
+    emit: (jobs) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('jobs:update', jobs)
+    },
+    killTerminal: (terminalId) => ptyManager?.kill(terminalId),
+    confirm: async (message, detail, confirmLabel) => {
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        message,
+        detail,
+        buttons: ['Cancel', confirmLabel],
+        defaultId: 0,
+        cancelId: 0
+      })
+      return response === 1
+    }
+  })
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
@@ -331,6 +374,10 @@ function createWindow(): void {
     ptyManager = null
     claudeStateWatcher?.dispose()
     claudeStateWatcher = null
+    pendingWatcher?.dispose()
+    pendingWatcher = null
+    jobManager?.dispose()
+    jobManager = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {
       app.dock.setBadge('')
@@ -384,6 +431,21 @@ const guardedOn: typeof ipcMain.on = (channel, listener) =>
 
 function registerIpc(): void {
   guardedHandle('agents:list', () => getAgentConfigs())
+
+  guardedHandle('jobs:list', () => jobManager?.list() ?? [])
+  guardedHandle('jobs:create', () => {
+    if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+    return jobManager.create()
+  })
+  guardedHandle('jobs:retry', (_event, id: string) => jobManager?.retry(id))
+  guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))
+  guardedHandle('jobs:dismiss', (_event, id: string) => jobManager?.dismiss(id) ?? false)
+  guardedHandle('jobs:close', (_event, id: string) => jobManager?.close(id))
+
+  guardedHandle('pending:list', () => pendingWatcher?.list() ?? [])
+  guardedHandle('pending:answer', (_event, answer: PendingAnswer): PendingAnswerResult =>
+    pendingWatcher ? pendingWatcher.answer(answer) : { ok: false, reason: 'stale' }
+  )
 
   guardedHandle('agents:update', async (_event, patch: AgentUpdate) => {
     const current = getAgentConfig(patch.id)

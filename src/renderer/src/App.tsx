@@ -7,6 +7,8 @@ import { AttentionNotifier } from './state/AttentionNotifier'
 import { EventsProvider } from './state/EventsContext'
 import { LayoutProvider } from './state/LayoutContext'
 import { NotesProvider } from './state/NotesContext'
+import { NeedsYouProvider } from './state/NeedsYouContext'
+import { JobsProvider } from './state/JobsContext'
 import { VercelProvider } from './state/VercelContext'
 import { GitHubProvider } from './state/GitHubContext'
 
@@ -15,20 +17,24 @@ function App(): React.JSX.Element {
     <AgentsProvider>
       <LayoutProvider>
         <AgentStatusProvider>
-          <NotesProvider>
-            <EventsProvider>
-              <VercelProvider>
-                <GitHubProvider>
-                  <MuckaSessionProvider>
-                    <MuckaTextProvider>
-                      <AttentionNotifier />
-                      <Workstation />
-                    </MuckaTextProvider>
-                  </MuckaSessionProvider>
-                </GitHubProvider>
-              </VercelProvider>
-            </EventsProvider>
-          </NotesProvider>
+          <JobsProvider>
+            <NeedsYouProvider>
+              <NotesProvider>
+                <EventsProvider>
+                  <VercelProvider>
+                    <GitHubProvider>
+                      <MuckaSessionProvider>
+                        <MuckaTextProvider>
+                          <AttentionNotifier />
+                          <Workstation />
+                        </MuckaTextProvider>
+                      </MuckaSessionProvider>
+                    </GitHubProvider>
+                  </VercelProvider>
+                </EventsProvider>
+              </NotesProvider>
+            </NeedsYouProvider>
+          </JobsProvider>
         </AgentStatusProvider>
       </LayoutProvider>
     </AgentsProvider>
