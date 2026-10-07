@@ -56,17 +56,15 @@ export function ExplorerPanel({
   return (
     <Clipboard
       title="Explorer"
+      onHeaderClick={onToggle}
+      headerClickLabel="Hide files"
       rightSlot={
-        <button
-          type="button"
-          onClick={onToggle}
-          title="Collapse explorer"
-          aria-label="Collapse explorer"
-          className="grid size-6 place-items-center rounded-sm hover:bg-van-white/15"
+        <span
+          className="grid size-6 place-items-center"
           style={{ color: 'rgba(234, 233, 232, 0.85)' }}
         >
           <Icon icon={ChevronLeft} size={16} strokeWidth={2.25} />
-        </button>
+        </span>
       }
       className="min-h-0"
     >
