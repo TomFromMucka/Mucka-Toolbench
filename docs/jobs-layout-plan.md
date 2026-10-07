@@ -269,6 +269,18 @@ building on `scripts/ticket.ts` and the `support-reply` skill.
 Run Sentry groundwork on cloud machines so it continues with the lid shut.
 Tickets stay local.
 
+**Commute hand-off (parked 2026-10-07).** Tom's idea: at 5pm, press a button and
+the jobs carry on in the cloud for the drive home, then come back to the
+laptop. Claude Code 2.1.292 has both halves: `claude --cloud` starts a cloud
+session, and `claude --teleport` pulls one back down. A running terminal can't
+move, so this would be a checkpoint, not a migration. At a turn boundary, push
+the job's branch and start a cloud session with a handover note. At home,
+teleport it back into the job's folder. Secrets, production reads, previews,
+MCP servers and Needs you all stay local. The alternative is an always-on
+machine: Tom's old laptop is spare and could stay at the office running the
+jobs (Claude Code supports self-hosted environments, via `--environment`). Tom
+parked both; tethering is good enough for now.
+
 ## Capacity (estimates, to measure on the 64GB laptop)
 
 - A job doing groundwork is mostly a waiting Claude session, about
