@@ -15,9 +15,11 @@ import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { useAgentsState } from '../state/AgentsContext'
 import { useLayout, useVisibleAgents } from '../state/LayoutContext'
 import { useNeedsYou } from '../state/NeedsYouContext'
+import { JobsLayout } from './JobsLayout'
 
 const STORAGE_COLLAPSED = 'explorer.collapsed'
 const STORAGE_AGENT = 'explorer.selectedAgent'
+const STORAGE_JOB = 'jobs.selected'
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -41,7 +43,7 @@ function readString(key: string): string | null {
 export function Workstation(): React.JSX.Element {
   const { reload } = useAgentsState()
   const agents = useVisibleAgents()
-  const { showRightColumn } = useLayout()
+  const { showRightColumn, isJobs } = useLayout()
   const gitStatus = useGitStatus()
   const { toggle: toggleMucka, restartVersion } = useMuckaSession()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -78,6 +80,27 @@ export function Workstation(): React.JSX.Element {
   }, [agents, explorerAgentId])
 
   const { queue, focusTerminal } = useNeedsYou()
+
+  const [jobPick, setJobPick] = useState<string | null>(() => readString(STORAGE_JOB))
+  // The job on screen: Tom's pick while it's still an agent, otherwise
+  // whoever needs him first, then the first agent that's running.
+  const currentJob = useMemo<AgentId | null>(
+    () =>
+      agents.find((a) => a.id === jobPick)?.id ??
+      queue[0]?.agentId ??
+      agents.find((a) => a.running)?.id ??
+      agents[0]?.id ??
+      null,
+    [agents, jobPick, queue]
+  )
+  const selectJob = useCallback((agentId: AgentId): void => {
+    setJobPick(agentId)
+    try {
+      localStorage.setItem(STORAGE_JOB, agentId)
+    } catch {
+      /* storage disabled */
+    }
+  }, [])
   const lastJumpRef = useRef<AgentId | null>(null)
 
   // ⌘J walks the queue. Answering an agent drops it out, so repeated
@@ -131,7 +154,13 @@ export function Workstation(): React.JSX.Element {
         style={{
           gridTemplateColumns: `${
             explorerCollapsed ? EXPLORER_WIDTH_COLLAPSED : EXPLORER_WIDTH_EXPANDED
-          } ${showRightColumn ? '2fr 1.1fr 1.2fr' : '3.2fr 1.1fr'}`,
+          } ${
+            isJobs
+              ? '0.95fr 1.35fr 2.2fr 1.1fr'
+              : showRightColumn
+                ? '2fr 1.1fr 1.2fr'
+                : '3.2fr 1.1fr'
+          }`,
           transition: 'grid-template-columns 180ms ease'
         }}
       >
@@ -139,14 +168,22 @@ export function Workstation(): React.JSX.Element {
           agents={agents}
           collapsed={explorerCollapsed}
           onToggle={() => setExplorerCollapsed((v) => !v)}
-          selectedAgentId={resolvedExplorerAgentId}
-          onSelectAgent={setExplorerAgentId}
+          // In Jobs the explorer shows the job on screen, and picking an
+          // agent there brings its job up.
+          selectedAgentId={isJobs ? currentJob : resolvedExplorerAgentId}
+          onSelectAgent={isJobs ? selectJob : setExplorerAgentId}
         />
-        <AgentGrid
-          agents={agents}
-          gitStatus={gitStatus}
-          restartVersion={restartVersion}
-        />
+        {isJobs ? (
+          <JobsLayout
+            agents={agents}
+            gitStatus={gitStatus}
+            restartVersion={restartVersion}
+            selected={currentJob}
+            onSelect={selectJob}
+          />
+        ) : (
+          <AgentGrid agents={agents} gitStatus={gitStatus} restartVersion={restartVersion} />
+        )}
         <MiddleColumn />
         {showRightColumn ? <RightColumn /> : null}
       </main>
