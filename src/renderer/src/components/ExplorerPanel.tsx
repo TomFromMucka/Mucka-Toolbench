@@ -88,35 +88,26 @@ export function ExplorerPanel({
 }
 
 function CollapsedRail({ onExpand }: { onExpand: () => void }): React.JSX.Element {
+  // The whole bar is the target: a 40px strip is easy to hit anywhere along
+  // its length, and fiddly if only a small icon at the top responds.
   return (
-    <aside
-      className="flex h-full min-h-0 flex-col items-center gap-2 py-2"
-      style={{ background: 'var(--charcoal)' }}
+    <button
+      type="button"
+      onClick={onExpand}
+      title="Show files"
+      aria-label="Show files"
+      className="flex h-full min-h-0 flex-col items-center gap-3 py-3 transition-colors hover:bg-van-white/10"
+      style={{ background: 'var(--charcoal)', color: 'var(--van-white)' }}
     >
-      <button
-        type="button"
-        onClick={onExpand}
-        title="Expand explorer"
-        aria-label="Expand explorer"
-        className="chamfer-sm grid size-8 place-items-center transition-colors hover:bg-van-white/10"
-        style={{
-          color: 'var(--van-white)',
-          background: 'rgba(234, 233, 232, 0.04)'
-        }}
+      <Icon icon={FolderTree} size={18} strokeWidth={2.25} />
+      <span
+        className="t-label-sm tracking-[0.16em]"
+        style={{ writingMode: 'vertical-rl', color: 'rgba(234, 233, 232, 0.7)' }}
       >
-        <Icon icon={FolderTree} size={18} strokeWidth={2.25} />
-      </button>
-      <button
-        type="button"
-        onClick={onExpand}
-        aria-label="Expand explorer"
-        title="Expand explorer"
-        className="grid size-6 place-items-center rounded-sm hover:bg-van-white/10"
-        style={{ color: 'rgba(234, 233, 232, 0.65)' }}
-      >
-        <Icon icon={ChevronRight} size={14} strokeWidth={2.25} />
-      </button>
-    </aside>
+        FILES
+      </span>
+      <Icon icon={ChevronRight} size={14} strokeWidth={2.25} className="mt-auto opacity-60" />
+    </button>
   )
 }
 

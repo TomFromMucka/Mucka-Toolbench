@@ -19,6 +19,9 @@ import { JobsLayout } from './JobsLayout'
 import { useJobs } from '../state/JobsContext'
 
 const STORAGE_COLLAPSED = 'explorer.collapsed'
+// Jobs keeps its own setting and starts folded: the board and terminal
+// need the width more, and the files are a click away.
+const STORAGE_COLLAPSED_JOBS = 'explorer.collapsed.jobs'
 const STORAGE_AGENT = 'explorer.selectedAgent'
 const STORAGE_JOB = 'jobs.selected'
 
@@ -48,9 +51,14 @@ export function Workstation(): React.JSX.Element {
   const gitStatus = useGitStatus()
   const { toggle: toggleMucka, restartVersion } = useMuckaSession()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [explorerCollapsed, setExplorerCollapsed] = useState<boolean>(() =>
+  const [gridExplorerCollapsed, setGridExplorerCollapsed] = useState<boolean>(() =>
     readBool(STORAGE_COLLAPSED, false)
   )
+  const [jobsExplorerCollapsed, setJobsExplorerCollapsed] = useState<boolean>(() =>
+    readBool(STORAGE_COLLAPSED_JOBS, true)
+  )
+  const explorerCollapsed = isJobs ? jobsExplorerCollapsed : gridExplorerCollapsed
+  const setExplorerCollapsed = isJobs ? setJobsExplorerCollapsed : setGridExplorerCollapsed
   const [explorerAgentId, setExplorerAgentId] = useState<AgentId | null>(() => {
     const stored = readString(STORAGE_AGENT)
     return stored ? (stored as AgentId) : null
@@ -58,11 +66,12 @@ export function Workstation(): React.JSX.Element {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_COLLAPSED, explorerCollapsed ? '1' : '0')
+      localStorage.setItem(STORAGE_COLLAPSED, gridExplorerCollapsed ? '1' : '0')
+      localStorage.setItem(STORAGE_COLLAPSED_JOBS, jobsExplorerCollapsed ? '1' : '0')
     } catch {
       /* storage disabled */
     }
-  }, [explorerCollapsed])
+  }, [gridExplorerCollapsed, jobsExplorerCollapsed])
 
   useEffect(() => {
     if (!explorerAgentId) return
