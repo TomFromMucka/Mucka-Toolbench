@@ -171,13 +171,25 @@ export interface Job {
    * setting-up: worktree being created and filled.
    * ready: terminal can start.
    * failed: setup stopped; `detail` says why.
+   * finished: its folder has gone (`/coach job-done` removes it); the card
+   * stays until Tom closes it, so he can read Claude's last report.
    */
-  state: 'setting-up' | 'ready' | 'failed'
+  state: 'setting-up' | 'ready' | 'failed' | 'finished'
   /** One line on what setup is doing, why it failed, or a caveat once ready. */
   detail: string | null
   /** No checkout had matching dependencies, so the terminal installs first. */
   needsInstall: boolean
+  /** The PR from the job's branch, once there is one. */
+  pr: JobPr | null
   createdAt: number
+}
+
+export interface JobPr {
+  number: number
+  url: string
+  state: PullRequestState
+  /** GitHub will merge it by itself once the checks pass. */
+  autoMerge: boolean
 }
 
 /** Main → renderer: a chunk of terminal output. */
@@ -660,6 +672,14 @@ export interface MuckaApi {
   retryJob(id: JobId): Promise<void>
   /** Take a failed job off the board. Refused once it has a folder. */
   discardJob(id: JobId): Promise<void>
+  /**
+   * Throw a job away: asks Tom first in a native dialog that says what
+   * would be lost, then closes its PR and deletes its folder and branch.
+   * Resolves false if he said no.
+   */
+  dismissJob(id: JobId): Promise<boolean>
+  /** Take a finished job's card off the board. */
+  closeJob(id: JobId): Promise<void>
   onJobsUpdate(handler: (jobs: Job[]) => void): () => void
   onJobStatus(handler: (event: JobStatusEvent) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>

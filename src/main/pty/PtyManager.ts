@@ -93,6 +93,12 @@ export class PtyManager {
   }
 
   spawn(req: PtySpawnRequest): void {
+    // A finished job's folder is gone, so there's no shell to ask for, but
+    // its Claude may still be on screen with the report Tom wants to read.
+    if (req.jobId !== undefined && this.ptys.has(req.terminalId) && jobShell(req.jobId) === null) {
+      this.resize({ terminalId: req.terminalId, cols: req.cols, rows: req.rows })
+      return
+    }
     const spec = specFor(req)
     const signature = signatureFor(spec)
     const existing = this.ptys.get(req.terminalId)

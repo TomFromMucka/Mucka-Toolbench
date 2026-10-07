@@ -291,6 +291,8 @@ function createWindow(): void {
     (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false,
     undefined,
     (event) => {
+      // A job that's just stopped may have opened or merged its PR.
+      if (event.status === 'idle') void jobManager?.refreshPrs(event.jobId)
       if (mainWindow.webContents.isDestroyed()) return
       mainWindow.webContents.send('job:status', event)
     }
@@ -307,9 +309,24 @@ function createWindow(): void {
     (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
   )
   pendingWatcher.start()
-  jobManager = new JobManager(getAgentConfigs, (jobs) => {
-    if (mainWindow.webContents.isDestroyed()) return
-    mainWindow.webContents.send('jobs:update', jobs)
+  jobManager = new JobManager({
+    listAgents: getAgentConfigs,
+    emit: (jobs) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('jobs:update', jobs)
+    },
+    killTerminal: (terminalId) => ptyManager?.kill(terminalId),
+    confirm: async (message, detail, confirmLabel) => {
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        message,
+        detail,
+        buttons: ['Cancel', confirmLabel],
+        defaultId: 0,
+        cancelId: 0
+      })
+      return response === 1
+    }
   })
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
@@ -422,6 +439,8 @@ function registerIpc(): void {
   })
   guardedHandle('jobs:retry', (_event, id: string) => jobManager?.retry(id))
   guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))
+  guardedHandle('jobs:dismiss', (_event, id: string) => jobManager?.dismiss(id) ?? false)
+  guardedHandle('jobs:close', (_event, id: string) => jobManager?.close(id))
 
   guardedHandle('pending:list', () => pendingWatcher?.list() ?? [])
   guardedHandle('pending:answer', (_event, answer: PendingAnswer): PendingAnswerResult =>

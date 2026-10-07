@@ -139,6 +139,8 @@ const muckaApi: MuckaApi = {
   createJob: () => ipcRenderer.invoke('jobs:create') as Promise<Job>,
   retryJob: (id: string) => ipcRenderer.invoke('jobs:retry', id) as Promise<void>,
   discardJob: (id: string) => ipcRenderer.invoke('jobs:discard', id) as Promise<void>,
+  dismissJob: (id: string) => ipcRenderer.invoke('jobs:dismiss', id) as Promise<boolean>,
+  closeJob: (id: string) => ipcRenderer.invoke('jobs:close', id) as Promise<void>,
   onJobsUpdate: (handler: (jobs: Job[]) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, jobs: Job[]) => handler(jobs)
     ipcRenderer.on('jobs:update', listener)

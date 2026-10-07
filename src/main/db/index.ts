@@ -203,4 +203,10 @@ function migrate(d: DatabaseType): void {
   if (!jobCols.has('needs_install')) {
     d.exec(`ALTER TABLE jobs ADD COLUMN needs_install INTEGER NOT NULL DEFAULT 0`)
   }
+  if (!jobCols.has('pr_number')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_number INTEGER`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_url TEXT`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_state TEXT`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN pr_auto_merge INTEGER NOT NULL DEFAULT 0`)
+  }
 }

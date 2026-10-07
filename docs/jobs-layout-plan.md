@@ -232,14 +232,23 @@ Built (2026-10-07):
   M5 Pro: the clone takes ~13s and next to no disk; each job gets a clean
   folder and its own Claude history; Claude's memory is per repo, so
   nothing is lost; there's no six-job ceiling.
+- **Jobs report in.** Job terminals carry `$MUCKA_JOB`, so a job's status
+  lanes its card and its questions reach Needs you. The card is titled
+  from Tom's first message, and a restarted terminal resumes its own
+  conversation with `claude --continue`.
+- **Sign-off bar** under each job's terminal. *Ship* tells the job's Claude
+  to commit, open the PR and turn on auto-merge (Tom's call: auto-merge,
+  not a PR he merges by hand). *Amend* puts the cursor in the terminal.
+  Once the PR merges, *Finish* types `/coach job-done`, a new coach command
+  (Mucka Pro PR #3305): finish's checks, then it removes the job's folder
+  and branch, only once the PR has merged. Toolbench sees the folder go,
+  marks the card finished, and keeps the terminal so Tom can read the
+  report until he closes the card. *Dismiss* throws an unmerged job away
+  after a native dialog that names what would be lost. Each job's PR is
+  polled every minute, and again whenever its Claude stops.
 
 Still to build:
-- A job's status and questions reaching the board and Needs you (job
-  terminals carry `$MUCKA_JOB`; the hooks and watchers need to follow it).
-- Titling a job from Tom's first message.
 - Pre-approving Claude's "trust this folder?" for job folders.
-- Sign-off: Ship / Amend / Dismiss, then removing the job's worktree and
-  branch. Removing a worktree deletes a folder, so it asks Tom each time.
 - **Job metrics.** Each job records what it cost (Claude Code reports it to
   the status line), whether it ended in a merged PR, and whether that PR
   was later reverted. The article's measure is "sessions that end in a

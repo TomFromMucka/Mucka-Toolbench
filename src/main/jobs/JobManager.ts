@@ -11,7 +11,8 @@ import {
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import type { AgentConfig, Job, JobId } from '@shared/types'
+import type { AgentConfig, Job, JobId, JobPr } from '@shared/types'
+import { closePullRequest, latestPullRequestForBranch, readGitHubOrigin } from '../github/GitHub'
 import { closeJob, getJob, insertJob, listOpenJobs, terminalIdForJob, updateJob } from '../db/jobs'
 
 /** Claude Code files a folder's conversations under its path with every other character as `-`. */
@@ -119,14 +120,32 @@ function titleFrom(prompt: string): string | null {
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1).trimEnd()}…` : line
 }
 
+/** How often to look for removed folders, and (every fourth pass) PR changes. */
+const SWEEP_MS = 15_000
+const PR_EVERY = 4
+
+export interface JobManagerDeps {
+  listAgents: () => AgentConfig[]
+  emit: (jobs: Job[]) => void
+  killTerminal: (terminalId: string) => void
+  /** Ask Tom in a native dialog. Resolves true only on the confirm button. */
+  confirm: (message: string, detail: string, confirmLabel: string) => Promise<boolean>
+}
+
 export class JobManager {
   private readonly listAgents: () => AgentConfig[]
   private readonly emit: (jobs: Job[]) => void
+  private readonly killTerminal: (terminalId: string) => void
+  private readonly confirm: JobManagerDeps['confirm']
   private promptWatcher: FSWatcher | null = null
+  private sweepTimer: NodeJS.Timeout | null = null
+  private sweeps = 0
 
-  constructor(listAgents: () => AgentConfig[], emit: (jobs: Job[]) => void) {
-    this.listAgents = listAgents
-    this.emit = emit
+  constructor(deps: JobManagerDeps) {
+    this.listAgents = deps.listAgents
+    this.emit = deps.emit
+    this.killTerminal = deps.killTerminal
+    this.confirm = deps.confirm
     try {
       mkdirSync(PROMPTS_DIR, { recursive: true })
       this.promptWatcher = watch(PROMPTS_DIR, () => this.titleFromPrompts())
@@ -134,6 +153,64 @@ export class JobManager {
       this.promptWatcher = null
     }
     this.titleFromPrompts()
+    this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_MS)
+    void this.sweep()
+  }
+
+  private async sweep(): Promise<void> {
+    this.noticeRemovedFolders()
+    if (this.sweeps++ % PR_EVERY === 0) await this.refreshPrs()
+  }
+
+  /**
+   * `/coach job-done` removes the job's folder and branch itself, from
+   * inside the job's own Claude. That's the signal the job is done: the
+   * card says so and keeps the terminal, so Tom can read the report.
+   */
+  private noticeRemovedFolders(): void {
+    let changed = false
+    for (const job of listOpenJobs()) {
+      if (job.state !== 'ready' || existsSync(job.worktreePath)) continue
+      updateJob(job.id, { state: 'finished', detail: 'Finished. Folder and branch removed.' })
+      changed = true
+    }
+    if (changed) this.push()
+  }
+
+  /** Look up each job's PR. Quietly skips when GitHub isn't set up. */
+  async refreshPrs(only?: JobId): Promise<void> {
+    const jobs = listOpenJobs().filter(
+      (j) => j.state === 'ready' && (only === undefined || j.id === only)
+    )
+    if (jobs.length === 0) return
+    let repo: ReturnType<typeof readGitHubOrigin>
+    try {
+      repo = readGitHubOrigin(await this.repoRoot())
+    } catch {
+      return
+    }
+    if (!repo) return
+    let changed = false
+    for (const job of jobs) {
+      let pr: JobPr | null
+      try {
+        const found = await latestPullRequestForBranch(repo, job.branch)
+        pr = found
+          ? {
+              number: found.pr.number,
+              url: found.pr.url,
+              state: found.pr.state,
+              autoMerge: found.autoMerge
+            }
+          : null
+      } catch {
+        return
+      }
+      if (JSON.stringify(pr) === JSON.stringify(job.pr)) continue
+      updateJob(job.id, { pr })
+      changed = true
+    }
+    if (changed) this.push()
   }
 
   /**
@@ -173,6 +250,8 @@ export class JobManager {
   dispose(): void {
     this.promptWatcher?.close()
     this.promptWatcher = null
+    if (this.sweepTimer) clearInterval(this.sweepTimer)
+    this.sweepTimer = null
   }
 
   list(): Job[] {
@@ -224,6 +303,7 @@ export class JobManager {
       state: 'setting-up',
       detail: 'Fetching the latest main…',
       needsInstall: false,
+      pr: null,
       createdAt: Date.now()
     }
     insertJob(job)
@@ -316,6 +396,72 @@ export class JobManager {
   discard(id: JobId): void {
     const job = getJob(id)
     if (!job || job.state !== 'failed' || existsSync(job.worktreePath)) return
+    closeJob(id)
+    this.push()
+  }
+
+  /**
+   * Throw a job away. The work may never have reached main, so this always
+   * asks first, in a dialog that names what would be lost. On yes: stop
+   * its terminal, close its PR (the branch stays on GitHub), then delete
+   * its folder and local branch.
+   */
+  async dismiss(id: JobId): Promise<boolean> {
+    const job = getJob(id)
+    if (!job || job.state !== 'ready') return false
+    const root = await this.repoRoot()
+    const losses: string[] = []
+    if (existsSync(job.worktreePath)) {
+      const dirty = (await git(job.worktreePath, ['status', '--porcelain']).catch(() => ''))
+        .split('\n')
+        .filter((l) => l.trim().length > 0).length
+      if (dirty > 0) losses.push(`${dirty} file${dirty === 1 ? '' : 's'} with uncommitted changes`)
+      const unpushed = await git(job.worktreePath, ['rev-list', '--count', '@{upstream}..HEAD'])
+        .catch(() => git(job.worktreePath, ['rev-list', '--count', 'origin/main..HEAD']))
+        .then((n) => Number(n))
+        .catch(() => 0)
+      if (unpushed > 0) losses.push(`${unpushed} commit${unpushed === 1 ? '' : 's'} not on GitHub`)
+    }
+    const openPr = job.pr && (job.pr.state === 'open' || job.pr.state === 'draft') ? job.pr : null
+    const detail = [
+      `Deletes ${job.worktreePath} and the branch ${job.branch}.`,
+      openPr ? `Closes PR #${openPr.number} without merging. Its branch stays on GitHub.` : null,
+      losses.length > 0
+        ? `Lost for good: ${losses.join(' and ')}.`
+        : "Nothing is lost that isn't already on GitHub."
+    ]
+      .filter((l): l is string => l !== null)
+      .join('\n\n')
+    const yes = await this.confirm(`Throw away "${job.title}"?`, detail, 'Throw it away')
+    if (!yes) return false
+
+    this.killTerminal(job.terminalId)
+    const problems: string[] = []
+    if (openPr) {
+      const repo = readGitHubOrigin(root)
+      if (repo)
+        await closePullRequest(repo, openPr.number).catch((e: unknown) => problems.push(String(e)))
+    }
+    if (existsSync(job.worktreePath)) {
+      await git(root, ['worktree', 'remove', '--force', job.worktreePath]).catch((e: unknown) =>
+        problems.push(e instanceof Error ? e.message : String(e))
+      )
+    }
+    await git(root, ['branch', '-D', job.branch]).catch(() => undefined)
+    if (problems.length > 0) {
+      updateJob(id, { detail: `Dismiss stopped part-way: ${problems[0]}` })
+    } else {
+      closeJob(id)
+    }
+    this.push()
+    return problems.length === 0
+  }
+
+  /** Take a finished job's card off the board. */
+  close(id: JobId): void {
+    const job = getJob(id)
+    if (!job || job.state !== 'finished') return
+    this.killTerminal(job.terminalId)
     closeJob(id)
     this.push()
   }

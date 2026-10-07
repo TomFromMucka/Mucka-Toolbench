@@ -12,6 +12,7 @@ import { useAgentStatuses } from '../state/AgentStatusContext'
 import { useGitHubState } from '../state/GitHubContext'
 import { useJobs } from '../state/JobsContext'
 import { useFocusRequests, useNeedsYou } from '../state/NeedsYouContext'
+import { submitPromptAndEnter } from '../mucka/dispatch'
 
 /**
  * The Jobs layout's middle three columns: who needs Tom, a board of the
@@ -248,7 +249,11 @@ export function JobsLayout({
             )}
             aria-hidden={job.id !== current}
           >
-            <JobTerminal job={job} />
+            <JobTerminal
+              job={job}
+              blocked={placeOf(job.id) !== null}
+              working={WORKING.includes(jobStatusFor(job.id))}
+            />
           </div>
         ))}
         {agents.map((cfg) => {
@@ -359,9 +364,20 @@ function JobCard({
   )
 }
 
+function prLine(job: Job): string | null {
+  const pr = job.pr
+  if (!pr) return null
+  if (pr.state === 'merged') return `PR #${pr.number} merged · ready to finish`
+  if (pr.state === 'closed') return `PR #${pr.number} closed`
+  return `PR #${pr.number} · ${pr.autoMerge ? 'merges when checks pass' : 'open, auto-merge off'}`
+}
+
 function jobDetail(job: Job): string {
   if (job.state === 'failed') return job.detail ?? 'Setup failed.'
   if (job.state === 'setting-up') return job.detail ?? 'Setting up…'
+  if (job.state === 'finished') return job.detail ?? 'Finished.'
+  const pr = prLine(job)
+  if (pr) return pr
   if (job.detail) return job.detail
   if (job.needsInstall) return 'Installing dependencies first'
   return job.branch
@@ -421,17 +437,44 @@ function NewJobCard({
   )
 }
 
-/** A job's own terminal, with Claude started in its worktree. */
-function JobTerminal({ job }: { job: Job }): React.JSX.Element {
+/**
+ * Ship and Finish are instructions to the job's own Claude, typed into its
+ * terminal the way Tom would. The work happens where he can watch it, and
+ * the skill's own checks apply. `/coach job-done` is in Mucka Pro's
+ * worktree-coach skill.
+ */
+const SHIP_PROMPT =
+  'Ship this job. Commit anything outstanding with a clear message, then push and open a PR ' +
+  "with /coach pr if there isn't one yet. Then turn on auto-merge with " +
+  '`gh pr merge --squash --auto --delete-branch`, and reply with the PR link.'
+const FINISH_PROMPT = '/coach job-done'
+
+/** A job's own terminal, with Claude started in its worktree, and its sign-off bar. */
+function JobTerminal({
+  job,
+  blocked,
+  working
+}: {
+  job: Job
+  /** Its Claude is asking something, so typing would answer the question. */
+  blocked: boolean
+  working: boolean
+}): React.JSX.Element {
   const [busy, setBusy] = useState(false)
-  const act = (run: (id: string) => Promise<void>): void => {
+  const act = (run: (id: string) => Promise<unknown>): void => {
     setBusy(true)
     void run(job.id).finally(() => setBusy(false))
   }
+  const live = job.state === 'ready' || job.state === 'finished'
   return (
     <Clipboard title={job.title} subtitle={job.branch} bodyClassName="bg-surface-2 min-h-0">
-      {job.state === 'ready' ? (
-        <AgentTerminal terminalId={job.terminalId} jobId={job.id} />
+      {live ? (
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="min-h-0 flex-1">
+            <AgentTerminal terminalId={job.terminalId} jobId={job.id} />
+          </div>
+          <SignOffBar job={job} blocked={blocked} working={working} />
+        </div>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
           <span
@@ -467,5 +510,131 @@ function JobTerminal({ job }: { job: Job }): React.JSX.Element {
         </div>
       )}
     </Clipboard>
+  )
+}
+
+function SignOffBar({
+  job,
+  blocked,
+  working
+}: {
+  job: Job
+  blocked: boolean
+  working: boolean
+}): React.JSX.Element {
+  const { focusTerminal } = useNeedsYou()
+  const [busy, setBusy] = useState(false)
+
+  if (job.state === 'finished') {
+    return (
+      <Bar note={job.detail ?? 'Finished.'}>
+        <Button
+          variant="primary"
+          size="sm"
+          trailingIcon={null}
+          onClick={() => void window.mucka.closeJob(job.id)}
+        >
+          Close card
+        </Button>
+      </Bar>
+    )
+  }
+
+  const notNow = blocked
+    ? 'Answer its question first'
+    : working
+      ? 'Claude is working. Wait for it to stop.'
+      : null
+  const tell = (prompt: string): void => {
+    focusTerminal(job.terminalId)
+    void submitPromptAndEnter(job.terminalId, prompt)
+  }
+  const dismiss = (): void => {
+    setBusy(true)
+    void window.mucka.dismissJob(job.id).finally(() => setBusy(false))
+  }
+  const pr = job.pr
+  const merged = pr?.state === 'merged'
+  const inFlight = pr !== null && (pr.state === 'open' || pr.state === 'draft')
+
+  return (
+    <Bar
+      note={
+        pr ? (
+          <a href={pr.url} target="_blank" rel="noreferrer" className="underline">
+            {prLine(job)}
+          </a>
+        ) : (
+          (notNow ?? 'Ship when it’s ready: PR, then merged once checks pass.')
+        )
+      }
+    >
+      {merged ? (
+        <Button
+          variant="primary"
+          size="sm"
+          trailingIcon={null}
+          disabled={notNow !== null}
+          title={
+            notNow ?? 'Checks it landed, stops its dev server, then removes the folder and branch'
+          }
+          onClick={() => tell(FINISH_PROMPT)}
+        >
+          Finish
+        </Button>
+      ) : (
+        <>
+          {!inFlight || !pr.autoMerge ? (
+            <Button
+              variant="primary"
+              size="sm"
+              trailingIcon={null}
+              disabled={notNow !== null}
+              title={notNow ?? 'Commit, push, open the PR and turn on auto-merge'}
+              onClick={() => tell(SHIP_PROMPT)}
+            >
+              Ship
+            </Button>
+          ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            trailingIcon={null}
+            title="Put the cursor in the terminal to tell Claude what to change"
+            onClick={() => focusTerminal(job.terminalId)}
+          >
+            Amend
+          </Button>
+          <Button
+            variant="tertiary"
+            size="sm"
+            trailingIcon={null}
+            disabled={busy}
+            title="Close its PR and delete its folder and branch. Asks first."
+            onClick={dismiss}
+          >
+            Dismiss
+          </Button>
+        </>
+      )}
+    </Bar>
+  )
+}
+
+function Bar({
+  note,
+  children
+}: {
+  note: React.ReactNode
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div
+      className="flex shrink-0 items-center gap-2 px-3 py-2"
+      style={{ borderTop: '1px solid var(--border)' }}
+    >
+      <span className="t-body-sm min-w-0 flex-1 truncate text-dirty-grey">{note}</span>
+      {children}
+    </div>
   )
 }
