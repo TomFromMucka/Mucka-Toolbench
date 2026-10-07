@@ -49,6 +49,24 @@ or "Tom, eyes here".
   for that agent, or Mucka's attention reason if she flagged it.
 - Per-agent git badges (branch · ahead/behind · dirty/untracked).
 
+**Jobs layout (third choice under Settings → Agents → *Layout*).**
+- Five columns: Files (folded until clicked), Needs you, Job board,
+  the selected job's terminal, and the six-up right column. The 4 and 6
+  layouts are unchanged.
+- **+ New job** (`⌘N`) makes a fresh worktree in `<repo>-jobs/` off the
+  latest `origin/main` (env files copied, `node_modules` cloned
+  copy-on-write) and opens Claude in it. The card takes its title from
+  Tom's first message and its lane from what Claude reports.
+- Sign-off bar under each job's terminal: *Ship* (PR with auto-merge),
+  *Amend*, *Finish* once merged (`/coach job-done` removes the folder and
+  branch), *Dismiss* (asks first, says what would be lost).
+
+**Needs you (all layouts).** One queue of agents' and jobs' permission
+prompts and questions, blocked first then oldest. Answered with buttons
+(Yes, the "don't ask again" rule, No, or a question's options). A banner
+tag lists the queue, `⌘J` jumps to the next one, and only the first gets
+the orange glow.
+
 **Mucka middle column.**
 - Voice mode (ElevenLabs Conv AI) — `⌘M` or banner mic button.
   Connection acknowledged by a two-tone chime; no spoken welcome.
@@ -151,6 +169,18 @@ the TUI redraws in place, so the stream holds interleaved fragments
 times across four real scrollback buffers — which is why the status pill
 sat on `idle` forever and Mucka's witnessed reply loop never fired.
 
+**Needs you (`src/main/claude/PendingWatcher.ts` +
+`scripts/claude-hooks/mucka-pending.sh`).** A PermissionRequest hook,
+installed with `npm run hooks:install -- --apply`, writes each pending
+prompt to `~/.claude/mucka-pending/` and waits for an answer file.
+The terminal's own dialog stays live, so whichever answer comes first
+wins. Answers never go in as keystrokes.
+
+**Jobs (`src/main/jobs/JobManager.ts`).** Rows in the `jobs` table.
+Creates and fills each job's worktree, titles it from the hook's record
+of Tom's prompts (`~/.claude/mucka-jobs/`), polls its PR every minute and
+whenever its Claude stops, and marks it finished when its folder goes.
+
 **Database (`src/main/db`).** better-sqlite3, migrated idempotently
 on boot. Tables: `agents`, `kv` (notes), `events` (job sheet, capped
 500), `chat_messages` (capped 500, holds text + voice transcripts
@@ -228,6 +258,11 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-10-07** — Jobs layout and the Needs you queue: a third layout
+  where each job is a fresh worktree with its own Claude terminal and a
+  sign-off bar, plus answer buttons for every agent's and job's prompts
+  and questions, in all layouts.
 
 - **2026-09-07** — Electron 39 → 44.1.1, which clears the last
   `npm audit` advisory (extract-zip in Electron's own installer).
