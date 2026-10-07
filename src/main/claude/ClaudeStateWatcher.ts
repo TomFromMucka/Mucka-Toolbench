@@ -1,7 +1,14 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, watch, type FSWatcher } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AgentConfig, AgentId, AgentStatus, AgentStatusEvent } from '@shared/types'
+import type {
+  AgentConfig,
+  AgentId,
+  AgentStatus,
+  AgentStatusEvent,
+  JobId,
+  JobStatusEvent
+} from '@shared/types'
 
 /**
  * Reads what Claude Code reports about itself.
@@ -107,6 +114,8 @@ export class ClaudeStateWatcher {
   private readonly listAgents: () => AgentConfig[]
   private readonly isLiveTerminal: (terminalId: string) => boolean
   private readonly stateDir: string
+  private readonly emitJob: (event: JobStatusEvent) => void
+  private readonly lastJob = new Map<JobId, string>()
   private watcher: FSWatcher | null = null
   private sweep: NodeJS.Timeout | null = null
   private readonly last = new Map<AgentId, string>()
@@ -118,9 +127,11 @@ export class ClaudeStateWatcher {
     emit: (event: AgentStatusEvent) => void,
     listAgents: () => AgentConfig[],
     isLiveTerminal: (terminalId: string) => boolean = () => true,
-    stateDir: string = DEFAULT_STATE_DIR
+    stateDir: string = DEFAULT_STATE_DIR,
+    emitJob: (event: JobStatusEvent) => void = () => {}
   ) {
     this.emit = emit
+    this.emitJob = emitJob
     this.listAgents = listAgents
     this.isLiveTerminal = isLiveTerminal
     this.stateDir = stateDir
@@ -174,6 +185,13 @@ export class ClaudeStateWatcher {
       // one with a made-up id can't claim an agent either.
       if (state.terminal && !this.isLiveTerminal(state.terminal)) continue
 
+      // A job's terminal is `job:<id>` and its Claude has no agent. Its
+      // folder isn't under any agent's worktree, so match on the terminal.
+      if (state.terminal?.startsWith('job:')) {
+        this.pushJob(state.terminal.slice('job:'.length), state, now)
+        continue
+      }
+
       // $MUCKA_AGENT is an exact binding from the cockpit's own PTY env;
       // fall back to matching the path only when it's absent.
       const claimed = agents.find((a) => a.id === state.agent)?.id ?? null
@@ -194,9 +212,7 @@ export class ClaudeStateWatcher {
 
       const stale = now - state.ts > STALE_MS
       const status: AgentStatus =
-        stale && state.activity === 'working'
-          ? 'idle'
-          : (ACTIVITY_STATUS[state.activity] ?? 'idle')
+        stale && state.activity === 'working' ? 'idle' : (ACTIVITY_STATUS[state.activity] ?? 'idle')
 
       this.push({
         agentId,
@@ -275,6 +291,22 @@ export class ClaudeStateWatcher {
     }
   }
 
+  private pushJob(jobId: JobId, state: ClaudeState, now: number): void {
+    const stale = now - state.ts > STALE_MS
+    const status: AgentStatus =
+      stale && state.activity === 'working' ? 'idle' : (ACTIVITY_STATUS[state.activity] ?? 'idle')
+    const event: JobStatusEvent = {
+      jobId,
+      status,
+      contextUsedPercent: state.ctxUsed,
+      model: state.model
+    }
+    const key = `${status}|${state.ctxUsed ?? ''}|${state.model ?? ''}`
+    if (this.lastJob.get(jobId) === key) return
+    this.lastJob.set(jobId, key)
+    this.emitJob(event)
+  }
+
   private push(event: AgentStatusEvent): void {
     const key = `${event.status}|${event.contextUsedPercent ?? ''}|${event.model ?? ''}`
     if (this.last.get(event.agentId) === key) return
@@ -288,6 +320,7 @@ export class ClaudeStateWatcher {
     if (this.sweep) clearInterval(this.sweep)
     this.sweep = null
     this.last.clear()
+    this.lastJob.clear()
     this.held.clear()
     this.markers.clear()
     for (const w of this.waiters) {

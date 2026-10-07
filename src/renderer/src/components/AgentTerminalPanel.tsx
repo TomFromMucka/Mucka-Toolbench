@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { FolderOpen, Power } from 'lucide-react'
 import type { AgentConfig, TerminalId } from '@shared/types'
 import { useAgentsState } from '../state/AgentsContext'
+import { useFocusRequests } from '../state/NeedsYouContext'
 import { AgentTerminal } from './AgentTerminal'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
@@ -159,6 +160,14 @@ function RunningAgentPanel({
     { terminalId: agent.id, label: primaryLabel(agent), isPreviewSource: false }
   ])
   const [activeId, setActiveId] = useState<TerminalId>(agent.id)
+  useFocusRequests(
+    useCallback(
+      (terminalId: TerminalId) => {
+        if (tabs.some((t) => t.terminalId === terminalId)) setActiveId(terminalId)
+      },
+      [tabs]
+    )
+  )
   const counterRef = useRef(1)
   const detectionBufferRef = useRef('')
   const lastPushedUrlRef = useRef<string | null>(null)

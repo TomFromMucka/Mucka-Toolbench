@@ -144,11 +144,52 @@ export interface AgentConfig {
  * configured cwd. `agentId` is only used to look up the cwd/command at
  * spawn time; subsequent IPC is keyed by `terminalId`.
  */
-export interface PtySpawnRequest {
+/** A terminal belongs to exactly one agent or one job. */
+export type PtySpawnRequest = {
   terminalId: TerminalId
-  agentId: AgentId
   cols: number
   rows: number
+} & ({ agentId: AgentId; jobId?: never } | { jobId: JobId; agentId?: never })
+
+/* ─── Jobs: work with its own worktree, not a seat ───────────────────── */
+
+export type JobId = string
+
+/**
+ * A piece of work with its own fresh worktree and its own Claude terminal.
+ * Created with "+ New job" in the Jobs layout; see docs/jobs-layout-plan.md.
+ */
+export interface Job {
+  id: JobId
+  /** What the job is. "New job" until Tom's first message names it. */
+  title: string
+  branch: string
+  worktreePath: string
+  /** The job's Claude terminal. */
+  terminalId: TerminalId
+  /**
+   * setting-up: worktree being created and filled.
+   * ready: terminal can start.
+   * failed: setup stopped; `detail` says why.
+   * finished: its folder has gone (`/coach job-done` removes it); the card
+   * stays until Tom closes it, so he can read Claude's last report.
+   */
+  state: 'setting-up' | 'ready' | 'failed' | 'finished'
+  /** One line on what setup is doing, why it failed, or a caveat once ready. */
+  detail: string | null
+  /** No checkout had matching dependencies, so the terminal installs first. */
+  needsInstall: boolean
+  /** The PR from the job's branch, once there is one. */
+  pr: JobPr | null
+  createdAt: number
+}
+
+export interface JobPr {
+  number: number
+  url: string
+  state: PullRequestState
+  /** GitHub will merge it by itself once the checks pass. */
+  autoMerge: boolean
 }
 
 /** Main → renderer: a chunk of terminal output. */
@@ -245,6 +286,76 @@ export interface AgentStatusEvent {
    */
   model?: string | null
 }
+
+/** Main → renderer: what a job's Claude reports about itself. */
+export interface JobStatusEvent {
+  jobId: JobId
+  status: AgentStatus
+  contextUsedPercent: number | null
+  model: string | null
+}
+
+/* ─── Needs you: what a cockpit-launched Claude is waiting on ────────── */
+
+export interface PendingQuestionOption {
+  label: string
+  description: string | null
+}
+
+export interface PendingQuestion {
+  question: string
+  header: string | null
+  options: PendingQuestionOption[]
+  multiSelect: boolean
+}
+
+/**
+ * One Claude blocked on Tom, as reported by the PermissionRequest hook
+ * (`scripts/claude-hooks/mucka-pending.sh`). Keyed by terminal, not agent:
+ * an agent's split tabs each run their own Claude.
+ */
+export interface PendingItem {
+  id: string
+  /** Exactly one of agentId and jobId is set. */
+  agentId: AgentId | null
+  jobId: JobId | null
+  terminalId: TerminalId
+  kind: 'permission' | 'question'
+  tool: string
+  /** What Claude wants to do, in one line: the command, the file, the URL. */
+  summary: string
+  /**
+   * The "Yes, and don't ask again" option, when Claude offered one, worded
+   * from what it would allow. Null when Claude offered nothing to remember.
+   */
+  alwaysLabel: string | null
+  /** Empty for a permission prompt. */
+  questions: PendingQuestion[]
+  /** Epoch ms when Claude started waiting. */
+  since: number
+}
+
+export type PendingAnswer =
+  | {
+      id: string
+      terminalId: TerminalId
+      kind: 'permission'
+      behavior: 'allow' | 'deny'
+      always: boolean
+    }
+  | {
+      id: string
+      terminalId: TerminalId
+      kind: 'question'
+      /** Question text → chosen option label. */
+      answers: Record<string, string>
+    }
+
+/**
+ * `stale` means Claude stopped waiting before the answer landed, usually
+ * because Tom answered in the terminal first. Nothing was sent.
+ */
+export type PendingAnswerResult = { ok: true } | { ok: false; reason: 'stale' | 'invalid' }
 
 /* ─── Mucka PM agent ─────────────────────────────────────────────────── */
 
@@ -545,6 +656,32 @@ export interface MuckaApi {
   refreshGit(agentId: AgentId): Promise<GitStatus>
   onGitStatus(handler: (event: GitStatusEvent) => void): () => void
   onAgentStatus(handler: (event: AgentStatusEvent) => void): () => void
+  /** Everything a cockpit-launched Claude is currently waiting on Tom for. */
+  listPending(): Promise<PendingItem[]>
+  onPendingUpdate(handler: (items: PendingItem[]) => void): () => void
+  answerPending(answer: PendingAnswer): Promise<PendingAnswerResult>
+  /** Open jobs, oldest first. */
+  listJobs(): Promise<Job[]>
+  /**
+   * Start a job: a fresh worktree off the latest main and its own Claude
+   * terminal. Resolves at once in `setting-up`; progress arrives through
+   * `onJobsUpdate`.
+   */
+  createJob(): Promise<Job>
+  /** Run a failed job's setup again. */
+  retryJob(id: JobId): Promise<void>
+  /** Take a failed job off the board. Refused once it has a folder. */
+  discardJob(id: JobId): Promise<void>
+  /**
+   * Throw a job away: asks Tom first in a native dialog that says what
+   * would be lost, then closes its PR and deletes its folder and branch.
+   * Resolves false if he said no.
+   */
+  dismissJob(id: JobId): Promise<boolean>
+  /** Take a finished job's card off the board. */
+  closeJob(id: JobId): Promise<void>
+  onJobsUpdate(handler: (jobs: Job[]) => void): () => void
+  onJobStatus(handler: (event: JobStatusEvent) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>
 
   /** Read-only worktree access for Mucka — paths are relative to the agent's worktree and can't escape it. */

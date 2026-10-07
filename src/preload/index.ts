@@ -3,6 +3,11 @@ import type {
   AgentConfig,
   AgentId,
   AgentStatusEvent,
+  Job,
+  JobStatusEvent,
+  PendingAnswer,
+  PendingAnswerResult,
+  PendingItem,
   AgentUpdate,
   CockpitDocPayload,
   Memory,
@@ -119,6 +124,32 @@ const muckaApi: MuckaApi = {
       handler(payload)
     ipcRenderer.on('agent:status', listener)
     return () => ipcRenderer.off('agent:status', listener)
+  },
+
+  listPending: () => ipcRenderer.invoke('pending:list') as Promise<PendingItem[]>,
+  onPendingUpdate: (handler: (items: PendingItem[]) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, items: PendingItem[]) => handler(items)
+    ipcRenderer.on('pending:update', listener)
+    return () => ipcRenderer.off('pending:update', listener)
+  },
+  answerPending: (answer: PendingAnswer) =>
+    ipcRenderer.invoke('pending:answer', answer) as Promise<PendingAnswerResult>,
+
+  listJobs: () => ipcRenderer.invoke('jobs:list') as Promise<Job[]>,
+  createJob: () => ipcRenderer.invoke('jobs:create') as Promise<Job>,
+  retryJob: (id: string) => ipcRenderer.invoke('jobs:retry', id) as Promise<void>,
+  discardJob: (id: string) => ipcRenderer.invoke('jobs:discard', id) as Promise<void>,
+  dismissJob: (id: string) => ipcRenderer.invoke('jobs:dismiss', id) as Promise<boolean>,
+  closeJob: (id: string) => ipcRenderer.invoke('jobs:close', id) as Promise<void>,
+  onJobsUpdate: (handler: (jobs: Job[]) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, jobs: Job[]) => handler(jobs)
+    ipcRenderer.on('jobs:update', listener)
+    return () => ipcRenderer.off('jobs:update', listener)
+  },
+  onJobStatus: (handler: (event: JobStatusEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: JobStatusEvent) => handler(event)
+    ipcRenderer.on('job:status', listener)
+    return () => ipcRenderer.off('job:status', listener)
   },
 
   getScrollback: (terminalId: TerminalId) =>

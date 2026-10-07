@@ -1,15 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
-import type { AgentId, TerminalId } from '@shared/types'
+import type { AgentId, JobId, TerminalId } from '@shared/types'
 import { requestPreviewNavigation } from '../state/previewBus'
+import { useFocusRequests } from '../state/NeedsYouContext'
 
-interface AgentTerminalProps {
+/** A terminal belongs to exactly one agent or one job. */
+type AgentTerminalProps = {
   terminalId: TerminalId
-  agentId: AgentId
   /**
    * Whether this terminal is the currently-visible tab. Inactive terminals
    * stay mounted (so their PTYs don't tear down on switch) but skip the
@@ -29,7 +30,7 @@ interface AgentTerminalProps {
    * only once per mount — changing the prop after mount has no effect.
    */
   autoCommand?: string
-}
+} & ({ agentId: AgentId; jobId?: never } | { jobId: JobId; agentId?: never })
 
 const THEME = {
   background: '#1a1612',
@@ -80,6 +81,7 @@ function separator(): string {
 export function AgentTerminal({
   terminalId,
   agentId,
+  jobId,
   isActive = true,
   onData,
   autoCommand
@@ -158,7 +160,7 @@ export function AgentTerminal({
           window.open(url, '_blank')
           return
         }
-        const routed = requestPreviewNavigation({ url, fromAgent: agentId })
+        const routed = agentId ? requestPreviewNavigation({ url, fromAgent: agentId }) : false
         if (!routed) window.open(url, '_blank')
       })
     )
@@ -274,12 +276,9 @@ export function AgentTerminal({
         term.write(chunk)
         onDataRef.current?.(chunk)
       }
-      await window.mucka.spawnPty({
-        terminalId,
-        agentId,
-        cols: term.cols,
-        rows: term.rows
-      })
+      const owner = jobId !== undefined ? { jobId } : agentId !== undefined ? { agentId } : null
+      if (!owner) throw new Error('this terminal has no agent or job')
+      await window.mucka.spawnPty({ terminalId, cols: term.cols, rows: term.rows, ...owner })
       // Give the shell a beat to print its prompt before injecting input.
       // Without the delay, `npm run dev` lands before zsh's rc files finish
       // sourcing and you see it land in front of the prompt cosmetically.
@@ -296,7 +295,9 @@ export function AgentTerminal({
       const message = err instanceof Error ? err.message : String(err)
       term.write(
         `\r\n\x1b[38;5;208m[mucka] could not start this terminal — ${message}\x1b[0m\r\n` +
-          `\x1b[38;5;208m[mucka] check the worktree path in Settings → Agents, then stop and start the agent.\x1b[0m\r\n`
+          (jobId !== undefined
+            ? `\x1b[38;5;208m[mucka] the job's folder may have been moved or removed.\x1b[0m\r\n`
+            : `\x1b[38;5;208m[mucka] check the worktree path in Settings → Agents, then stop and start the agent.\x1b[0m\r\n`)
       )
     })
 
@@ -311,7 +312,7 @@ export function AgentTerminal({
       termRef.current = null
       fitRef.current = null
     }
-  }, [terminalId, agentId])
+  }, [terminalId, agentId, jobId])
 
   // When a hidden tab becomes active again, re-fit so xterm matches the
   // now-visible host dimensions (ResizeObserver doesn't fire for visibility
@@ -338,6 +339,20 @@ export function AgentTerminal({
     })
     return () => window.cancelAnimationFrame(handle)
   }, [isActive, terminalId])
+
+  useFocusRequests(
+    useCallback(
+      (requested: TerminalId) => {
+        if (requested !== terminalId) return
+        // Let the panel switch tabs first, so the terminal is visible to focus.
+        window.requestAnimationFrame(() => {
+          hostRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+          termRef.current?.focus()
+        })
+      },
+      [terminalId]
+    )
+  )
 
   return <div ref={hostRef} className="size-full bg-[#1a1612]" />
 }
