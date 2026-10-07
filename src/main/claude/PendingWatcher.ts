@@ -43,6 +43,7 @@ interface RawPending {
   id: string
   kind: 'permission' | 'question'
   agent: string | null
+  job: string | null
   terminal: string
   tool: string
   input: Record<string, unknown> | null
@@ -80,6 +81,7 @@ function parseRaw(text: string): RawPending | null {
     id,
     kind: v.kind === 'question' ? 'question' : 'permission',
     agent: str(v.agent),
+    job: str(v.job),
     terminal,
     tool,
     input: isRecord(v.input) ? v.input : null,
@@ -165,11 +167,14 @@ function parseQuestions(input: Record<string, unknown> | null): PendingQuestion[
   return out
 }
 
-function toItem(raw: RawPending, agentId: AgentId): PendingItem {
+function toItem(
+  raw: RawPending,
+  owner: { agentId: AgentId; jobId: null } | { agentId: null; jobId: string }
+): PendingItem {
   const questions = raw.kind === 'question' ? parseQuestions(raw.input) : []
   return {
     id: raw.id,
-    agentId,
+    ...owner,
     terminalId: raw.terminal,
     kind: raw.kind,
     tool: raw.tool,
@@ -241,14 +246,18 @@ export class PendingWatcher {
     const next: PendingItem[] = []
     for (const file of files) {
       const raw = this.read(file)
-      if (!raw || !raw.agent) continue
+      if (!raw) continue
       // A file for a PTY that's gone, or one claiming an agent we don't
       // have, isn't anything Tom can answer.
       if (!this.isLiveTerminal(raw.terminal)) continue
+      if (now - raw.since > MAX_AGE_MS) continue
+      if (raw.job) {
+        next.push(toItem(raw, { agentId: null, jobId: raw.job }))
+        continue
+      }
       const agentId = agents.find((a) => a.id === raw.agent)?.id
       if (!agentId) continue
-      if (now - raw.since > MAX_AGE_MS) continue
-      next.push(toItem(raw, agentId))
+      next.push(toItem(raw, { agentId, jobId: null }))
     }
     next.sort((a, b) => a.since - b.since)
     const key = next.map((i) => i.id).join('|')

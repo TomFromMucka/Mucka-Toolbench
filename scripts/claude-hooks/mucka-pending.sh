@@ -13,6 +13,9 @@
 #               (AskUserQuestion) come through here too, and the cockpit
 #               answers them with `updatedInput.answers`.
 #   clear       PostToolUse / Stop / UserPromptSubmit. The wait is over.
+#               On UserPromptSubmit in a job's terminal it also records
+#               Tom's message in ~/.claude/mucka-jobs/<job>.json, so the
+#               job's card can be titled from his first one.
 #
 # Measured on Claude Code 2.1.292: while this hook waits, the terminal keeps
 # showing the dialog or the question and still takes a keypress, so
@@ -49,12 +52,13 @@ write_pending() {
   local id="$1"
   printf '%s' "$input" | jq -c \
     --arg id "$id" \
-    --arg agent "${MUCKA_AGENT:-}" --arg terminal "$MUCKA_TERMINAL" \
+    --arg agent "${MUCKA_AGENT:-}" --arg job "${MUCKA_JOB:-}" --arg terminal "$MUCKA_TERMINAL" \
     --argjson since "$(($(date +%s) * 1000))" '
     {
       id: $id,
       kind: (if .tool_name == "AskUserQuestion" then "question" else "permission" end),
       agent: $agent,
+      job: $job,
       terminal: $terminal,
       sessionId: (.session_id // null),
       tool: (.tool_name // null),
@@ -92,8 +96,22 @@ case "$mode" in
     ;;
 
   clear)
-    [ -f "$pending" ] || exit 0
     event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty')
+    if [ "$event" = "UserPromptSubmit" ] && [ -n "${MUCKA_JOB:-}" ]; then
+      jobs_dir="$HOME/.claude/mucka-jobs"
+      job_file="$jobs_dir/$(printf '%s' "$MUCKA_JOB" | sed 's|[^A-Za-z0-9_-]|_|g').json"
+      mkdir -p "$jobs_dir"
+      prev='{}'
+      [ -f "$job_file" ] && prev=$(cat "$job_file" 2>/dev/null || printf '{}')
+      printf '%s' "$prev" | jq -e . >/dev/null 2>&1 || prev='{}'
+      printf '%s' "$prev" | jq -c --argjson e "$input" --argjson ts "$(($(date +%s) * 1000))" '
+        {
+          firstPrompt: (.firstPrompt // $e.prompt),
+          lastPrompt: $e.prompt,
+          ts: $ts
+        }' > "${job_file}.tmp" && mv -f "${job_file}.tmp" "$job_file"
+    fi
+    [ -f "$pending" ] || exit 0
     if [ "$event" = "PostToolUse" ]; then
       # Claude can run tools in parallel. Only the call we're waiting on
       # finishing means the wait is over; any other tool finishing doesn't.

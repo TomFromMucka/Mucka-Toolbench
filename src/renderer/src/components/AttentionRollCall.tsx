@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAgentsState } from '../state/AgentsContext'
+import { useJobs } from '../state/JobsContext'
 import { useNeedsYou } from '../state/NeedsYouContext'
 import { NeedsYouCard } from './NeedsYouCard'
 
@@ -16,6 +17,7 @@ import { NeedsYouCard } from './NeedsYouCard'
 export function AttentionRollCall(): React.JSX.Element | null {
   const { agents } = useAgentsState()
   const { queue } = useNeedsYou()
+  const { jobs } = useJobs()
   const [open, setOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const rootRef = useRef<HTMLDivElement>(null)
@@ -50,7 +52,10 @@ export function AttentionRollCall(): React.JSX.Element | null {
   if (queue.length === 0) return null
 
   const head = queue[0]
-  const headName = agents.find((a) => a.id === head.agentId)?.displayName ?? head.agentId
+  const headName =
+    agents.find((a) => a.id === head.agentId)?.displayName ??
+    jobs.find((j) => j.id === head.jobId)?.title ??
+    head.key
   const others = queue.length - 1
   const what = head.pending
     ? head.pending.kind === 'question'
@@ -103,7 +108,7 @@ export function AttentionRollCall(): React.JSX.Element | null {
           </span>
           {queue.map((entry, i) => (
             <NeedsYouCard
-              key={entry.pending?.id ?? entry.agentId}
+              key={entry.pending?.id ?? entry.key}
               entry={entry}
               place={i + 1}
               now={now}

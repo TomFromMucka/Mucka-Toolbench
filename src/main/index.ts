@@ -288,7 +288,12 @@ function createWindow(): void {
       mainWindow.webContents.send('agent:status', event)
     },
     getAgentConfigs,
-    (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false
+    (terminalId) => ptyManager?.hasTerminal(terminalId) ?? false,
+    undefined,
+    (event) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('job:status', event)
+    }
   )
   claudeStateWatcher.start()
   // What each Claude is blocked on, from the PermissionRequest hook in
@@ -354,6 +359,7 @@ function createWindow(): void {
     claudeStateWatcher = null
     pendingWatcher?.dispose()
     pendingWatcher = null
+    jobManager?.dispose()
     jobManager = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {

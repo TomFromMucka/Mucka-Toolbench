@@ -275,6 +275,14 @@ export interface AgentStatusEvent {
   model?: string | null
 }
 
+/** Main → renderer: what a job's Claude reports about itself. */
+export interface JobStatusEvent {
+  jobId: JobId
+  status: AgentStatus
+  contextUsedPercent: number | null
+  model: string | null
+}
+
 /* ─── Needs you: what a cockpit-launched Claude is waiting on ────────── */
 
 export interface PendingQuestionOption {
@@ -296,7 +304,9 @@ export interface PendingQuestion {
  */
 export interface PendingItem {
   id: string
-  agentId: AgentId
+  /** Exactly one of agentId and jobId is set. */
+  agentId: AgentId | null
+  jobId: JobId | null
   terminalId: TerminalId
   kind: 'permission' | 'question'
   tool: string
@@ -651,6 +661,7 @@ export interface MuckaApi {
   /** Take a failed job off the board. Refused once it has a folder. */
   discardJob(id: JobId): Promise<void>
   onJobsUpdate(handler: (jobs: Job[]) => void): () => void
+  onJobStatus(handler: (event: JobStatusEvent) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>
 
   /** Read-only worktree access for Mucka — paths are relative to the agent's worktree and can't escape it. */

@@ -4,6 +4,7 @@ import type {
   AgentId,
   AgentStatusEvent,
   Job,
+  JobStatusEvent,
   PendingAnswer,
   PendingAnswerResult,
   PendingItem,
@@ -142,6 +143,11 @@ const muckaApi: MuckaApi = {
     const listener = (_e: Electron.IpcRendererEvent, jobs: Job[]) => handler(jobs)
     ipcRenderer.on('jobs:update', listener)
     return () => ipcRenderer.off('jobs:update', listener)
+  },
+  onJobStatus: (handler: (event: JobStatusEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: JobStatusEvent) => handler(event)
+    ipcRenderer.on('job:status', listener)
+    return () => ipcRenderer.off('job:status', listener)
   },
 
   getScrollback: (terminalId: TerminalId) =>

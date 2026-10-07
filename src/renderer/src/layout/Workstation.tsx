@@ -100,7 +100,7 @@ export function Workstation(): React.JSX.Element {
     () =>
       jobs.find((j) => j.id === jobPick)?.id ??
       agents.find((a) => a.id === jobPick)?.id ??
-      queue[0]?.agentId ??
+      queue[0]?.key ??
       jobs[jobs.length - 1]?.id ??
       agents.find((a) => a.running)?.id ??
       agents[0]?.id ??
@@ -117,17 +117,17 @@ export function Workstation(): React.JSX.Element {
       /* storage disabled */
     }
   }, [])
-  const lastJumpRef = useRef<AgentId | null>(null)
+  const lastJumpRef = useRef<string | null>(null)
 
   // ⌘J walks the queue. Answering an agent drops it out, so repeated
   // presses work through the blocked ones; an agent that's only waiting
   // for its next prompt stays put, so step past whoever we jumped to last.
   const jumpToNext = useCallback((): void => {
     if (queue.length === 0) return
-    const last = queue.findIndex((e) => e.agentId === lastJumpRef.current)
+    const last = queue.findIndex((e) => e.key === lastJumpRef.current)
     const next = queue[(last + 1) % queue.length]
-    lastJumpRef.current = next.agentId
-    focusTerminal(next.terminalId ?? next.agentId)
+    lastJumpRef.current = next.key
+    focusTerminal(next.terminalId)
   }, [queue, focusTerminal])
 
   useEffect(() => {

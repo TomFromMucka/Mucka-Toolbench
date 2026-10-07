@@ -1,33 +1,38 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type {
   AgentId,
+  JobId,
   PendingAnswer,
   PendingAnswerResult,
   PendingItem,
   TerminalId
 } from '@shared/types'
 import { useAgentStatuses } from './AgentStatusContext'
+import { useJobs } from './JobsContext'
 import { useVisibleAgents } from './LayoutContext'
 
 /**
- * One agent waiting on Tom, in the order he should deal with them.
+ * One agent or job waiting on Tom, in the order he should deal with them.
  *
- * Agents blocked on a prompt or a question come first, oldest first,
- * because a blocked agent is a wasted seat. Agents that are only flagged,
- * or idle waiting for their next instruction, follow in seat order.
+ * Anything blocked on a prompt or a question comes first, oldest first,
+ * because a blocked Claude is wasted time. Agents and jobs that are only
+ * flagged, or idle waiting for their next instruction, follow.
  */
 export interface QueueEntry {
-  agentId: AgentId
-  /** Where to jump to. Null when the agent is flagged but not blocked. */
-  terminalId: TerminalId | null
+  /** The agent's or the job's id: whichever this entry is. */
+  key: string
+  agentId: AgentId | null
+  jobId: JobId | null
+  /** Where to jump to. */
+  terminalId: TerminalId
   /** What it's blocked on. Null when it's only waiting for its next prompt. */
   pending: PendingItem | null
 }
 
 interface NeedsYouValue {
   queue: QueueEntry[]
-  /** 1-based place in the queue, or null when the agent isn't waiting. */
-  placeOf: (agentId: AgentId) => number | null
+  /** 1-based place in the queue of an agent or job id, or null when it isn't waiting. */
+  placeOf: (id: string) => number | null
   answer: (answer: PendingAnswer) => Promise<PendingAnswerResult>
   /** Bring a terminal forward: switch to its split tab and focus it. */
   focusTerminal: (terminalId: TerminalId) => void
@@ -41,6 +46,7 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
   const [pending, setPending] = useState<PendingItem[]>([])
   const agents = useVisibleAgents()
   const { statusFor } = useAgentStatuses()
+  const { jobs, jobStatusFor } = useJobs()
 
   useEffect(() => {
     const api = window.mucka
@@ -57,27 +63,55 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
   }, [])
 
   const queue = useMemo<QueueEntry[]>(() => {
-    const visible = new Set(agents.map((a) => a.id))
-    const blocked = pending
-      .filter((p) => visible.has(p.agentId))
-      .map((p) => ({ agentId: p.agentId, terminalId: p.terminalId, pending: p }))
-    const blockedIds = new Set(blocked.map((b) => b.agentId))
-    const waiting = agents
+    const visible = new Set<string>(agents.map((a) => a.id))
+    const openJobs = new Set<string>(jobs.map((j) => j.id))
+    const blocked: QueueEntry[] = []
+    for (const p of pending) {
+      if (p.agentId && visible.has(p.agentId)) {
+        blocked.push({
+          key: p.agentId,
+          agentId: p.agentId,
+          jobId: null,
+          terminalId: p.terminalId,
+          pending: p
+        })
+      } else if (p.jobId && openJobs.has(p.jobId)) {
+        blocked.push({
+          key: p.jobId,
+          agentId: null,
+          jobId: p.jobId,
+          terminalId: p.terminalId,
+          pending: p
+        })
+      }
+    }
+    const blockedKeys = new Set(blocked.map((b) => b.key))
+    const waitingStatus = (s: string): boolean => s === 'awaiting-input' || s === 'blocked'
+    const waitingAgents: QueueEntry[] = agents
       .filter(
         (a) =>
           a.running &&
-          !blockedIds.has(a.id) &&
-          (a.needsAttention ||
-            statusFor(a.id) === 'awaiting-input' ||
-            statusFor(a.id) === 'blocked')
+          !blockedKeys.has(a.id) &&
+          (a.needsAttention || waitingStatus(statusFor(a.id)))
       )
-      .map((a) => ({ agentId: a.id, terminalId: a.id, pending: null }))
-    return [...blocked, ...waiting]
-  }, [pending, agents, statusFor])
+      .map((a) => ({ key: a.id, agentId: a.id, jobId: null, terminalId: a.id, pending: null }))
+    const waitingJobs: QueueEntry[] = jobs
+      .filter(
+        (j) => j.state === 'ready' && !blockedKeys.has(j.id) && waitingStatus(jobStatusFor(j.id))
+      )
+      .map((j) => ({
+        key: j.id,
+        agentId: null,
+        jobId: j.id,
+        terminalId: j.terminalId,
+        pending: null
+      }))
+    return [...blocked, ...waitingJobs, ...waitingAgents]
+  }, [pending, agents, statusFor, jobs, jobStatusFor])
 
   const placeOf = useCallback(
-    (agentId: AgentId): number | null => {
-      const i = queue.findIndex((e) => e.agentId === agentId)
+    (id: string): number | null => {
+      const i = queue.findIndex((e) => e.key === id)
       return i === -1 ? null : i + 1
     },
     [queue]

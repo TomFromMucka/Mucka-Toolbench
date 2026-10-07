@@ -1,5 +1,14 @@
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, copyFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  copyFileSync,
+  watch,
+  type FSWatcher
+} from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { AgentConfig, Job, JobId } from '@shared/types'
@@ -81,13 +90,75 @@ function readIfExists(path: string): string | null {
   }
 }
 
+/** Where the hook records Tom's messages to each job's Claude. */
+const PROMPTS_DIR = join(homedir(), '.claude', 'mucka-jobs')
+const UNTITLED = 'New job'
+const TITLE_MAX = 70
+
+/** First line of Tom's first message, trimmed to fit a card. */
+function titleFrom(prompt: string): string | null {
+  const line = prompt
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length > 0 && !l.startsWith('/'))
+  if (!line) return null
+  return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1).trimEnd()}…` : line
+}
+
 export class JobManager {
   private readonly listAgents: () => AgentConfig[]
   private readonly emit: (jobs: Job[]) => void
+  private promptWatcher: FSWatcher | null = null
 
   constructor(listAgents: () => AgentConfig[], emit: (jobs: Job[]) => void) {
     this.listAgents = listAgents
     this.emit = emit
+    try {
+      mkdirSync(PROMPTS_DIR, { recursive: true })
+      this.promptWatcher = watch(PROMPTS_DIR, () => this.titleFromPrompts())
+    } catch {
+      this.promptWatcher = null
+    }
+    this.titleFromPrompts()
+  }
+
+  /**
+   * Name each untitled job after Tom's first message to its Claude, the
+   * way he'd describe the job himself. A title he's given stays.
+   */
+  private titleFromPrompts(): void {
+    let changed = false
+    let files: string[]
+    try {
+      files = readdirSync(PROMPTS_DIR).filter((f) => f.endsWith('.json'))
+    } catch {
+      return
+    }
+    for (const job of listOpenJobs()) {
+      if (job.title !== UNTITLED) continue
+      const slug = job.id.replace(/[^A-Za-z0-9_-]/g, '_')
+      if (!files.includes(`${slug}.json`)) continue
+      let first: unknown
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(join(PROMPTS_DIR, `${slug}.json`), 'utf8'))
+        first =
+          typeof parsed === 'object' && parsed !== null && 'firstPrompt' in parsed
+            ? parsed.firstPrompt
+            : null
+      } catch {
+        continue
+      }
+      const title = typeof first === 'string' ? titleFrom(first) : null
+      if (!title) continue
+      updateJob(job.id, { title })
+      changed = true
+    }
+    if (changed) this.push()
+  }
+
+  dispose(): void {
+    this.promptWatcher?.close()
+    this.promptWatcher = null
   }
 
   list(): Job[] {
@@ -132,7 +203,7 @@ export class JobManager {
     const id: JobId = `job-${slug}`
     const job: Job = {
       id,
-      title: 'New job',
+      title: UNTITLED,
       branch: `job/${slug}`,
       worktreePath: join(jobsDir, id),
       terminalId: terminalIdForJob(id),

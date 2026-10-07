@@ -69,7 +69,7 @@ export function JobsLayout({
   const { statusFor } = useAgentStatuses()
   const { summaries } = useGitHubState()
   const slotFor = useAgentSlots(gitStatus, restartVersion)
-  const { jobs, createJob } = useJobs()
+  const { jobs, jobStatusFor, createJob } = useJobs()
   const [now, setNow] = useState(() => Date.now())
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
@@ -128,6 +128,21 @@ export function JobsLayout({
     return hasWork ? 'check' : 'idle'
   }
 
+  // A job is laned like an agent, from what its Claude reports. It counts
+  // as finished ("Check it") once Tom has given it something to do and
+  // it's gone quiet; a job nobody has spoken to yet is just idle.
+  const laneOfJob = (job: Job): Lane => {
+    if (job.state === 'setting-up') return 'working'
+    if (job.state === 'failed') return 'check'
+    if (placeOf(job.id) !== null) return 'waiting'
+    if (WORKING.includes(jobStatusFor(job.id))) return 'working'
+    return job.title === 'New job' ? 'idle' : 'check'
+  }
+  const jobsIn = (lane: Lane): Job[] =>
+    jobs
+      .filter((j) => laneOfJob(j) === lane)
+      .sort((a, b) => (placeOf(a.id) ?? 0) - (placeOf(b.id) ?? 0))
+
   const byLane = new Map<Lane, AgentConfig[]>(LANES.map((l) => [l.lane, []]))
   for (const cfg of agents) byLane.get(laneOf(cfg))?.push(cfg)
   // Waiting lane follows queue order, so the board and the column agree.
@@ -144,7 +159,7 @@ export function JobsLayout({
           ) : (
             queue.map((entry, i) => (
               <NeedsYouCard
-                key={entry.pending?.id ?? entry.agentId}
+                key={entry.pending?.id ?? entry.key}
                 entry={entry}
                 place={i + 1}
                 now={now}
@@ -183,17 +198,17 @@ export function JobsLayout({
                   <span>{title}</span>
                   <span>{list.length}</span>
                 </div>
-                {lane === 'working'
-                  ? jobs.map((job) => (
-                      <NewJobCard
-                        key={job.id}
-                        job={job}
-                        selected={job.id === current}
-                        onSelect={() => onSelect(job.id)}
-                      />
-                    ))
-                  : null}
-                {list.length === 0 && !(lane === 'working' && jobs.length > 0) ? (
+                {jobsIn(lane).map((job) => (
+                  <NewJobCard
+                    key={job.id}
+                    job={job}
+                    place={placeOf(job.id)}
+                    working={WORKING.includes(jobStatusFor(job.id))}
+                    selected={job.id === current}
+                    onSelect={() => onSelect(job.id)}
+                  />
+                ))}
+                {list.length === 0 && jobsIn(lane).length === 0 ? (
                   <span className="t-body-sm px-1 text-dirty-grey">{empty}</span>
                 ) : (
                   list.map((cfg) => (
@@ -354,10 +369,14 @@ function jobDetail(job: Job): string {
 
 function NewJobCard({
   job,
+  place,
+  working,
   selected,
   onSelect
 }: {
   job: Job
+  place: number | null
+  working: boolean
   selected: boolean
   onSelect: () => void
 }): React.JSX.Element {
@@ -372,7 +391,23 @@ function NewJobCard({
       }}
       title={job.worktreePath}
     >
-      <span className="t-label-sm text-dirty-grey">Job</span>
+      <span className="flex items-center gap-1.5">
+        <span className="t-label-sm text-dirty-grey">Job</span>
+        {place !== null ? (
+          <span
+            className="chamfer-sm ml-auto px-1 font-mono text-[0.62rem]"
+            style={
+              place === 1
+                ? { background: 'var(--orange)', color: 'var(--surface2)' }
+                : { boxShadow: 'inset 0 0 0 1px var(--orange)', color: 'var(--orange)' }
+            }
+          >
+            {place}
+          </span>
+        ) : working ? (
+          <span className="t-body-sm ml-auto text-dirty-grey">working</span>
+        ) : null}
+      </span>
       <span className="t-body-sm line-clamp-2 text-van-white">{job.title}</span>
       <span
         className={clsx(

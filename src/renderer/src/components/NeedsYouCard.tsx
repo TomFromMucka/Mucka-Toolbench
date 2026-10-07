@@ -3,6 +3,7 @@ import type { PendingAnswerResult, PendingItem, PendingQuestion } from '@shared/
 import type { QueueEntry } from '../state/NeedsYouContext'
 import { useNeedsYou } from '../state/NeedsYouContext'
 import { useAgentsState } from '../state/AgentsContext'
+import { useJobs } from '../state/JobsContext'
 import { Button } from './ui/Button'
 
 interface NeedsYouCardProps {
@@ -29,8 +30,10 @@ export function NeedsYouCard({ entry, place, now }: NeedsYouCardProps): React.JS
   const { focusTerminal } = useNeedsYou()
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const { jobs } = useJobs()
   const agent = agents.find((a) => a.id === entry.agentId)
-  const name = agent?.displayName ?? entry.agentId
+  const job = jobs.find((j) => j.id === entry.jobId)
+  const name = agent?.displayName ?? job?.title ?? entry.key
   const p = entry.pending
   const first = place === 1
 
