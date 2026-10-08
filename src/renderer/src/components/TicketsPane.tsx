@@ -237,10 +237,7 @@ function Select<T extends string>({
   )
 }
 
-/**
- * One ticket. Clicking it opens the whole thing; the brief comes from the
- * read-only scout, and the badges are /admin/support's.
- */
+/** One ticket, with /admin/support's badges. Clicking it opens the whole thing. */
 function TicketRow({
   ticket,
   now,
@@ -255,10 +252,9 @@ function TicketRow({
   onOpen: () => void
   onSelect: (jobId: string) => void
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false)
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
-  const startFix = (): void => {
+  const startJob = (): void => {
     setStarting(true)
     setStartError(null)
     window.mucka
@@ -267,7 +263,6 @@ function TicketRow({
       .catch((err: unknown) => setStartError(err instanceof Error ? err.message : String(err)))
       .finally(() => setStarting(false))
   }
-  const scout = (): void => void window.mucka.scoutTicket(ticket.reference)
   const due = followUp(ticket, now)
   const category = ticket.category ? CATEGORY_LABELS[ticket.category] : undefined
   const who = [ticket.business, ticket.raiser].filter(Boolean).join(' · ')
@@ -321,55 +316,19 @@ function TicketRow({
         </div>
       ) : null}
       <div className="mt-1 flex items-baseline gap-1">
-        {ticket.briefState === 'ready' ? (
-          <TermButton onClick={() => setOpen((v) => !v)}>{open ? '▾ brief' : '▸ brief'}</TermButton>
-        ) : ticket.briefState === 'queued' || ticket.briefState === 'running' ? (
-          <span className="px-1.5" style={{ color: 'var(--dirty-grey)' }}>
-            {ticket.briefState === 'running' ? 'scouting…' : 'queued for the scout'}
-          </span>
-        ) : ticket.status === 'open' || ticket.status === 'in_progress' ? (
-          <TermButton
-            onClick={scout}
-            title="A read-only Claude reads the ticket and the code, and writes a brief"
-          >
-            {ticket.briefState === 'failed' ? '↻ scout again' : '▶ scout'}
-          </TermButton>
-        ) : null}
-        {ticket.briefState === 'ready' ? (
-          <TermButton onClick={scout} title="Write the brief again from the ticket as it is now">
-            ↻
-          </TermButton>
-        ) : null}
         {jobId ? (
           <TermButton onClick={() => onSelect(jobId)}>→ open its job</TermButton>
-        ) : ticket.briefState === 'ready' ? (
+        ) : (
           <TermButton
             disabled={starting}
-            onClick={startFix}
-            title="A fix job working from the brief, with tickets and production blocked"
+            onClick={startJob}
+            title="A fresh job that reads this ticket, does the groundwork and drafts the fix"
           >
-            {starting ? 'starting…' : '▶ start fix'}
+            {starting ? 'starting…' : '▶ start job'}
           </TermButton>
-        ) : null}
-        {ticket.briefCost !== null ? (
-          <span className="ml-auto px-1.5" style={{ color: 'var(--dirty-grey)' }}>
-            ${ticket.briefCost.toFixed(2)}
-          </span>
-        ) : null}
+        )}
       </div>
       {startError ? <span style={{ color: THEME.brightRed }}>{startError}</span> : null}
-      {ticket.briefState === 'failed' && ticket.briefError ? (
-        <span style={{ color: THEME.brightRed }}>{ticket.briefError}</span>
-      ) : null}
-      {open && ticket.brief ? (
-        <pre
-          onClick={(e) => e.stopPropagation()}
-          className="mt-1 cursor-text whitespace-pre-wrap break-words px-2 py-1.5"
-          style={{ background: THEME.black, fontFamily: 'inherit' }}
-        >
-          {ticket.brief}
-        </pre>
-      ) : null}
     </div>
   )
 }

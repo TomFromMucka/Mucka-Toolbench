@@ -6,14 +6,11 @@ import { AgentTerminal } from '../components/AgentTerminal'
 import { Button } from '../components/ui/Button'
 import { Clipboard } from '../components/Clipboard'
 import { IntakePanel } from '../components/IntakePanel'
-import { ScoutCard } from '../components/ScoutCard'
-import { TicketModal, type TicketTab } from '../components/TicketModal'
 import { useAgentSlots } from '../hooks/useAgentSlots'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useAgentStatuses } from '../state/AgentStatusContext'
 import { useGitHubState } from '../state/GitHubContext'
 import { useJobs } from '../state/JobsContext'
-import { useTickets } from '../state/useTickets'
 import { useFocusRequests, useNeedsYou } from '../state/NeedsYouContext'
 import { submitPromptAndEnter } from '../mucka/dispatch'
 
@@ -76,16 +73,6 @@ export function JobsLayout({
   const { jobs, jobStatusFor, createJob } = useJobs()
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
-  const tickets = useTickets()
-  const [openTicket, setOpenTicket] = useState<{ reference: string; tab: TicketTab } | null>(null)
-  // Every scout, asked for or automatic, until it becomes a job or Tom
-  // dismisses it. A ticket that's no longer open leaves with it.
-  const scouting = (tickets?.tickets ?? []).filter(
-    (t) =>
-      t.briefState !== 'none' &&
-      !t.scoutDismissed &&
-      !jobs.some((j) => j.source === `ticket:${t.reference}`)
-  )
 
   const newJob = useCallback(async (): Promise<void> => {
     setStarting(true)
@@ -168,16 +155,6 @@ export function JobsLayout({
       */}
       <IntakePanel onSelect={onSelect} />
 
-      {openTicket ? (
-        <TicketModal
-          reference={openTicket.reference}
-          summary={tickets?.tickets.find((t) => t.reference === openTicket.reference) ?? null}
-          initialTab={openTicket.tab}
-          onClose={() => setOpenTicket(null)}
-          onJob={onSelect}
-        />
-      ) : null}
-
       <Clipboard
         title="Job board"
         subtitle={startError ?? 'what everyone is on'}
@@ -195,33 +172,7 @@ export function JobsLayout({
           </Button>
         }
       >
-        <div className="grid h-full min-h-0 grid-cols-5 gap-2 overflow-y-auto p-2">
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <div
-              className="t-label-sm flex justify-between px-1 pb-1 text-dirty-grey"
-              style={{ borderBottom: '1px solid var(--border)' }}
-            >
-              <span>Scouting</span>
-              <span>{scouting.length}</span>
-            </div>
-            {scouting.length === 0 ? (
-              <span className="t-body-sm px-1 text-dirty-grey">No tickets being scouted.</span>
-            ) : (
-              scouting.map((t) => (
-                <ScoutCard
-                  key={t.reference}
-                  ticket={t}
-                  onOpen={() =>
-                    setOpenTicket({
-                      reference: t.reference,
-                      tab: t.briefState === 'ready' ? 'brief' : 'ticket'
-                    })
-                  }
-                  onStarted={onSelect}
-                />
-              ))
-            )}
-          </div>
+        <div className="grid h-full min-h-0 grid-cols-4 gap-2 overflow-y-auto p-2">
           {LANES.map(({ lane, title, empty }) => {
             const list = byLane.get(lane) ?? []
             return (

@@ -149,8 +149,6 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('jobs:start-sentry', issueId) as Promise<Job>,
   getJobsAuto: () => ipcRenderer.invoke('jobs:auto-get') as Promise<JobsAutoStatus>,
   listTickets: () => ipcRenderer.invoke('tickets:list') as Promise<TicketsState>,
-  scoutTicket: (reference: string) =>
-    ipcRenderer.invoke('tickets:scout', reference) as Promise<void>,
   onTicketsUpdate: (handler: (state: TicketsState) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, state: TicketsState): void => handler(state)
     ipcRenderer.on('tickets:update', listener)
@@ -170,8 +168,6 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('tickets:mark-read', reference) as Promise<void>,
   startTicketJob: (reference: string) =>
     ipcRenderer.invoke('tickets:start-job', reference) as Promise<Job>,
-  dismissScout: (reference: string) =>
-    ipcRenderer.invoke('tickets:dismiss-scout', reference) as Promise<void>,
   openTicketFile: (reference: string, attachmentId: string) =>
     ipcRenderer.invoke('tickets:open-file', reference, attachmentId) as Promise<void>,
   setJobsAuto: (enabled: boolean) =>

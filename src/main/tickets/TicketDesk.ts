@@ -9,7 +9,6 @@ import type {
   TicketSendPreview,
   TicketSendResult
 } from '@shared/types'
-import { withBriefs } from '../db/tickets'
 import {
   lastJsonLine,
   lastLine,
@@ -101,13 +100,12 @@ export class TicketDesk {
     if (!STATUSES.includes(filter.status) || !CATEGORIES.includes(filter.category)) {
       throw new Error('Unknown ticket filter')
     }
-    const listed = parseListing(
+    return parseListing(
       await this.run(
         'list --json --limit 500 --status "$T_STATUS" --category "$T_CATEGORY" --search "$T_SEARCH"',
         { T_STATUS: filter.status, T_CATEGORY: filter.category, T_SEARCH: filter.search.trim() }
       )
     )
-    return withBriefs(listed)
   }
 
   async get(reference: string): Promise<TicketDetail> {

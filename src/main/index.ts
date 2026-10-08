@@ -25,7 +25,7 @@ import icon from '../../resources/icon.png?asset'
 import { ensureSeeded, getAgentConfig, getAgentConfigs } from './config/agents'
 import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
-import { dismissScout, getTicket } from './db/tickets'
+import { getTicket } from './db/tickets'
 import { appendValue, getValue, setValue } from './db/kv'
 import { forgetMemory, getMemory, listMemories, rememberMemory } from './db/memories'
 import {
@@ -473,7 +473,6 @@ function registerIpc(): void {
     if (!ticketWatcher) throw new Error('The cockpit window is not ready yet.')
     return ticketWatcher.state()
   })
-  guardedHandle('tickets:scout', (_event, reference: string) => ticketWatcher?.scout(reference))
   const desk = (): TicketDesk => {
     if (!ticketDesk) throw new Error('The cockpit window is not ready yet.')
     return ticketDesk
@@ -489,16 +488,13 @@ function registerIpc(): void {
     desk().open(reference, id)
   )
   guardedHandle('tickets:mark-read', (_event, reference: string) => desk().markRead(reference))
-  guardedHandle('tickets:start-job', (_event, reference: string) => {
+  guardedHandle('tickets:start-job', async (_event, reference: string) => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
-    const ticket = getTicket(reference)
-    if (!ticket) throw new Error(`${reference} isn't in the ticket list.`)
+    // A resolved or closed ticket isn't in the polled list; look it up.
+    const ticket = getTicket(reference) ?? (await desk().get(reference))
     return jobManager.startFromTicket(ticket)
   })
-  guardedHandle('tickets:dismiss-scout', (_event, reference: string) => {
-    dismissScout(reference)
-    ticketWatcher?.publish()
-  })
+
   guardedHandle('jobs:auto-get', () => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     return jobManager.autoStatus()

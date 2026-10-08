@@ -178,12 +178,7 @@ export interface Job {
 
 /* ─── Support tickets in Intake ─────────────────────────────────────── */
 
-/**
- * An open support ticket, from Mucka Pro's `scripts/ticket.ts list --json`.
- * The brief is written by a read-only scout Claude (no code edits), so a
- * fix job can work from it without reading customer text or touching
- * production itself: the Rule of Two in docs/jobs-layout-plan.md.
- */
+/** A support ticket, from Mucka Pro's `scripts/ticket.ts list --json`. */
 export interface Ticket {
   /** e.g. TKT-1467 */
   reference: string
@@ -201,14 +196,6 @@ export interface Ticket {
   lastAuthor: string | null
   /** False for a feature request logged from a question, which the customer never sees. */
   customerVisible: boolean
-  brief: string | null
-  /** none: not scouted. queued / running: on its way. */
-  briefState: 'none' | 'queued' | 'running' | 'ready' | 'failed'
-  briefError: string | null
-  /** What the scout cost, in dollars. */
-  briefCost: number | null
-  /** Taken off the board's Scouting column by Tom. */
-  scoutDismissed: boolean
 }
 
 export interface TicketsState {
@@ -843,8 +830,6 @@ export interface MuckaApi {
   startSentryJob(issueId: string): Promise<Job>
   getJobsAuto(): Promise<JobsAutoStatus>
   listTickets(): Promise<TicketsState>
-  /** Write (or rewrite) a ticket's brief with the read-only scout. */
-  scoutTicket(reference: string): Promise<void>
   onTicketsUpdate(handler: (state: TicketsState) => void): () => void
   /** Tickets matching the admin filters, fetched on demand rather than polled. */
   browseTickets(filter: TicketFilter): Promise<Ticket[]>
@@ -856,9 +841,8 @@ export interface MuckaApi {
   getTicketFile(reference: string, attachmentId: string): Promise<TicketFile>
   /** As opening it in /admin/support does: clears "awaiting reply". */
   markTicketRead(reference: string): Promise<void>
-  /** A fix job working from the scout's brief, or the one it already has. */
+  /** A job on the ticket, briefed to do the groundwork, or the one it already has. */
   startTicketJob(reference: string): Promise<Job>
-  dismissScout(reference: string): Promise<void>
   /** Opens a PDF in Preview, or shows any other file in Finder. Never runs it. */
   openTicketFile(reference: string, attachmentId: string): Promise<void>
   setJobsAuto(enabled: boolean): Promise<JobsAutoStatus>

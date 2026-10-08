@@ -72,12 +72,12 @@ or "Tom, eyes here".
     on which channels, and whether it's held until 08:00. All of it runs
     through Mucka Pro's `scripts/ticket.ts`, so no credentials live in
     the cockpit. Opening a ticket marks it read, as the web does.
-  - New tickets get a brief from a read-only scout Claude (ticket,
-    production data and code, no edits): Rule of Two. Every scout shows
-    on the board's **Scouting** column until it becomes a job or is
-    dismissed. *Start fix* (on the card, the row or the ticket) opens a
-    job that works from the brief, with `ticket.ts`, `psql` and
-    `~/.mucka` denied in its own `.claude/settings.local.json`.
+  - *Start job* (on the row or the open ticket) opens a fresh job told
+    to read the ticket with `ticket.ts show`, do the groundwork, reproduce
+    it with a failing test and draft the fix, committed but not pushed.
+    Replying and status changes are denied in its own
+    `.claude/settings.local.json`; Tom signs replies off himself. Tickets
+    never start jobs by themselves.
   - Hovering a ticket fetches it, so it usually opens instantly.
   - *sentry*: *Start job* opens a job whose Claude begins with the issue
     and the groundwork rules. With auto on (header switch), an issue
@@ -282,14 +282,15 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
-- **2026-10-08** — Jobs: Scouting column on the board; Start fix opens a
-  job from a ticket's brief with tickets and production blocked; tickets
-  open faster (hover prefetch, header shown at once).
+- **2026-10-08** — Intake: tickets go straight to a job (Start job), as Tom
+  works on a worktree; the read-only scout, auto-scouting and the Scouting
+  column are gone (a fix redid the scout's work anyway). Job ids no longer
+  clash when several start in the same minute. Tickets open faster (hover
+  prefetch, header shown at once).
 
 - **2026-10-08** — Intake: support and sentry tabs; manage support
   tickets in the cockpit (filters, search, full ticket, attachments,
-  reply and status with a who-gets-told check) through `ticket.ts`; new
-  tickets briefed by a read-only scout.
+  reply and status with a who-gets-told check) through `ticket.ts`.
 
 - **2026-10-07** — Jobs: Intake (Sentry issues, one click to a briefed
   job) replaces the Needs you column; Needs you cards look like Claude's

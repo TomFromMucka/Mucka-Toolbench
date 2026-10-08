@@ -21,7 +21,7 @@ const DIM = 'var(--dirty-grey)'
 const drafts = new Map<string, string>()
 
 type Pending = { action: TicketAction; label: string; preview: TicketSendPreview }
-export type TicketTab = 'ticket' | 'brief' | 'conversation'
+type TicketTab = 'ticket' | 'conversation'
 
 /**
  * A ticket in full, and everything /admin/support can do to it. Nothing
@@ -31,23 +31,19 @@ export type TicketTab = 'ticket' | 'brief' | 'conversation'
 export function TicketModal({
   reference,
   summary,
-  initialTab = 'ticket',
   onClose,
   onJob
 }: {
   reference: string
   /** The list's row, shown at once while the full ticket loads. */
   summary: Ticket | null
-  initialTab?: TicketTab
   onClose: () => void
   /** Show a job, after starting one or to go to the one it has. */
   onJob: (jobId: string) => void
 }): React.JSX.Element {
   const [detail, setDetail] = useState<TicketDetail | null>(() => cachedTicket(reference))
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<TicketTab>(
-    initialTab === 'brief' && !summary?.brief ? 'ticket' : initialTab
-  )
+  const [tab, setTab] = useState<TicketTab>('ticket')
   const { jobs } = useJobs()
   const job = jobs.find((j) => j.source === `ticket:${reference}`)
   const [starting, setStarting] = useState(false)
@@ -72,7 +68,7 @@ export function TicketModal({
     void window.mucka.markTicketRead(reference)
   }, [load, reference])
 
-  const startFix = (): void => {
+  const startJob = (): void => {
     setStarting(true)
     setNote(null)
     window.mucka
@@ -202,15 +198,15 @@ export function TicketModal({
             >
               → open its job
             </TermButton>
-          ) : summary?.briefState === 'ready' ? (
+          ) : (
             <TermButton
               disabled={starting}
-              onClick={startFix}
-              title="A fix job working from the scout's brief, with tickets and production blocked"
+              onClick={startJob}
+              title="A fresh job that reads this ticket, does the groundwork and drafts the fix"
             >
-              {starting ? 'starting…' : '▶ start fix'}
+              {starting ? 'starting…' : '▶ start job'}
             </TermButton>
-          ) : null}
+          )}
           <TermButton tone="dim" onClick={onClose} title="Close (Esc)">
             × close
           </TermButton>
@@ -224,17 +220,9 @@ export function TicketModal({
             <div style={{ color: DIM }}>
               {[summary.business, summary.raiser].filter(Boolean).join(' — ')}
             </div>
-            {summary.brief ? <Tabs tab={tab} setTab={setTab} brief conversation={null} /> : null}
           </div>
         ) : null}
-        {!detail && (tab !== 'brief' || !summary?.brief) && !error ? (
-          <Dim>Opening the thread…</Dim>
-        ) : null}
-        {!detail && tab === 'brief' && summary?.brief ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            <Brief ticket={summary} />
-          </div>
-        ) : null}
+        {!detail && !error ? <Dim>Opening the thread…</Dim> : null}
 
         {detail ? (
           <>
@@ -255,20 +243,17 @@ export function TicketModal({
                   also on this ticket: {detail.participants.join(', ')}
                 </div>
               ) : null}
-              {detail.conversation || summary?.brief ? (
+              {detail.conversation ? (
                 <Tabs
                   tab={tab}
                   setTab={setTab}
-                  brief={Boolean(summary?.brief)}
-                  conversation={detail.conversation?.messages.length ?? null}
+                  conversation={detail.conversation.messages.length}
                 />
               ) : null}
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {tab === 'brief' && summary?.brief ? (
-                <Brief ticket={summary} />
-              ) : tab === 'conversation' && detail.conversation ? (
+              {tab === 'conversation' && detail.conversation ? (
                 <Conversation detail={detail} />
               ) : (
                 <Thread detail={detail} />
@@ -630,43 +615,21 @@ function Conversation({ detail }: { detail: TicketDetail }): React.JSX.Element |
 function Tabs({
   tab,
   setTab,
-  brief,
   conversation
 }: {
   tab: TicketTab
   setTab: (tab: TicketTab) => void
-  brief: boolean
-  /** How many conversation messages, or null when there's no conversation. */
-  conversation: number | null
+  /** How many conversation messages. */
+  conversation: number
 }): React.JSX.Element {
   return (
     <div className="mt-1.5 flex gap-1">
       <TabButton active={tab === 'ticket'} onClick={() => setTab('ticket')}>
         ticket
       </TabButton>
-      {brief ? (
-        <TabButton active={tab === 'brief'} onClick={() => setTab('brief')}>
-          brief
-        </TabButton>
-      ) : null}
-      {conversation !== null ? (
-        <TabButton active={tab === 'conversation'} onClick={() => setTab('conversation')}>
-          conversation ({conversation})
-        </TabButton>
-      ) : null}
-    </div>
-  )
-}
-
-/** The scout's brief: what a fix job starts from. */
-function Brief({ ticket }: { ticket: Ticket }): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div style={{ color: DIM }}>
-        written by the read-only scout
-        {ticket.briefCost !== null ? ` · $${ticket.briefCost.toFixed(2)}` : ''}
-      </div>
-      <div className="whitespace-pre-wrap break-words">{ticket.brief}</div>
+      <TabButton active={tab === 'conversation'} onClick={() => setTab('conversation')}>
+        conversation ({conversation})
+      </TabButton>
     </div>
   )
 }

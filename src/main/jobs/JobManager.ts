@@ -177,7 +177,11 @@ function jobSlug(jobsDir: string, now: Date): string {
   const pad = (n: number): string => String(n).padStart(2, '0')
   const base = `${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
   let slug = base
-  for (let n = 2; existsSync(join(jobsDir, `job-${slug}`)); n++) slug = `${base}-${n}`
+  // The table too, not just the folder: the folder only appears once setup
+  // gets going, so two jobs started in the same minute both saw it free.
+  const taken = (s: string): boolean =>
+    existsSync(join(jobsDir, `job-${s}`)) || getJob(`job-${s}`) !== null
+  for (let n = 2; taken(slug); n++) slug = `${base}-${n}`
   return slug
 }
 
@@ -400,17 +404,14 @@ export class JobManager {
     })
   }
 
-  /** Start a fix job from a scouted ticket's brief, or return the one it already has. */
-  async startFromTicket(ticket: Ticket): Promise<Job> {
+  /** Start a job on a support ticket, or return the one it already has. */
+  async startFromTicket(ticket: Pick<Ticket, 'reference' | 'subject'>): Promise<Job> {
     const source = `ticket:${ticket.reference}`
     const existing = listOpenJobs().find((j) => j.source === source)
     if (existing) return existing
-    if (ticket.briefState !== 'ready' || !ticket.brief) {
-      throw new Error(`${ticket.reference} has no brief yet. Scout it first.`)
-    }
     return this.create({
       title: `${ticket.reference}: ${ticket.subject}`,
-      prompt: ticketBrief(ticket),
+      prompt: ticketBrief(ticket.reference),
       source
     })
   }

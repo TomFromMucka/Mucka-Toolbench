@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type {
+  Ticket,
   TicketAttachment,
   TicketConversation,
   TicketDetail,
@@ -8,7 +9,6 @@ import type {
   TicketSendPreview,
   TicketSendResult
 } from '@shared/types'
-import type { TicketListing } from '../db/tickets'
 
 /**
  * Shared plumbing for driving Mucka Pro's `scripts/ticket.ts` from the
@@ -94,9 +94,9 @@ function strings(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
 }
 
-export function parseListing(parsed: unknown): TicketListing[] {
+export function parseListing(parsed: unknown): Ticket[] {
   if (!Array.isArray(parsed)) throw new Error('ticket list was not a JSON array')
-  const out: TicketListing[] = []
+  const out: Ticket[] = []
   for (const row of list(parsed)) {
     const reference = str(row, 'reference')
     if (!reference || !REFERENCE.test(reference)) continue
