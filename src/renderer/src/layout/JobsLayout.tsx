@@ -317,15 +317,14 @@ function JobCard({
     <button
       type="button"
       onClick={onSelect}
-      className="chamfer-sm flex flex-col gap-1 px-2.5 py-2 text-left"
-      style={{
-        background: 'var(--surface2)',
-        boxShadow: selected
-          ? 'inset 0 0 0 1px var(--van-white)'
+      className={clsx(
+        'chamfer-frame-sm flex flex-col gap-1 px-2.5 py-2 text-left [--fill:var(--surface2)]',
+        selected
+          ? '[--ring:var(--van-white)]'
           : place === 1
-            ? 'inset 0 0 0 1px var(--orange)'
-            : 'inset 0 0 0 1px var(--border)'
-      }}
+            ? '[--ring:var(--orange)]'
+            : '[--ring:var(--border)]'
+      )}
       title={branch ?? undefined}
     >
       <span className="flex min-w-0 items-center gap-1.5">
@@ -341,11 +340,16 @@ function JobCard({
         </span>
         {place !== null ? (
           <span
-            className="chamfer-sm ml-auto px-1 font-mono text-[0.62rem]"
+            className={clsx(
+              'ml-auto px-1 font-mono text-[0.62rem]',
+              place === 1
+                ? 'chamfer-sm'
+                : 'chamfer-frame-sm [--fill:var(--surface2)] [--ring:var(--orange)]'
+            )}
             style={
               place === 1
                 ? { background: 'var(--orange)', color: 'var(--surface2)' }
-                : { boxShadow: 'inset 0 0 0 1px var(--orange)', color: 'var(--orange)' }
+                : { color: 'var(--orange)' }
             }
           >
             {place}
@@ -398,22 +402,26 @@ function NewJobCard({
     <button
       type="button"
       onClick={onSelect}
-      className="chamfer-sm flex flex-col gap-1 px-2.5 py-2 text-left"
-      style={{
-        background: 'var(--surface2)',
-        boxShadow: selected ? 'inset 0 0 0 1px var(--van-white)' : 'inset 0 0 0 1px var(--border)'
-      }}
+      className={clsx(
+        'chamfer-frame-sm flex flex-col gap-1 px-2.5 py-2 text-left [--fill:var(--surface2)]',
+        selected ? '[--ring:var(--van-white)]' : '[--ring:var(--border)]'
+      )}
       title={job.worktreePath}
     >
       <span className="flex items-center gap-1.5">
         <span className="t-label-sm text-dirty-grey">Job</span>
         {place !== null ? (
           <span
-            className="chamfer-sm ml-auto px-1 font-mono text-[0.62rem]"
+            className={clsx(
+              'ml-auto px-1 font-mono text-[0.62rem]',
+              place === 1
+                ? 'chamfer-sm'
+                : 'chamfer-frame-sm [--fill:var(--surface2)] [--ring:var(--orange)]'
+            )}
             style={
               place === 1
                 ? { background: 'var(--orange)', color: 'var(--surface2)' }
-                : { boxShadow: 'inset 0 0 0 1px var(--orange)', color: 'var(--orange)' }
+                : { color: 'var(--orange)' }
             }
           >
             {place}

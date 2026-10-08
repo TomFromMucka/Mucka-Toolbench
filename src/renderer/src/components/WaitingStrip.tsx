@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import clsx from 'clsx'
 import { useAgentsState } from '../state/AgentsContext'
 import { useJobs } from '../state/JobsContext'
 import { useNeedsYou } from '../state/NeedsYouContext'
@@ -33,10 +34,7 @@ export function WaitingStrip({
   }, [])
 
   return (
-    <div
-      className="chamfer-sm flex min-w-0 items-center gap-1.5 overflow-x-auto px-2 py-1.5"
-      style={{ background: 'var(--surface2)', boxShadow: 'inset 0 0 0 1px var(--border)' }}
-    >
+    <div className="chamfer-frame-sm flex min-w-0 items-center gap-1.5 overflow-x-auto px-2 py-1.5 [--fill:var(--surface2)] [--ring:var(--border)]">
       <span className="t-label-sm shrink-0 pr-1 text-dirty-grey">Waiting on you</span>
       {queue.length === 0 ? (
         <span className="t-body-sm text-dirty-grey">Nobody needs you.</span>
@@ -54,15 +52,15 @@ export function WaitingStrip({
               key={entry.key}
               type="button"
               onClick={() => onSelect(entry.key)}
-              className="chamfer-sm flex max-w-[22rem] shrink-0 items-baseline gap-1.5 px-2 py-1 text-left hover:brightness-125"
-              style={{
-                background: current ? 'var(--surface)' : 'transparent',
-                boxShadow: first
-                  ? 'inset 0 0 0 1px var(--orange)'
+              className={clsx(
+                'chamfer-frame-sm flex max-w-[22rem] shrink-0 items-baseline gap-1.5 px-2 py-1 text-left hover:[--fill:var(--surface)]',
+                current ? '[--fill:var(--surface)]' : '[--fill:var(--surface2)]',
+                first
+                  ? '[--ring:var(--orange)]'
                   : current
-                    ? 'inset 0 0 0 1px var(--van-white)'
-                    : 'inset 0 0 0 1px var(--border)'
-              }}
+                    ? '[--ring:var(--van-white)]'
+                    : '[--ring:var(--border)]'
+              )}
               title={name}
             >
               <span
