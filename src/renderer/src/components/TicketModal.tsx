@@ -109,6 +109,12 @@ export function TicketModal({
     try {
       const result = await window.mucka.sendTicketAction(pending.action)
       if (result.replied) editReply('')
+      // A status change is the end of Tom's look at this ticket: back to
+      // the list, where it has already moved. A reply alone stays open.
+      if (result.status) {
+        onClose()
+        return
+      }
       setNote(
         [
           result.replied ? 'Reply sent.' : null,
