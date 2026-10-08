@@ -1,21 +1,11 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import type { TicketsState } from '@shared/types'
 import { getValue, setValue } from '../db/kv'
-import {
-  getTicket,
-  listActiveTickets,
-  setBrief,
-  syncTickets,
-  type TicketListing
-} from '../db/tickets'
-
-const execFileAsync = promisify(execFile)
+import { getTicket, listActiveTickets, setBrief, syncTickets } from '../db/tickets'
+import { lastJsonLine, lastLine, loginShell, parseListing, REFERENCE } from './ticketCli'
 
 /** Tickets arrive a few a day; a five-minute look is plenty. */
 const POLL_MS = 5 * 60_000
 const BASELINE_KEY = 'tickets.baselined'
-const REFERENCE = /^TKT-\d+$/
 /** A scout reads a ticket and some code; ~$0.20 and half a minute measured. */
 const SCOUT_BUDGET_USD = '1'
 const SCOUT_TIMEOUT_MS = 10 * 60_000
@@ -72,56 +62,6 @@ function scoutPrompt(reference: string): string {
   ].join('\n')
 }
 
-function str(row: Record<string, unknown>, key: string): string | null {
-  const v = row[key]
-  return typeof v === 'string' && v.length > 0 ? v : null
-}
-
-function ms(row: Record<string, unknown>, key: string): number {
-  const v = str(row, key)
-  const n = v ? Date.parse(v) : NaN
-  return Number.isFinite(n) ? n : 0
-}
-
-function parseListing(stdout: string): TicketListing[] {
-  // npx can print notices before the JSON; the list is the last line.
-  const line = stdout.trim().split('\n').pop() ?? '[]'
-  const parsed: unknown = JSON.parse(line)
-  if (!Array.isArray(parsed)) throw new Error('ticket list was not a JSON array')
-  const out: TicketListing[] = []
-  for (const item of parsed) {
-    if (typeof item !== 'object' || item === null) continue
-    const row = Object.fromEntries(Object.entries(item))
-    const reference = str(row, 'reference')
-    if (!reference || !REFERENCE.test(reference)) continue
-    out.push({
-      reference,
-      subject: str(row, 'subject') ?? '(no subject)',
-      status: str(row, 'status') ?? 'open',
-      priority: str(row, 'priority'),
-      category: str(row, 'category'),
-      business: str(row, 'business_name'),
-      raiser: str(row, 'raiser_name'),
-      createdAt: ms(row, 'created_at'),
-      updatedAt: ms(row, 'updated_at')
-    })
-  }
-  return out
-}
-
-function lastLine(err: unknown): string {
-  const stderr =
-    typeof err === 'object' && err !== null && 'stderr' in err && typeof err.stderr === 'string'
-      ? err.stderr
-      : ''
-  const line = stderr
-    .trim()
-    .split('\n')
-    .filter((l) => l.trim().length > 0)
-    .pop()
-  return line ?? (err instanceof Error ? err.message.split('\n')[0] : String(err))
-}
-
 export interface TicketWatcherDeps {
   /** The read-only checkout of the latest main to run from. */
   scoutCheckout: () => Promise<string>
@@ -162,6 +102,11 @@ export class TicketWatcher {
     this.timer = null
   }
 
+  /** Look at the list now, after something changed a ticket. */
+  refresh(): void {
+    void this.poll()
+  }
+
   state(): TicketsState {
     return { tickets: listActiveTickets(), error: this.error, polledAt: this.polledAt }
   }
@@ -178,20 +123,13 @@ export class TicketWatcher {
     void this.work()
   }
 
-  /** Run `cmd` in a login shell, so node, npx and claude are on the PATH. */
-  private async sh(
+  private sh(
     cwd: string,
     cmd: string,
     extraEnv: Record<string, string> = {},
-    timeout = 120_000
+    timeout?: number
   ): Promise<string> {
-    const { stdout } = await execFileAsync('/bin/zsh', ['-l', '-c', cmd], {
-      cwd,
-      env: { ...this.deps.env(), ...extraEnv },
-      timeout,
-      maxBuffer: 16 * 1024 * 1024
-    })
-    return stdout
+    return loginShell(cwd, cmd, { ...this.deps.env(), ...extraEnv }, timeout)
   }
 
   private async poll(): Promise<void> {
@@ -201,8 +139,8 @@ export class TicketWatcher {
     this.busy = true
     try {
       const dir = await this.deps.scoutCheckout()
-      const out = await this.sh(dir, 'npx tsx scripts/ticket.ts list --json --limit 50')
-      const fresh = syncTickets(parseListing(out))
+      const out = await this.sh(dir, 'npx tsx scripts/ticket.ts list --json --limit 200')
+      const fresh = syncTickets(parseListing(lastJsonLine(out)))
       this.error = null
       this.polledAt = Date.now()
       if (getValue(BASELINE_KEY) !== 'yes') {
@@ -241,7 +179,7 @@ export class TicketWatcher {
         { SCOUT_PROMPT: scoutPrompt(reference) },
         SCOUT_TIMEOUT_MS
       )
-      const result: unknown = JSON.parse(out.trim().split('\n').pop() ?? '{}')
+      const result = lastJsonLine(out)
       const record =
         typeof result === 'object' && result !== null
           ? Object.fromEntries(Object.entries(result))

@@ -61,10 +61,23 @@ or "Tom, eyes here".
   loose ends, lands the PR with auto-merge, then `/coach job-done` removes
   the folder and branch), *Amend*, *Dismiss* (asks first, says what would
   be lost).
-- **Intake** lists unresolved Sentry issues in the terminal's font.
-  *Start job* opens a job whose Claude begins with the issue and the
-  groundwork rules. With auto on (header switch), an issue Mucka triages
-  as a ticket starts its own job, 3 open at most, the rest queued.
+- **Intake** has two tabs in the terminal's font, *support* and
+  *sentry*, each with its open count.
+  - *support* is the `/admin/support` desk without the browser: the same
+    status and kind filters, search, grouping and badges (awaiting reply,
+    chase / follow up). Clicking a ticket opens it in full: thread,
+    attachments (pictures inline, PDFs in Preview, anything else only in
+    Finder), the AI conversation, and Reply, Reply + resolve, In
+    progress, Resolve and Close. Every send first shows who it reaches,
+    on which channels, and whether it's held until 08:00. All of it runs
+    through Mucka Pro's `scripts/ticket.ts`, so no credentials live in
+    the cockpit. Opening a ticket marks it read, as the web does.
+  - New tickets get a brief from a read-only scout Claude (ticket,
+    production data and code, no edits): Rule of Two.
+  - *sentry*: *Start job* opens a job whose Claude begins with the issue
+    and the groundwork rules. With auto on (header switch), an issue
+    Mucka triages as a ticket starts its own job, 3 open at most, the
+    rest queued.
 
 **Needs you (all layouts).** One queue of agents' and jobs' permission
 prompts and questions, blocked first then oldest. Answered with buttons
@@ -263,6 +276,11 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-10-08** — Intake: support and sentry tabs; manage support
+  tickets in the cockpit (filters, search, full ticket, attachments,
+  reply and status with a who-gets-told check) through `ticket.ts`; new
+  tickets briefed by a read-only scout.
 
 - **2026-10-07** — Jobs: Intake (Sentry issues, one click to a briefed
   job) replaces the Needs you column; Needs you cards look like Claude's

@@ -4,11 +4,7 @@
  */
 
 import type { SecretId, SecretStatus, SecretTestResult } from './secrets'
-import type {
-  CredentialCreateInput,
-  CredentialSummary,
-  CredentialUpdateInput
-} from './credentials'
+import type { CredentialCreateInput, CredentialSummary, CredentialUpdateInput } from './credentials'
 import type {
   BrowserSlotId,
   OpenTabInput as BrowserOpenTabInput,
@@ -17,13 +13,7 @@ import type {
   TabState as BrowserTabState
 } from './browser'
 
-export type AgentId =
-  | 'dave'
-  | 'sammy'
-  | 'kev'
-  | 'bren'
-  | 'marlene'
-  | 'albert'
+export type AgentId = 'dave' | 'sammy' | 'kev' | 'bren' | 'marlene' | 'albert'
 
 export type AgentStatus =
   | 'idle'
@@ -205,6 +195,12 @@ export interface Ticket {
   raiser: string | null
   createdAt: number
   updatedAt: number
+  /** A customer message nobody has opened yet. */
+  awaitingReply: boolean
+  /** Who wrote the latest message: user, admin or system. Null when nobody has. */
+  lastAuthor: string | null
+  /** False for a feature request logged from a question, which the customer never sees. */
+  customerVisible: boolean
   brief: string | null
   /** none: not scouted. queued / running: on its way. */
   briefState: 'none' | 'queued' | 'running' | 'ready' | 'failed'
@@ -218,6 +214,116 @@ export interface TicketsState {
   /** Why the last look at the ticket list failed, if it did. */
   error: string | null
   polledAt: number | null
+}
+
+/** The filters /admin/support offers, with the same values. */
+export type TicketStatusFilter =
+  | 'active'
+  | 'all'
+  | 'awaiting_reply'
+  | 'open'
+  | 'in_progress'
+  | 'resolved'
+  | 'closed'
+export type TicketCategoryFilter = 'all' | 'support' | 'bug' | 'migration' | 'feature_request'
+
+export interface TicketFilter {
+  status: TicketStatusFilter
+  category: TicketCategoryFilter
+  search: string
+}
+
+export interface TicketMessage {
+  id: string
+  /** user, admin or system. Everything in the thread is visible to the customer. */
+  authorType: string
+  authorName: string | null
+  content: string
+  createdAt: number
+  /** Set while an admin reply's notifications wait for 08:00. */
+  heldUntil: number | null
+}
+
+export interface TicketAttachment {
+  id: string
+  /** Null for a file attached to the ticket itself rather than a message. */
+  messageId: string | null
+  filename: string
+  mimeType: string
+  sizeBytes: number | null
+  uploader: string | null
+  createdAt: number
+}
+
+export interface TicketConversation {
+  channel: string | null
+  source: string | null
+  summary: string | null
+  startedAt: number | null
+  messageCount: number | null
+  /** Only the newest 200 messages came back. */
+  truncated: boolean
+  messages: { role: string; content: string; tools: string[]; createdAt: number }[]
+}
+
+/** One ticket in full, from `scripts/ticket.ts show --json`. */
+export interface TicketDetail {
+  reference: string
+  status: string
+  priority: string | null
+  category: string | null
+  subject: string
+  body: string
+  adminNotes: string | null
+  customerVisible: boolean
+  createdAt: number
+  updatedAt: number
+  resolvedAt: number | null
+  business: string | null
+  raiser: { name: string; role: string | null; email: string | null } | null
+  /** Everyone else on the ticket, as "Name <email>". */
+  participants: string[]
+  messages: TicketMessage[]
+  attachments: TicketAttachment[]
+  conversation: TicketConversation | null
+}
+
+export type TicketSendStatus = 'in_progress' | 'resolved' | 'closed'
+
+/** A reply, a status change, or both (the reply goes first). */
+export interface TicketAction {
+  reference: string
+  message?: string
+  status?: TicketSendStatus
+}
+
+/** What an action would do, before it's sent. */
+export interface TicketSendPreview {
+  people: string[]
+  from: string
+  to: string | null
+  /** Why nobody is notified, when nobody is. */
+  nobody: string | null
+  channels: string[]
+  /** When the reply's notifications will go out, if outside 08:00-20:00. */
+  heldUntilLabel: string | null
+}
+
+export interface TicketSendResult {
+  replied: boolean
+  status: string | null
+  heldUntilLabel: string | null
+  attachmentError: string | null
+}
+
+/** An attachment once it's on this machine. Images come back ready to show. */
+export interface TicketFile {
+  filename: string
+  mimeType: string
+  /** For jpeg, png, webp and gif only. */
+  dataUrl: string | null
+  /** pdf: opens in Preview. Anything else is only shown in Finder. */
+  opens: 'preview' | 'finder'
 }
 
 /** Whether Sentry tickets start jobs by themselves, and how far that has got. */
@@ -420,12 +526,7 @@ export type MuckaStatus =
   | { kind: 'missing-agent' }
   | { kind: 'error'; message: string }
 
-export type MuckaSessionState =
-  | 'idle'
-  | 'connecting'
-  | 'listening'
-  | 'speaking'
-  | 'error'
+export type MuckaSessionState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
 
 /** What `getMicAccess` reports about the OS-level mic permission (macOS TCC). */
 export type MicAccess = 'granted' | 'denied' | 'not-determined' | 'unknown'
@@ -482,7 +583,14 @@ export type UpdaterStatus =
   | { kind: 'checking' }
   | { kind: 'not-available'; currentVersion: string }
   | { kind: 'available'; version: string; releaseNotes: string | null }
-  | { kind: 'downloading'; version: string; percent: number; bytesPerSecond: number; transferred: number; total: number }
+  | {
+      kind: 'downloading'
+      version: string
+      percent: number
+      bytesPerSecond: number
+      transferred: number
+      total: number
+    }
   | { kind: 'downloaded'; version: string; releaseNotes: string | null }
   | { kind: 'error'; message: string }
 
@@ -507,13 +615,7 @@ export interface BroadcastResult {
  * - shipped: landed (replaces the manual Recent-changes log over time)
  * - parked:  not now, but worth keeping (low-priority or paused)
  */
-export type RoadmapColumn =
-  | 'backlog'
-  | 'issues'
-  | 'next'
-  | 'doing'
-  | 'shipped'
-  | 'parked'
+export type RoadmapColumn = 'backlog' | 'issues' | 'next' | 'doing' | 'shipped' | 'parked'
 
 export interface RoadmapCard {
   id: string
@@ -742,6 +844,16 @@ export interface MuckaApi {
   /** Write (or rewrite) a ticket's brief with the read-only scout. */
   scoutTicket(reference: string): Promise<void>
   onTicketsUpdate(handler: (state: TicketsState) => void): () => void
+  /** Tickets matching the admin filters, fetched on demand rather than polled. */
+  browseTickets(filter: TicketFilter): Promise<Ticket[]>
+  /** The whole ticket. Opening it marks the customer's messages read, as the web does. */
+  getTicket(reference: string): Promise<TicketDetail>
+  previewTicketAction(action: TicketAction): Promise<TicketSendPreview>
+  /** Sends for real: the customer is notified as the preview said. */
+  sendTicketAction(action: TicketAction): Promise<TicketSendResult>
+  getTicketFile(reference: string, attachmentId: string): Promise<TicketFile>
+  /** Opens a PDF in Preview, or shows any other file in Finder. Never runs it. */
+  openTicketFile(reference: string, attachmentId: string): Promise<void>
   setJobsAuto(enabled: boolean): Promise<JobsAutoStatus>
   onJobsUpdate(handler: (jobs: Job[]) => void): () => void
   onJobStatus(handler: (event: JobStatusEvent) => void): () => void
@@ -867,18 +979,14 @@ export interface MuckaApi {
   listVercelDeployments(agentId: AgentId): Promise<VercelAgentSummary>
   listAllVercelDeployments(): Promise<Record<AgentId, VercelAgentSummary>>
   refreshVercel(agentId: AgentId): Promise<VercelAgentSummary>
-  onVercelUpdate(
-    handler: (event: VercelUpdateEvent) => void
-  ): () => void
+  onVercelUpdate(handler: (event: VercelUpdateEvent) => void): () => void
 
   /* GitHub */
   getGitHubStatus(): Promise<GitHubStatus>
   listGitHubSummary(agentId: AgentId): Promise<GitHubAgentSummary>
   listAllGitHubSummaries(): Promise<Record<AgentId, GitHubAgentSummary>>
   refreshGitHub(agentId: AgentId): Promise<GitHubAgentSummary>
-  onGitHubUpdate(
-    handler: (event: GitHubUpdateEvent) => void
-  ): () => void
+  onGitHubUpdate(handler: (event: GitHubUpdateEvent) => void): () => void
 
   /* Sentry — issue triage */
   getSentryStatus(): Promise<SentryStatus>
@@ -1097,10 +1205,7 @@ export interface GitHubUpdateEvent {
 
 /* ─── Sentry ─────────────────────────────────────────────────────────── */
 
-export type SentryStatus =
-  | { kind: 'ok' }
-  | { kind: 'missing-token' }
-  | { kind: 'missing-org' }
+export type SentryStatus = { kind: 'ok' } | { kind: 'missing-token' } | { kind: 'missing-org' }
 
 /** One grouped Sentry issue, flattened to what triage actually needs. */
 export interface SentryIssue {

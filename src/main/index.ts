@@ -26,12 +26,7 @@ import { ensureSeeded, getAgentConfig, getAgentConfigs } from './config/agents'
 import { upsertAgent, listAgents as listAgentsFromDb } from './db/agents'
 import { closeDb } from './db/index'
 import { appendValue, getValue, setValue } from './db/kv'
-import {
-  forgetMemory,
-  getMemory,
-  listMemories,
-  rememberMemory
-} from './db/memories'
+import { forgetMemory, getMemory, listMemories, rememberMemory } from './db/memories'
 import {
   createFile as fsCreateFile,
   createFolder as fsCreateFolder,
@@ -55,16 +50,8 @@ import {
   logEvent,
   unbindEventsBroadcaster
 } from './events/Events'
-import {
-  extractDocSection,
-  listDocSections,
-  readCockpitDoc
-} from './doc/CockpitDoc'
-import {
-  extractProductSection,
-  listProductSections,
-  readProductDoc
-} from './doc/ProductDoc'
+import { extractDocSection, listDocSections, readCockpitDoc } from './doc/CockpitDoc'
+import { extractProductSection, listProductSections, readProductDoc } from './doc/ProductDoc'
 import { mirrorToMarkdown, readRoadmapSection } from './doc/RoadmapMirror'
 import {
   createCard as roadmapCreate,
@@ -93,6 +80,7 @@ import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
 import { PendingWatcher } from './claude/PendingWatcher'
 import { JobManager } from './jobs/JobManager'
 import { TicketWatcher } from './tickets/TicketWatcher'
+import { TicketDesk } from './tickets/TicketDesk'
 import { scrollback } from './scrollback/Scrollback'
 import { getStatus as vercelStatus } from './vercel/Vercel'
 import { VercelPoller } from './vercel/VercelPoller'
@@ -138,10 +126,7 @@ import {
   listCredentials,
   updateCredential
 } from './credentials/Credentials'
-import type {
-  CredentialCreateInput,
-  CredentialUpdateInput
-} from '@shared/credentials'
+import type { CredentialCreateInput, CredentialUpdateInput } from '@shared/credentials'
 import { installInputContextMenu } from './contextMenu/InputMenu'
 import {
   bindFsWatcherBroadcaster,
@@ -177,6 +162,8 @@ import type {
   MemoryWriteInput,
   MicAccess,
   SentryVerdict,
+  TicketAction,
+  TicketFilter,
   MuckaTextToolResult,
   PrReviewContext,
   PrReviewSubmission,
@@ -206,6 +193,7 @@ let claudeStateWatcher: ClaudeStateWatcher | null = null
 let pendingWatcher: PendingWatcher | null = null
 let jobManager: JobManager | null = null
 let ticketWatcher: TicketWatcher | null = null
+let ticketDesk: TicketDesk | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
 let githubPoller: GitHubPoller | null = null
@@ -349,6 +337,17 @@ function createWindow(): void {
     }
   })
   ticketWatcher.start()
+  ticketDesk = new TicketDesk({
+    checkout: () => {
+      if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+      return jobManager.scoutCheckout()
+    },
+    env: agentShellEnv,
+    filesDir: join(app.getPath('userData'), 'ticket-files'),
+    refresh: () => ticketWatcher?.refresh(),
+    openPath: (path) => shell.openPath(path),
+    showInFolder: (path) => shell.showItemInFolder(path)
+  })
   bindEventsBroadcaster(mainWindow.webContents)
   bindMuckaTextBroadcaster(mainWindow.webContents)
   bindUpdaterBroadcaster(mainWindow.webContents)
@@ -401,6 +400,7 @@ function createWindow(): void {
     jobManager = null
     ticketWatcher?.stop()
     ticketWatcher = null
+    ticketDesk = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {
       app.dock.setBadge('')
@@ -473,6 +473,20 @@ function registerIpc(): void {
     return ticketWatcher.state()
   })
   guardedHandle('tickets:scout', (_event, reference: string) => ticketWatcher?.scout(reference))
+  const desk = (): TicketDesk => {
+    if (!ticketDesk) throw new Error('The cockpit window is not ready yet.')
+    return ticketDesk
+  }
+  guardedHandle('tickets:browse', (_event, filter: TicketFilter) => desk().browse(filter))
+  guardedHandle('tickets:get', (_event, reference: string) => desk().get(reference))
+  guardedHandle('tickets:preview', (_event, action: TicketAction) => desk().preview(action))
+  guardedHandle('tickets:send', (_event, action: TicketAction) => desk().send(action))
+  guardedHandle('tickets:file', (_event, reference: string, id: string) =>
+    desk().file(reference, id)
+  )
+  guardedHandle('tickets:open-file', (_event, reference: string, id: string) =>
+    desk().open(reference, id)
+  )
   guardedHandle('jobs:auto-get', () => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     return jobManager.autoStatus()
@@ -483,8 +497,10 @@ function registerIpc(): void {
   })
 
   guardedHandle('pending:list', () => pendingWatcher?.list() ?? [])
-  guardedHandle('pending:answer', (_event, answer: PendingAnswer): PendingAnswerResult =>
-    pendingWatcher ? pendingWatcher.answer(answer) : { ok: false, reason: 'stale' }
+  guardedHandle(
+    'pending:answer',
+    (_event, answer: PendingAnswer): PendingAnswerResult =>
+      pendingWatcher ? pendingWatcher.answer(answer) : { ok: false, reason: 'stale' }
   )
 
   guardedHandle('agents:update', async (_event, patch: AgentUpdate) => {
@@ -537,9 +553,7 @@ function registerIpc(): void {
       logEvent({
         source: updated.id,
         kind: 'agent.preview',
-        message: updated.previewUrl
-          ? `Preview bound → ${updated.previewUrl}`
-          : 'Preview cleared.',
+        message: updated.previewUrl ? `Preview bound → ${updated.previewUrl}` : 'Preview cleared.',
         tone: 'normal'
       })
     }
@@ -560,10 +574,7 @@ function registerIpc(): void {
     if (!current.running) {
       const ordered = listAgentsFromDb()
       const sortOrder = ordered.findIndex((a) => a.id === agentId)
-      upsertAgent(
-        { ...current, running: true },
-        sortOrder < 0 ? ordered.length : sortOrder
-      )
+      upsertAgent({ ...current, running: true }, sortOrder < 0 ? ordered.length : sortOrder)
       logEvent({
         source: agentId,
         kind: 'agent.start',
@@ -587,10 +598,7 @@ function registerIpc(): void {
     claudeStateWatcher?.clear(agentId)
     const ordered = listAgentsFromDb()
     const sortOrder = ordered.findIndex((a) => a.id === agentId)
-    upsertAgent(
-      { ...current, running: true },
-      sortOrder < 0 ? ordered.length : sortOrder
-    )
+    upsertAgent({ ...current, running: true }, sortOrder < 0 ? ordered.length : sortOrder)
     logEvent({
       source: agentId,
       kind: 'agent.restart',
@@ -634,10 +642,7 @@ function registerIpc(): void {
     if (current.running) {
       const ordered = listAgentsFromDb()
       const sortOrder = ordered.findIndex((a) => a.id === agentId)
-      upsertAgent(
-        { ...current, running: false },
-        sortOrder < 0 ? ordered.length : sortOrder
-      )
+      upsertAgent({ ...current, running: false }, sortOrder < 0 ? ordered.length : sortOrder)
       logEvent({
         source: agentId,
         kind: 'agent.stop',
@@ -673,10 +678,8 @@ function registerIpc(): void {
         typeof path === 'string' ? path : null
       )
   )
-  guardedHandle(
-    'worktree:log',
-    (_event, agentId: AgentId, limit: number, branchOnly: boolean) =>
-      readWorktreeLog(worktreeOf(agentId), Number(limit) || 20, branchOnly === true)
+  guardedHandle('worktree:log', (_event, agentId: AgentId, limit: number, branchOnly: boolean) =>
+    readWorktreeLog(worktreeOf(agentId), Number(limit) || 20, branchOnly === true)
   )
 
   guardedHandle('git:refresh', async (_event, agentId: AgentId) => {
@@ -684,23 +687,20 @@ function registerIpc(): void {
     return gitService.refreshOne(agentId)
   })
 
-  guardedHandle(
-    'dialog:pickDirectory',
-    async (_event, opts?: { defaultPath?: string }) => {
-      const owner = mainWindowRef
-      const result = await (owner
-        ? dialog.showOpenDialog(owner, {
-            properties: ['openDirectory', 'createDirectory'],
-            defaultPath: opts?.defaultPath
-          })
-        : dialog.showOpenDialog({
-            properties: ['openDirectory', 'createDirectory'],
-            defaultPath: opts?.defaultPath
-          }))
-      if (result.canceled || result.filePaths.length === 0) return null
-      return result.filePaths[0]
-    }
-  )
+  guardedHandle('dialog:pickDirectory', async (_event, opts?: { defaultPath?: string }) => {
+    const owner = mainWindowRef
+    const result = await (owner
+      ? dialog.showOpenDialog(owner, {
+          properties: ['openDirectory', 'createDirectory'],
+          defaultPath: opts?.defaultPath
+        })
+      : dialog.showOpenDialog({
+          properties: ['openDirectory', 'createDirectory'],
+          defaultPath: opts?.defaultPath
+        }))
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
 
   guardedHandle('pty:spawn', (_event, req: PtySpawnRequest) => {
     ptyManager?.spawn(req)
@@ -718,9 +718,7 @@ function registerIpc(): void {
     ptyManager?.kill(terminalId)
   })
 
-  guardedHandle('pty:scrollback', (_event, terminalId: TerminalId) =>
-    scrollback.get(terminalId)
-  )
+  guardedHandle('pty:scrollback', (_event, terminalId: TerminalId) => scrollback.get(terminalId))
 
   guardedHandle('mucka:status', () => muckaStatus())
 
@@ -745,26 +743,24 @@ function registerIpc(): void {
 
   guardedHandle('vercel:status', () => vercelStatus())
 
-  guardedHandle('vercel:get', (_event, agentId: AgentId) =>
-    vercelPoller?.get(agentId) ?? null
-  )
+  guardedHandle('vercel:get', (_event, agentId: AgentId) => vercelPoller?.get(agentId) ?? null)
 
   guardedHandle('vercel:getAll', () => vercelPoller?.getAll() ?? {})
 
-  guardedHandle('vercel:refresh', (_event, agentId: AgentId) =>
-    vercelPoller?.refreshOne(agentId) ?? null
+  guardedHandle(
+    'vercel:refresh',
+    (_event, agentId: AgentId) => vercelPoller?.refreshOne(agentId) ?? null
   )
 
   guardedHandle('github:status', () => githubStatus())
 
-  guardedHandle('github:get', (_event, agentId: AgentId) =>
-    githubPoller?.get(agentId) ?? null
-  )
+  guardedHandle('github:get', (_event, agentId: AgentId) => githubPoller?.get(agentId) ?? null)
 
   guardedHandle('github:getAll', () => githubPoller?.getAll() ?? {})
 
-  guardedHandle('github:refresh', (_event, agentId: AgentId) =>
-    githubPoller?.refreshOne(agentId) ?? null
+  guardedHandle(
+    'github:refresh',
+    (_event, agentId: AgentId) => githubPoller?.refreshOne(agentId) ?? null
   )
 
   guardedHandle('sentry:status', () => sentryGetStatus())
@@ -783,8 +779,9 @@ function registerIpc(): void {
     ackSentryStatusChange(issueId)
   })
 
-  guardedHandle('sentry:health', () =>
-    sentryPoller?.getHealth() ?? { hasPolled: false, lastError: null, count: 0 }
+  guardedHandle(
+    'sentry:health',
+    () => sentryPoller?.getHealth() ?? { hasPolled: false, lastError: null, count: 0 }
   )
 
   guardedHandle('sentry:archive', async (_event, issueId: string) => {
@@ -889,8 +886,7 @@ function registerIpc(): void {
   guardedHandle(
     'github:review-submit',
     async (_event, input: PrReviewSubmission): Promise<PrReviewSubmitted> => {
-      const summary = await (githubPoller?.refreshOne(input.agentId) ??
-        Promise.resolve(null))
+      const summary = await (githubPoller?.refreshOne(input.agentId) ?? Promise.resolve(null))
       if (!summary || !summary.repo || !summary.openPr) {
         throw new Error('agent has no open PR to review')
       }
@@ -900,12 +896,7 @@ function registerIpc(): void {
           : input.verdict === 'request-changes'
             ? 'REQUEST_CHANGES'
             : 'COMMENT'
-      const result = await submitPrReview(
-        summary.repo,
-        summary.openPr.number,
-        input.body,
-        event
-      )
+      const result = await submitPrReview(summary.repo, summary.openPr.number, input.body, event)
       logEvent({
         source: input.agentId,
         kind: 'github.review',
@@ -959,15 +950,11 @@ function registerIpc(): void {
     applyAttentionToShell(typeof count === 'number' ? count : 0)
   })
 
-  guardedHandle('memory:list', (_event, query?: MemoryListQuery) =>
-    listMemories(query ?? {})
-  )
+  guardedHandle('memory:list', (_event, query?: MemoryListQuery) => listMemories(query ?? {}))
 
   guardedHandle('memory:get', (_event, topic: string) => getMemory(topic))
 
-  guardedHandle('memory:remember', (_event, input: MemoryWriteInput) =>
-    rememberMemory(input)
-  )
+  guardedHandle('memory:remember', (_event, input: MemoryWriteInput) => rememberMemory(input))
 
   guardedHandle('memory:forget', (_event, topic: string) => forgetMemory(topic))
 
@@ -1002,50 +989,44 @@ function registerIpc(): void {
 
   guardedHandle(
     'roadmap:attachImage',
-    async (
-      _event,
-      input: { cardId: string; name: string; bytes: Uint8Array }
-    ) => {
+    async (_event, input: { cardId: string; name: string; bytes: Uint8Array }) => {
       return attachmentsSaveImage(input.cardId, input.name, input.bytes)
     }
   )
 
-  guardedHandle(
-    'broadcast:send',
-    (_event, input: { text: string; agentIds?: AgentId[] }) => {
-      const raw = typeof input?.text === 'string' ? input.text : ''
-      if (raw.trim().length === 0) {
-        return { sent: [] as AgentId[], skipped: [] as AgentId[] }
-      }
-      const targets: AgentId[] =
-        input?.agentIds && input.agentIds.length > 0
-          ? input.agentIds
-          : getAgentConfigs()
-              .filter((a) => a.running)
-              .map((a) => a.id)
-
-      const sent: AgentId[] = []
-      const skipped: AgentId[] = []
-      for (const id of targets) {
-        if (ptyManager?.hasTerminal(id)) {
-          ptyManager.write({ terminalId: id, data: raw + '\r' })
-          sent.push(id)
-        } else {
-          skipped.push(id)
-        }
-      }
-      if (sent.length > 0) {
-        const preview = raw.replace(/\s+/g, ' ').trim()
-        logEvent({
-          source: 'system',
-          kind: 'broadcast',
-          message: `Broadcast → ${sent.join(', ')}: ${preview.slice(0, 100)}${preview.length > 100 ? '…' : ''}`,
-          tone: 'normal'
-        })
-      }
-      return { sent, skipped }
+  guardedHandle('broadcast:send', (_event, input: { text: string; agentIds?: AgentId[] }) => {
+    const raw = typeof input?.text === 'string' ? input.text : ''
+    if (raw.trim().length === 0) {
+      return { sent: [] as AgentId[], skipped: [] as AgentId[] }
     }
-  )
+    const targets: AgentId[] =
+      input?.agentIds && input.agentIds.length > 0
+        ? input.agentIds
+        : getAgentConfigs()
+            .filter((a) => a.running)
+            .map((a) => a.id)
+
+    const sent: AgentId[] = []
+    const skipped: AgentId[] = []
+    for (const id of targets) {
+      if (ptyManager?.hasTerminal(id)) {
+        ptyManager.write({ terminalId: id, data: raw + '\r' })
+        sent.push(id)
+      } else {
+        skipped.push(id)
+      }
+    }
+    if (sent.length > 0) {
+      const preview = raw.replace(/\s+/g, ' ').trim()
+      logEvent({
+        source: 'system',
+        kind: 'broadcast',
+        message: `Broadcast → ${sent.join(', ')}: ${preview.slice(0, 100)}${preview.length > 100 ? '…' : ''}`,
+        tone: 'normal'
+      })
+    }
+    return { sent, skipped }
+  })
 
   guardedHandle('fs:listDir', (_event, path: string) => fsListDir(path))
 
@@ -1058,19 +1039,16 @@ function registerIpc(): void {
     fsWriteTextFile(path, typeof content === 'string' ? content : '')
   )
 
-  guardedHandle(
-    'fs:createFile',
-    (_event, parentPath: string, name: string) => fsCreateFile(parentPath, name)
+  guardedHandle('fs:createFile', (_event, parentPath: string, name: string) =>
+    fsCreateFile(parentPath, name)
   )
 
-  guardedHandle(
-    'fs:createFolder',
-    (_event, parentPath: string, name: string) => fsCreateFolder(parentPath, name)
+  guardedHandle('fs:createFolder', (_event, parentPath: string, name: string) =>
+    fsCreateFolder(parentPath, name)
   )
 
-  guardedHandle(
-    'fs:rename',
-    (_event, fromPath: string, toName: string) => fsRename(fromPath, toName)
+  guardedHandle('fs:rename', (_event, fromPath: string, toName: string) =>
+    fsRename(fromPath, toName)
   )
 
   guardedHandle('fs:delete', (_event, path: string) => fsDelete(path))
@@ -1084,9 +1062,7 @@ function registerIpc(): void {
         return { text: '', sections, found: false }
       }
       const wantSection =
-        typeof section === 'string' && section.trim().length > 0
-          ? section.trim()
-          : null
+        typeof section === 'string' && section.trim().length > 0 ? section.trim() : null
       if (!wantSection) {
         return { text: doc.text, sections, found: true }
       }
@@ -1104,9 +1080,7 @@ function registerIpc(): void {
         return { text: '', sections, found: false }
       }
       const wantSection =
-        typeof section === 'string' && section.trim().length > 0
-          ? section.trim()
-          : null
+        typeof section === 'string' && section.trim().length > 0 ? section.trim() : null
       if (!wantSection) {
         return { text: doc.text, sections, found: true }
       }
@@ -1144,37 +1118,22 @@ function registerIpc(): void {
   guardedHandle('fs:unwatch', (_event, path: string) => fsUnwatch(path))
 
   guardedHandle('browser:list', () => browserListTabs())
-  guardedHandle('browser:open', (_event, input: BrowserOpenTabInput) =>
-    browserOpenTab(input)
-  )
-  guardedHandle('browser:close', (_event, tabId: BrowserTabId) =>
-    browserCloseTab(tabId)
-  )
-  guardedHandle('browser:switch', (_event, tabId: BrowserTabId) =>
-    browserSwitch(tabId)
-  )
+  guardedHandle('browser:open', (_event, input: BrowserOpenTabInput) => browserOpenTab(input))
+  guardedHandle('browser:close', (_event, tabId: BrowserTabId) => browserCloseTab(tabId))
+  guardedHandle('browser:switch', (_event, tabId: BrowserTabId) => browserSwitch(tabId))
   guardedHandle('browser:navigate', (_event, tabId: BrowserTabId, url: string) =>
     browserNavigate(tabId, url)
   )
-  guardedHandle('browser:back', (_event, tabId: BrowserTabId) =>
-    browserGoBack(tabId)
-  )
-  guardedHandle('browser:forward', (_event, tabId: BrowserTabId) =>
-    browserGoForward(tabId)
-  )
-  guardedHandle('browser:reload', (_event, tabId: BrowserTabId) =>
-    browserReload(tabId)
-  )
+  guardedHandle('browser:back', (_event, tabId: BrowserTabId) => browserGoBack(tabId))
+  guardedHandle('browser:forward', (_event, tabId: BrowserTabId) => browserGoForward(tabId))
+  guardedHandle('browser:reload', (_event, tabId: BrowserTabId) => browserReload(tabId))
   guardedHandle('browser:set-bounds', (_event, input: BrowserSetSlotBoundsInput) =>
     browserSetBounds(input)
   )
-  guardedHandle(
-    'browser:set-zoom',
-    (_event, slotId: BrowserSlotId, factor: number) => browserSetZoom(slotId, factor)
+  guardedHandle('browser:set-zoom', (_event, slotId: BrowserSlotId, factor: number) =>
+    browserSetZoom(slotId, factor)
   )
-  guardedHandle('browser:raise', (_event, slotId: BrowserSlotId) =>
-    browserRaiseSlot(slotId)
-  )
+  guardedHandle('browser:raise', (_event, slotId: BrowserSlotId) => browserRaiseSlot(slotId))
 }
 
 function configureMediaPermissions(): void {
@@ -1184,15 +1143,11 @@ function configureMediaPermissions(): void {
   const allow = (permission: string): boolean =>
     permission === 'media' || permission === 'microphone'
 
-  session.defaultSession.setPermissionRequestHandler(
-    (_webContents, permission, callback) => {
-      callback(allow(permission))
-    }
-  )
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(allow(permission))
+  })
 
-  session.defaultSession.setPermissionCheckHandler(
-    (_webContents, permission) => allow(permission)
-  )
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => allow(permission))
 
   // Preview tabs live on their own partition, and a session with no
   // handler grants every request — so a page in a preview could take the

@@ -231,4 +231,12 @@ function migrate(d: DatabaseType): void {
     d.exec(`ALTER TABLE jobs ADD COLUMN source TEXT`)
     d.exec(`ALTER TABLE jobs ADD COLUMN brief TEXT`)
   }
+  const ticketCols = new Set(
+    d.prepare<[], { name: string }>(`PRAGMA table_info(tickets)`).all().map((c) => c.name)
+  )
+  if (!ticketCols.has('awaiting_reply')) {
+    d.exec(`ALTER TABLE tickets ADD COLUMN awaiting_reply INTEGER NOT NULL DEFAULT 0`)
+    d.exec(`ALTER TABLE tickets ADD COLUMN last_author TEXT`)
+    d.exec(`ALTER TABLE tickets ADD COLUMN customer_visible INTEGER NOT NULL DEFAULT 1`)
+  }
 }

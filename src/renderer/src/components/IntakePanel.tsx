@@ -5,12 +5,14 @@ import type {
   SentryHealth,
   SentryIssue,
   SentryStatus,
-  Ticket,
   TicketsState
 } from '@shared/types'
 import { useJobs } from '../state/JobsContext'
 import { Clipboard } from './Clipboard'
+import { Dim, TermButton } from './IntakeBits'
+import { ago } from './intakeFormat'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
+import { TicketsPane } from './TicketsPane'
 
 /**
  * Work coming in, before it's a job. Sentry first (the poller already
@@ -24,14 +26,6 @@ import { TERMINAL_FONT, THEME } from './terminalTheme'
  */
 
 const POLL_MS = 5 * 60_000
-
-function ago(ms: number, now: number): string {
-  const mins = Math.max(0, Math.floor((now - ms) / 60_000))
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 48) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
 
 const sourceOf = (issue: SentryIssue): string => `sentry:${issue.shortId}`
 
@@ -92,12 +86,14 @@ export function IntakePanel({
     // The queue moves when jobs open and close.
     const offJobs = window.mucka?.onJobsUpdate(() => void window.mucka.getJobsAuto().then(setAuto))
     void window.mucka?.listTickets().then(setTickets)
+    const tick = setInterval(() => setNow(Date.now()), 60_000)
     const offTickets = window.mucka?.onTicketsUpdate(setTickets)
     return () => {
       clearInterval(timer)
       off?.()
       offJobs?.()
       offTickets?.()
+      clearInterval(tick)
     }
   }, [load])
 
@@ -174,16 +170,7 @@ export function IntakePanel({
           </TabButton>
         </div>
         {tab === 'support' ? (
-          <>
-            {tickets?.error ? <Dim error>{tickets.error}</Dim> : null}
-            {tickets === null ? (
-              <Dim>Loading…</Dim>
-            ) : tickets.tickets.length === 0 && !tickets.error ? (
-              <Dim>{tickets.polledAt ? 'No open tickets.' : 'Looking at the ticket list…'}</Dim>
-            ) : (
-              tickets.tickets.map((t) => <TicketRow key={t.reference} ticket={t} now={now} />)
-            )}
-          </>
+          <TicketsPane state={tickets} now={now} />
         ) : issues.length === 0 ? (
           <Dim>{empty}</Dim>
         ) : (
@@ -282,114 +269,6 @@ function TabButton({
       }}
     >
       {children}
-    </button>
-  )
-}
-
-function Dim({
-  children,
-  error = false
-}: {
-  children: React.ReactNode
-  error?: boolean
-}): React.JSX.Element {
-  return (
-    <span className="px-3 py-2" style={{ color: error ? THEME.brightRed : 'var(--dirty-grey)' }}>
-      {children}
-    </span>
-  )
-}
-
-/**
- * One open ticket. The brief comes from the read-only scout; Tom reads it
- * here rather than the customer's own text.
- */
-function TicketRow({ ticket, now }: { ticket: Ticket; now: number }): React.JSX.Element {
-  const [open, setOpen] = useState(false)
-  const scout = (): void => void window.mucka.scoutTicket(ticket.reference)
-  const who = [ticket.business, ticket.category].filter(Boolean).join(' · ')
-  return (
-    <div
-      className="flex flex-col gap-0.5 px-3 py-2.5"
-      style={{ borderBottom: `1px solid ${THEME.black}` }}
-    >
-      <div className="flex items-baseline gap-2">
-        <span style={{ fontWeight: 700 }}>{ticket.reference}</span>
-        <span style={{ color: ticket.status === 'open' ? THEME.yellow : 'var(--dirty-grey)' }}>
-          {ticket.status.replace('_', ' ')}
-        </span>
-        <span className="ml-auto shrink-0" style={{ color: 'var(--dirty-grey)' }}>
-          {ago(ticket.updatedAt, now)}
-        </span>
-      </div>
-      <span className="line-clamp-2 break-words">{ticket.subject}</span>
-      {who ? (
-        <span className="truncate" style={{ color: 'var(--dirty-grey)' }}>
-          {who}
-        </span>
-      ) : null}
-      <div className="mt-1 flex gap-1">
-        {ticket.briefState === 'ready' ? (
-          <TermButton onClick={() => setOpen((v) => !v)}>{open ? '▾ brief' : '▸ brief'}</TermButton>
-        ) : ticket.briefState === 'queued' || ticket.briefState === 'running' ? (
-          <span className="px-1.5" style={{ color: 'var(--dirty-grey)' }}>
-            {ticket.briefState === 'running' ? 'scouting…' : 'queued for the scout'}
-          </span>
-        ) : (
-          <TermButton
-            onClick={scout}
-            title="A read-only Claude reads the ticket and the code, and writes a brief"
-          >
-            {ticket.briefState === 'failed' ? '↻ scout again' : '▶ scout'}
-          </TermButton>
-        )}
-        {ticket.briefState === 'ready' ? (
-          <TermButton onClick={scout} title="Write the brief again from the ticket as it is now">
-            ↻
-          </TermButton>
-        ) : null}
-        {ticket.briefCost !== null ? (
-          <span className="ml-auto px-1.5" style={{ color: 'var(--dirty-grey)' }}>
-            ${ticket.briefCost.toFixed(2)}
-          </span>
-        ) : null}
-      </div>
-      {ticket.briefState === 'failed' && ticket.briefError ? (
-        <span style={{ color: THEME.brightRed }}>{ticket.briefError}</span>
-      ) : null}
-      {open && ticket.brief ? (
-        <pre
-          className="mt-1 whitespace-pre-wrap break-words px-2 py-1.5"
-          style={{ background: THEME.black, fontFamily: 'inherit' }}
-        >
-          {ticket.brief}
-        </pre>
-      ) : null}
-    </div>
-  )
-}
-
-function TermButton({
-  children,
-  onClick,
-  disabled,
-  title
-}: {
-  children: React.ReactNode
-  onClick: () => void
-  disabled?: boolean
-  title?: string
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="px-1.5 text-left hover:bg-[rgba(234,233,232,0.1)] disabled:opacity-50"
-      style={{ fontFamily: 'inherit', color: THEME.brightWhite }}
-    >
-      [ {children} ]
     </button>
   )
 }

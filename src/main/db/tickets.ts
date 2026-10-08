@@ -11,6 +11,9 @@ interface TicketRow {
   raiser: string | null
   created_at: number
   updated_at: number
+  awaiting_reply: number
+  last_author: string | null
+  customer_visible: number
   brief: string | null
   brief_state: string
   brief_error: string | null
@@ -30,6 +33,9 @@ function rowToTicket(row: TicketRow): Ticket {
     raiser: row.raiser,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    awaitingReply: row.awaiting_reply === 1,
+    lastAuthor: row.last_author,
+    customerVisible: row.customer_visible === 1,
     brief: row.brief,
     briefState: BRIEF_STATES.find((s) => s === row.brief_state) ?? 'none',
     briefError: row.brief_error,
@@ -63,6 +69,9 @@ export type TicketListing = Pick<
   | 'raiser'
   | 'createdAt'
   | 'updatedAt'
+  | 'awaitingReply'
+  | 'lastAuthor'
+  | 'customerVisible'
 >
 
 /**
@@ -80,12 +89,15 @@ export function syncTickets(listed: TicketListing[]): string[] {
   )
   const upsert = db.prepare(
     `INSERT INTO tickets (reference, subject, status, priority, category, business, raiser,
-                          created_at, updated_at, active, first_seen)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                          created_at, updated_at, awaiting_reply, last_author, customer_visible,
+                          active, first_seen)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
      ON CONFLICT(reference) DO UPDATE SET
        subject = excluded.subject, status = excluded.status, priority = excluded.priority,
        category = excluded.category, business = excluded.business, raiser = excluded.raiser,
-       created_at = excluded.created_at, updated_at = excluded.updated_at, active = 1`
+       created_at = excluded.created_at, updated_at = excluded.updated_at,
+       awaiting_reply = excluded.awaiting_reply, last_author = excluded.last_author,
+       customer_visible = excluded.customer_visible, active = 1`
   )
   const now = Date.now()
   const fresh: string[] = []
@@ -102,12 +114,33 @@ export function syncTickets(listed: TicketListing[]): string[] {
         t.raiser,
         t.createdAt,
         t.updatedAt,
+        t.awaitingReply ? 1 : 0,
+        t.lastAuthor,
+        t.customerVisible ? 1 : 0,
         now
       )
       if (!known.has(t.reference)) fresh.push(t.reference)
     }
   })()
   return fresh
+}
+
+/**
+ * Tickets from a filtered look (which may include closed ones the poll
+ * never stores), with any brief the scout has written for them.
+ */
+export function withBriefs(listed: TicketListing[]): Ticket[] {
+  const known = getDb().prepare<[string], TicketRow>(`SELECT * FROM tickets WHERE reference = ?`)
+  return listed.map((t) => {
+    const row = known.get(t.reference)
+    return {
+      ...t,
+      brief: row?.brief ?? null,
+      briefState: BRIEF_STATES.find((s) => s === row?.brief_state) ?? 'none',
+      briefError: row?.brief_error ?? null,
+      briefCost: row?.brief_cost ?? null
+    }
+  })
 }
 
 export function setBrief(
