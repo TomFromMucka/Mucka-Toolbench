@@ -70,7 +70,11 @@ export function JobsLayout({
   selected,
   onSelect
 }: JobsLayoutProps): React.JSX.Element {
-  const { placeOf } = useNeedsYou()
+  const { placeOf, queue } = useNeedsYou()
+  // Only a real question or permission prompt holds the sign-off bar. A job
+  // also queues once it has just gone quiet ("waiting for your input"), and
+  // that's exactly when Job done is wanted.
+  const askingNow = (id: string): boolean => queue.some((e) => e.key === id && e.pending !== null)
   const { statusFor } = useAgentStatuses()
   const { summaries } = useGitHubState()
   const slotFor = useAgentSlots(gitStatus, restartVersion)
@@ -181,7 +185,7 @@ export function JobsLayout({
             >
               <JobTerminal
                 job={job}
-                blocked={placeOf(job.id) !== null}
+                blocked={askingNow(job.id)}
                 working={WORKING.includes(jobStatusFor(job.id))}
               />
             </div>
