@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
+  Ticket,
   TicketAction,
   TicketAttachment,
   TicketDetail,
@@ -11,6 +12,8 @@ import type {
 import { Dim, TermButton } from './IntakeBits'
 import { bytes, CATEGORY_LABELS, STATUS_LABELS, when } from './intakeFormat'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
+import { cachedTicket, loadTicket } from '../state/ticketCache'
+import { useJobs } from '../state/JobsContext'
 
 const DIM = 'var(--dirty-grey)'
 
@@ -18,6 +21,7 @@ const DIM = 'var(--dirty-grey)'
 const drafts = new Map<string, string>()
 
 type Pending = { action: TicketAction; label: string; preview: TicketSendPreview }
+export type TicketTab = 'ticket' | 'brief' | 'conversation'
 
 /**
  * A ticket in full, and everything /admin/support can do to it. Nothing
@@ -26,14 +30,27 @@ type Pending = { action: TicketAction; label: string; preview: TicketSendPreview
  */
 export function TicketModal({
   reference,
-  onClose
+  summary,
+  initialTab = 'ticket',
+  onClose,
+  onJob
 }: {
   reference: string
+  /** The list's row, shown at once while the full ticket loads. */
+  summary: Ticket | null
+  initialTab?: TicketTab
   onClose: () => void
+  /** Show a job, after starting one or to go to the one it has. */
+  onJob: (jobId: string) => void
 }): React.JSX.Element {
-  const [detail, setDetail] = useState<TicketDetail | null>(null)
+  const [detail, setDetail] = useState<TicketDetail | null>(() => cachedTicket(reference))
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'ticket' | 'conversation'>('ticket')
+  const [tab, setTab] = useState<TicketTab>(
+    initialTab === 'brief' && !summary?.brief ? 'ticket' : initialTab
+  )
+  const { jobs } = useJobs()
+  const job = jobs.find((j) => j.source === `ticket:${reference}`)
+  const [starting, setStarting] = useState(false)
   const [reply, setReply] = useState(() => drafts.get(reference) ?? '')
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
@@ -41,8 +58,7 @@ export function TicketModal({
 
   const load = useCallback(
     (): Promise<void> =>
-      window.mucka
-        .getTicket(reference)
+      loadTicket(reference)
         .then((d) => {
           setDetail(d)
           setError(null)
@@ -53,7 +69,21 @@ export function TicketModal({
 
   useEffect(() => {
     void load()
-  }, [load])
+    void window.mucka.markTicketRead(reference)
+  }, [load, reference])
+
+  const startFix = (): void => {
+    setStarting(true)
+    setNote(null)
+    window.mucka
+      .startTicketJob(reference)
+      .then((started) => {
+        onJob(started.id)
+        onClose()
+      })
+      .catch((err: unknown) => setNote(err instanceof Error ? err.message : String(err)))
+      .finally(() => setStarting(false))
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -120,6 +150,7 @@ export function TicketModal({
   }
 
   const hasReply = reply.trim().length > 0
+  const head = detail ?? summary
   const status = detail?.status
 
   return createPortal(
@@ -145,30 +176,65 @@ export function TicketModal({
           style={{ borderBottom: `1px solid ${THEME.black}` }}
         >
           <span style={{ fontWeight: 700 }}>{reference}</span>
-          {detail ? (
+          {head ? (
             <>
-              <span style={{ color: detail.status === 'open' ? THEME.yellow : DIM }}>
-                {STATUS_LABELS[detail.status] ?? detail.status}
+              <span style={{ color: head.status === 'open' ? THEME.yellow : DIM }}>
+                {STATUS_LABELS[head.status] ?? head.status}
               </span>
-              {detail.priority ? <span style={{ color: DIM }}>{detail.priority}</span> : null}
-              {detail.category ? (
+              {head.priority ? <span style={{ color: DIM }}>{head.priority}</span> : null}
+              {head.category ? (
                 <span style={{ color: THEME.blue }}>
-                  {CATEGORY_LABELS[detail.category] ?? detail.category}
+                  {CATEGORY_LABELS[head.category] ?? head.category}
                 </span>
               ) : null}
-              {!detail.customerVisible ? (
+              {!head.customerVisible ? (
                 <span style={{ color: DIM }}>· not visible to them</span>
               ) : null}
             </>
           ) : null}
           <span className="ml-auto" />
+          {job ? (
+            <TermButton
+              onClick={() => {
+                onJob(job.id)
+                onClose()
+              }}
+            >
+              → open its job
+            </TermButton>
+          ) : summary?.briefState === 'ready' ? (
+            <TermButton
+              disabled={starting}
+              onClick={startFix}
+              title="A fix job working from the scout's brief, with tickets and production blocked"
+            >
+              {starting ? 'starting…' : '▶ start fix'}
+            </TermButton>
+          ) : null}
           <TermButton tone="dim" onClick={onClose} title="Close (Esc)">
             × close
           </TermButton>
         </header>
 
         {error ? <Dim error>{error}</Dim> : null}
-        {!detail && !error ? <Dim>Opening {reference}…</Dim> : null}
+
+        {!detail && summary ? (
+          <div className="px-4 pt-2.5 pb-2" style={{ borderBottom: `1px solid ${THEME.black}` }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{summary.subject}</div>
+            <div style={{ color: DIM }}>
+              {[summary.business, summary.raiser].filter(Boolean).join(' — ')}
+            </div>
+            {summary.brief ? <Tabs tab={tab} setTab={setTab} brief conversation={null} /> : null}
+          </div>
+        ) : null}
+        {!detail && (tab !== 'brief' || !summary?.brief) && !error ? (
+          <Dim>Opening the thread…</Dim>
+        ) : null}
+        {!detail && tab === 'brief' && summary?.brief ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <Brief ticket={summary} />
+          </div>
+        ) : null}
 
         {detail ? (
           <>
@@ -189,20 +255,20 @@ export function TicketModal({
                   also on this ticket: {detail.participants.join(', ')}
                 </div>
               ) : null}
-              {detail.conversation ? (
-                <div className="mt-1.5 flex gap-1">
-                  <TabButton active={tab === 'ticket'} onClick={() => setTab('ticket')}>
-                    ticket
-                  </TabButton>
-                  <TabButton active={tab === 'conversation'} onClick={() => setTab('conversation')}>
-                    conversation ({detail.conversation.messages.length})
-                  </TabButton>
-                </div>
+              {detail.conversation || summary?.brief ? (
+                <Tabs
+                  tab={tab}
+                  setTab={setTab}
+                  brief={Boolean(summary?.brief)}
+                  conversation={detail.conversation?.messages.length ?? null}
+                />
               ) : null}
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {tab === 'conversation' && detail.conversation ? (
+              {tab === 'brief' && summary?.brief ? (
+                <Brief ticket={summary} />
+              ) : tab === 'conversation' && detail.conversation ? (
                 <Conversation detail={detail} />
               ) : (
                 <Thread detail={detail} />
@@ -557,6 +623,50 @@ function Conversation({ detail }: { detail: TicketDetail }): React.JSX.Element |
           ) : null}
         </div>
       ))}
+    </div>
+  )
+}
+
+function Tabs({
+  tab,
+  setTab,
+  brief,
+  conversation
+}: {
+  tab: TicketTab
+  setTab: (tab: TicketTab) => void
+  brief: boolean
+  /** How many conversation messages, or null when there's no conversation. */
+  conversation: number | null
+}): React.JSX.Element {
+  return (
+    <div className="mt-1.5 flex gap-1">
+      <TabButton active={tab === 'ticket'} onClick={() => setTab('ticket')}>
+        ticket
+      </TabButton>
+      {brief ? (
+        <TabButton active={tab === 'brief'} onClick={() => setTab('brief')}>
+          brief
+        </TabButton>
+      ) : null}
+      {conversation !== null ? (
+        <TabButton active={tab === 'conversation'} onClick={() => setTab('conversation')}>
+          conversation ({conversation})
+        </TabButton>
+      ) : null}
+    </div>
+  )
+}
+
+/** The scout's brief: what a fix job starts from. */
+function Brief({ ticket }: { ticket: Ticket }): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div style={{ color: DIM }}>
+        written by the read-only scout
+        {ticket.briefCost !== null ? ` · $${ticket.briefCost.toFixed(2)}` : ''}
+      </div>
+      <div className="whitespace-pre-wrap break-words">{ticket.brief}</div>
     </div>
   )
 }

@@ -170,7 +170,7 @@ export function IntakePanel({
           </TabButton>
         </div>
         {tab === 'support' ? (
-          <TicketsPane state={tickets} now={now} />
+          <TicketsPane state={tickets} now={now} onSelect={onSelect} />
         ) : issues.length === 0 ? (
           <Dim>{empty}</Dim>
         ) : (

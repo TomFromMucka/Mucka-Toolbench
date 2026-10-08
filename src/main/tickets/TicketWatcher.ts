@@ -107,6 +107,11 @@ export class TicketWatcher {
     void this.poll()
   }
 
+  /** Send the stored list as it is, after a change that needs no new look. */
+  publish(): void {
+    this.push()
+  }
+
   state(): TicketsState {
     return { tickets: listActiveTickets(), error: this.error, polledAt: this.polledAt }
   }

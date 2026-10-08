@@ -73,7 +73,7 @@ export class TicketDesk {
     rmSync(deps.filesDir, { recursive: true, force: true })
   }
 
-  /** The checkout is only moved by the watcher's poll; the desk just runs in it. */
+  /** The checkout is only moved by the watcher's poll; the desk just runs in it, unfetched. */
   private checkout(): Promise<string> {
     if (!this.dir) {
       this.dir = this.deps.checkout().catch((err: unknown) => {
@@ -112,13 +112,22 @@ export class TicketDesk {
 
   async get(reference: string): Promise<TicketDetail> {
     const ref = checkRef(reference)
-    const detail = parseDetail(await this.run('show "$T_REF" --json', { T_REF: ref }))
-    // As opening it in /admin/support does. A failure here only leaves the
-    // "awaiting reply" badge up, so it's not worth failing the open over.
-    void this.run('mark-read "$T_REF"', { T_REF: ref })
-      .then(() => this.deps.refresh())
-      .catch((err: unknown) => console.warn(`[tickets] mark-read ${ref}:`, err))
-    return detail
+    return parseDetail(await this.run('show "$T_REF" --json', { T_REF: ref }))
+  }
+
+  /**
+   * As opening it in /admin/support does. Separate from `get`, which also
+   * runs when Tom only hovers. A failure only leaves the "awaiting reply"
+   * badge up, so it's logged rather than shown.
+   */
+  async markRead(reference: string): Promise<void> {
+    const ref = checkRef(reference)
+    try {
+      await this.run('mark-read "$T_REF"', { T_REF: ref })
+      this.deps.refresh()
+    } catch (err) {
+      console.warn(`[tickets] mark-read ${ref}:`, err)
+    }
   }
 
   private actionArgs(action: TicketAction): { cmd: string; vars: Record<string, string> } {

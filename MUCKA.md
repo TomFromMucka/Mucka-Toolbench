@@ -73,7 +73,12 @@ or "Tom, eyes here".
     through Mucka Pro's `scripts/ticket.ts`, so no credentials live in
     the cockpit. Opening a ticket marks it read, as the web does.
   - New tickets get a brief from a read-only scout Claude (ticket,
-    production data and code, no edits): Rule of Two.
+    production data and code, no edits): Rule of Two. Every scout shows
+    on the board's **Scouting** column until it becomes a job or is
+    dismissed. *Start fix* (on the card, the row or the ticket) opens a
+    job that works from the brief, with `ticket.ts`, `psql` and
+    `~/.mucka` denied in its own `.claude/settings.local.json`.
+  - Hovering a ticket fetches it, so it usually opens instantly.
   - *sentry*: *Start job* opens a job whose Claude begins with the issue
     and the groundwork rules. With auto on (header switch), an issue
     Mucka triages as a ticket starts its own job, 3 open at most, the
@@ -276,6 +281,10 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-10-08** — Jobs: Scouting column on the board; Start fix opens a
+  job from a ticket's brief with tickets and production blocked; tickets
+  open faster (hover prefetch, header shown at once).
 
 - **2026-10-08** — Intake: support and sentry tabs; manage support
   tickets in the cockpit (filters, search, full ticket, attachments,

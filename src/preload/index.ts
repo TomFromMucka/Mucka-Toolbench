@@ -166,6 +166,12 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('tickets:send', action) as Promise<TicketSendResult>,
   getTicketFile: (reference: string, attachmentId: string) =>
     ipcRenderer.invoke('tickets:file', reference, attachmentId) as Promise<TicketFile>,
+  markTicketRead: (reference: string) =>
+    ipcRenderer.invoke('tickets:mark-read', reference) as Promise<void>,
+  startTicketJob: (reference: string) =>
+    ipcRenderer.invoke('tickets:start-job', reference) as Promise<Job>,
+  dismissScout: (reference: string) =>
+    ipcRenderer.invoke('tickets:dismiss-scout', reference) as Promise<void>,
   openTicketFile: (reference: string, attachmentId: string) =>
     ipcRenderer.invoke('tickets:open-file', reference, attachmentId) as Promise<void>,
   setJobsAuto: (enabled: boolean) =>

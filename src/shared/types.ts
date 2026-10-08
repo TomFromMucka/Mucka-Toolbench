@@ -207,6 +207,8 @@ export interface Ticket {
   briefError: string | null
   /** What the scout cost, in dollars. */
   briefCost: number | null
+  /** Taken off the board's Scouting column by Tom. */
+  scoutDismissed: boolean
 }
 
 export interface TicketsState {
@@ -852,6 +854,11 @@ export interface MuckaApi {
   /** Sends for real: the customer is notified as the preview said. */
   sendTicketAction(action: TicketAction): Promise<TicketSendResult>
   getTicketFile(reference: string, attachmentId: string): Promise<TicketFile>
+  /** As opening it in /admin/support does: clears "awaiting reply". */
+  markTicketRead(reference: string): Promise<void>
+  /** A fix job working from the scout's brief, or the one it already has. */
+  startTicketJob(reference: string): Promise<Job>
+  dismissScout(reference: string): Promise<void>
   /** Opens a PDF in Preview, or shows any other file in Finder. Never runs it. */
   openTicketFile(reference: string, attachmentId: string): Promise<void>
   setJobsAuto(enabled: boolean): Promise<JobsAutoStatus>

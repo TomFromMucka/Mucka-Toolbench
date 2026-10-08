@@ -239,4 +239,7 @@ function migrate(d: DatabaseType): void {
     d.exec(`ALTER TABLE tickets ADD COLUMN last_author TEXT`)
     d.exec(`ALTER TABLE tickets ADD COLUMN customer_visible INTEGER NOT NULL DEFAULT 1`)
   }
+  if (!ticketCols.has('scout_dismissed')) {
+    d.exec(`ALTER TABLE tickets ADD COLUMN scout_dismissed INTEGER NOT NULL DEFAULT 0`)
+  }
 }

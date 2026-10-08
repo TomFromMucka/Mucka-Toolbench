@@ -19,11 +19,13 @@ import type {
   JobId,
   JobPr,
   JobsAutoStatus,
-  SentryIssue
+  SentryIssue,
+  Ticket
 } from '@shared/types'
 import { getValue, setValue } from '../db/kv'
 import { logEvent } from '../events/Events'
 import { sentryBrief } from './sentryBrief'
+import { TICKET_JOB_DENY, ticketBrief } from './ticketBrief'
 import {
   closeJob,
   getJob,
@@ -398,6 +400,21 @@ export class JobManager {
     })
   }
 
+  /** Start a fix job from a scouted ticket's brief, or return the one it already has. */
+  async startFromTicket(ticket: Ticket): Promise<Job> {
+    const source = `ticket:${ticket.reference}`
+    const existing = listOpenJobs().find((j) => j.source === source)
+    if (existing) return existing
+    if (ticket.briefState !== 'ready' || !ticket.brief) {
+      throw new Error(`${ticket.reference} has no brief yet. Scout it first.`)
+    }
+    return this.create({
+      title: `${ticket.reference}: ${ticket.subject}`,
+      prompt: ticketBrief(ticket),
+      source
+    })
+  }
+
   async startSentryById(issueId: string): Promise<Job> {
     const issue = await this.getSentryIssue(issueId)
     if (!issue) throw new Error(`Sentry issue ${issueId} isn't in the latest list.`)
@@ -568,6 +585,15 @@ export class JobManager {
 
       this.progress(job.id, 'Copying local settings…')
       this.copyLocalFiles(root, job.worktreePath)
+      if (job.source?.startsWith('ticket:')) {
+        // Gitignored, and never copied from the main checkout, so this is
+        // the job's whole local settings file.
+        mkdirSync(join(job.worktreePath, '.claude'), { recursive: true })
+        writeFileSync(
+          join(job.worktreePath, '.claude', 'settings.local.json'),
+          `${JSON.stringify({ permissions: { deny: TICKET_JOB_DENY } }, null, 2)}\n`
+        )
+      }
 
       const source = await this.matchingNodeModules(root, job.worktreePath)
       if (source) {
@@ -622,6 +648,17 @@ export class JobManager {
    * moved to origin/main on every call, with dependencies cloned from a
    * checkout installed from the same lockfile (never installed here).
    */
+  /**
+   * The scout checkout as it is, for quick reads: no fetch, no move. The
+   * ticket poll keeps it on the latest main; only a missing one is set up.
+   */
+  async scoutDir(): Promise<string> {
+    const root = await this.repoRoot()
+    const dir = join(dirname(root), `${basename(root)}-jobs`, 'scout')
+    if (existsSync(join(dir, 'node_modules', '.scout-lock'))) return dir
+    return this.scoutCheckout()
+  }
+
   async scoutCheckout(): Promise<string> {
     const root = await this.repoRoot()
     const dir = join(dirname(root), `${basename(root)}-jobs`, 'scout')

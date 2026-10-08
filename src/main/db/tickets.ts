@@ -18,6 +18,7 @@ interface TicketRow {
   brief_state: string
   brief_error: string | null
   brief_cost: number | null
+  scout_dismissed: number
 }
 
 const BRIEF_STATES: Ticket['briefState'][] = ['none', 'queued', 'running', 'ready', 'failed']
@@ -39,7 +40,8 @@ function rowToTicket(row: TicketRow): Ticket {
     brief: row.brief,
     briefState: BRIEF_STATES.find((s) => s === row.brief_state) ?? 'none',
     briefError: row.brief_error,
-    briefCost: row.brief_cost
+    briefCost: row.brief_cost,
+    scoutDismissed: row.scout_dismissed === 1
   }
 }
 
@@ -138,7 +140,8 @@ export function withBriefs(listed: TicketListing[]): Ticket[] {
       brief: row?.brief ?? null,
       briefState: BRIEF_STATES.find((s) => s === row?.brief_state) ?? 'none',
       briefError: row?.brief_error ?? null,
-      briefCost: row?.brief_cost ?? null
+      briefCost: row?.brief_cost ?? null,
+      scoutDismissed: row?.scout_dismissed === 1
     }
   })
 }
@@ -156,7 +159,8 @@ export function setBrief(
   if (!current) return
   getDb()
     .prepare(
-      `UPDATE tickets SET brief_state = ?, brief = ?, brief_error = ?, brief_cost = ?, brief_at = ?
+      `UPDATE tickets SET brief_state = ?, brief = ?, brief_error = ?, brief_cost = ?, brief_at = ?,
+              scout_dismissed = CASE WHEN ? = 'queued' THEN 0 ELSE scout_dismissed END
        WHERE reference = ?`
     )
     .run(
@@ -165,6 +169,12 @@ export function setBrief(
       patch.error === undefined ? null : patch.error,
       patch.cost === undefined ? current.briefCost : patch.cost,
       Date.now(),
+      patch.state,
       reference
     )
+}
+
+/** Take a ticket's card off the board's Scouting column. A new scout brings it back. */
+export function dismissScout(reference: string): void {
+  getDb().prepare(`UPDATE tickets SET scout_dismissed = 1 WHERE reference = ?`).run(reference)
 }

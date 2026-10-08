@@ -10,6 +10,8 @@ import { Dim, TermButton } from './IntakeBits'
 import { ago, CATEGORY_LABELS, followUp, sortTickets, STATUS_LABELS } from './intakeFormat'
 import { THEME } from './terminalTheme'
 import { TicketModal } from './TicketModal'
+import { prefetchTicket } from '../state/ticketCache'
+import { useJobs } from '../state/JobsContext'
 
 const STATUS_OPTIONS: { value: TicketStatusFilter; label: string }[] = [
   { value: 'active', label: 'active' },
@@ -40,16 +42,20 @@ const isDefault = (f: TicketFilter): boolean =>
  */
 export function TicketsPane({
   state,
-  now
+  now,
+  onSelect
 }: {
   state: TicketsState | null
   now: number
+  /** Show a job on the board and in the terminal column. */
+  onSelect: (jobId: string) => void
 }): React.JSX.Element {
   const [filter, setFilter] = useState<TicketFilter>(DEFAULT_FILTER)
   const [search, setSearch] = useState('')
   const [browsed, setBrowsed] = useState<Ticket[] | null>(null)
   const [browseError, setBrowseError] = useState<string | null>(null)
   const [openRef, setOpenRef] = useState<string | null>(null)
+  const { jobs } = useJobs()
 
   // Typing settles before it asks the database.
   useEffect(() => {
@@ -90,7 +96,14 @@ export function TicketsPane({
 
   const renderRows = (list: Ticket[]): React.ReactNode =>
     list.map((t) => (
-      <TicketRow key={t.reference} ticket={t} now={now} onOpen={() => setOpenRef(t.reference)} />
+      <TicketRow
+        key={t.reference}
+        ticket={t}
+        now={now}
+        jobId={jobs.find((j) => j.source === `ticket:${t.reference}`)?.id ?? null}
+        onOpen={() => setOpenRef(t.reference)}
+        onSelect={onSelect}
+      />
     ))
 
   return (
@@ -159,7 +172,14 @@ export function TicketsPane({
         </>
       )}
 
-      {openRef ? <TicketModal reference={openRef} onClose={() => setOpenRef(null)} /> : null}
+      {openRef ? (
+        <TicketModal
+          reference={openRef}
+          summary={rows?.find((t) => t.reference === openRef) ?? null}
+          onClose={() => setOpenRef(null)}
+          onJob={onSelect}
+        />
+      ) : null}
     </>
   )
 }
@@ -224,13 +244,29 @@ function Select<T extends string>({
 function TicketRow({
   ticket,
   now,
-  onOpen
+  jobId,
+  onOpen,
+  onSelect
 }: {
   ticket: Ticket
   now: number
+  /** The fix job started from this ticket, if there is one. */
+  jobId: string | null
   onOpen: () => void
+  onSelect: (jobId: string) => void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const startFix = (): void => {
+    setStarting(true)
+    setStartError(null)
+    window.mucka
+      .startTicketJob(ticket.reference)
+      .then((job) => onSelect(job.id))
+      .catch((err: unknown) => setStartError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setStarting(false))
+  }
   const scout = (): void => void window.mucka.scoutTicket(ticket.reference)
   const due = followUp(ticket, now)
   const category = ticket.category ? CATEGORY_LABELS[ticket.category] : undefined
@@ -241,6 +277,7 @@ function TicketRow({
       role="button"
       tabIndex={0}
       onClick={onOpen}
+      onMouseEnter={() => prefetchTicket(ticket.reference)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') onOpen()
       }}
@@ -303,12 +340,24 @@ function TicketRow({
             ↻
           </TermButton>
         ) : null}
+        {jobId ? (
+          <TermButton onClick={() => onSelect(jobId)}>→ open its job</TermButton>
+        ) : ticket.briefState === 'ready' ? (
+          <TermButton
+            disabled={starting}
+            onClick={startFix}
+            title="A fix job working from the brief, with tickets and production blocked"
+          >
+            {starting ? 'starting…' : '▶ start fix'}
+          </TermButton>
+        ) : null}
         {ticket.briefCost !== null ? (
           <span className="ml-auto px-1.5" style={{ color: 'var(--dirty-grey)' }}>
             ${ticket.briefCost.toFixed(2)}
           </span>
         ) : null}
       </div>
+      {startError ? <span style={{ color: THEME.brightRed }}>{startError}</span> : null}
       {ticket.briefState === 'failed' && ticket.briefError ? (
         <span style={{ color: THEME.brightRed }}>{ticket.briefError}</span>
       ) : null}
