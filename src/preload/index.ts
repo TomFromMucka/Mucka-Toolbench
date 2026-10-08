@@ -145,8 +145,8 @@ const muckaApi: MuckaApi = {
   discardJob: (id: string) => ipcRenderer.invoke('jobs:discard', id) as Promise<void>,
   dismissJob: (id: string) => ipcRenderer.invoke('jobs:dismiss', id) as Promise<boolean>,
   closeJob: (id: string) => ipcRenderer.invoke('jobs:close', id) as Promise<void>,
-  startSentryJob: (issueId: string) =>
-    ipcRenderer.invoke('jobs:start-sentry', issueId) as Promise<Job>,
+  startSentryJob: (issueId: string, note?: string) =>
+    ipcRenderer.invoke('jobs:start-sentry', issueId, note) as Promise<Job>,
   getJobsAuto: () => ipcRenderer.invoke('jobs:auto-get') as Promise<JobsAutoStatus>,
   listTickets: () => ipcRenderer.invoke('tickets:list') as Promise<TicketsState>,
   onTicketsUpdate: (handler: (state: TicketsState) => void) => {
@@ -166,8 +166,8 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('tickets:file', reference, attachmentId) as Promise<TicketFile>,
   markTicketRead: (reference: string) =>
     ipcRenderer.invoke('tickets:mark-read', reference) as Promise<void>,
-  startTicketJob: (reference: string) =>
-    ipcRenderer.invoke('tickets:start-job', reference) as Promise<Job>,
+  startTicketJob: (reference: string, note?: string) =>
+    ipcRenderer.invoke('tickets:start-job', reference, note) as Promise<Job>,
   openTicketFile: (reference: string, attachmentId: string) =>
     ipcRenderer.invoke('tickets:open-file', reference, attachmentId) as Promise<void>,
   setJobsAuto: (enabled: boolean) =>

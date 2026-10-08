@@ -827,7 +827,8 @@ export interface MuckaApi {
   /** Take a finished job's card off the board. */
   closeJob(id: JobId): Promise<void>
   /** Start a job on a Sentry issue, briefed with it. Returns its existing job if it has one. */
-  startSentryJob(issueId: string): Promise<Job>
+  /** `note` is Tom's own direction, put first in the job's opening message. */
+  startSentryJob(issueId: string, note?: string): Promise<Job>
   getJobsAuto(): Promise<JobsAutoStatus>
   listTickets(): Promise<TicketsState>
   onTicketsUpdate(handler: (state: TicketsState) => void): () => void
@@ -842,7 +843,7 @@ export interface MuckaApi {
   /** As opening it in /admin/support does: clears "awaiting reply". */
   markTicketRead(reference: string): Promise<void>
   /** A job on the ticket, briefed to do the groundwork, or the one it already has. */
-  startTicketJob(reference: string): Promise<Job>
+  startTicketJob(reference: string, note?: string): Promise<Job>
   /** Opens a PDF in Preview, or shows any other file in Finder. Never runs it. */
   openTicketFile(reference: string, attachmentId: string): Promise<void>
   setJobsAuto(enabled: boolean): Promise<JobsAutoStatus>

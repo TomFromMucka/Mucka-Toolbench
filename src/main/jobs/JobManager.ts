@@ -26,6 +26,7 @@ import { getValue, setValue } from '../db/kv'
 import { logEvent } from '../events/Events'
 import { sentryBrief } from './sentryBrief'
 import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
+import { withTomsNote } from './tomsNote'
 import {
   closeJob,
   getJob,
@@ -393,33 +394,36 @@ export class JobManager {
   }
 
   /** Start a job briefed with a Sentry issue, or return the one it already has. */
-  async startFromSentry(issue: SentryIssue): Promise<Job> {
+  async startFromSentry(issue: SentryIssue, note?: string): Promise<Job> {
     const existing = listOpenJobs().find((j) => j.source === sentrySource(issue))
     if (existing) return existing
     this.setQueue(this.queue().filter((id) => id !== issue.id))
     return this.create({
       title: `${issue.shortId}: ${issue.title}`,
-      prompt: sentryBrief(issue),
+      prompt: withTomsNote(sentryBrief(issue), note),
       source: sentrySource(issue)
     })
   }
 
   /** Start a job on a support ticket, or return the one it already has. */
-  async startFromTicket(ticket: Pick<Ticket, 'reference' | 'subject'>): Promise<Job> {
+  async startFromTicket(
+    ticket: Pick<Ticket, 'reference' | 'subject'>,
+    note?: string
+  ): Promise<Job> {
     const source = `ticket:${ticket.reference}`
     const existing = listOpenJobs().find((j) => j.source === source)
     if (existing) return existing
     return this.create({
       title: `${ticket.reference}: ${ticket.subject}`,
-      prompt: ticketBrief(ticket.reference),
+      prompt: withTomsNote(ticketBrief(ticket.reference), note),
       source
     })
   }
 
-  async startSentryById(issueId: string): Promise<Job> {
+  async startSentryById(issueId: string, note?: string): Promise<Job> {
     const issue = await this.getSentryIssue(issueId)
     if (!issue) throw new Error(`Sentry issue ${issueId} isn't in the latest list.`)
-    return this.startFromSentry(issue)
+    return this.startFromSentry(issue, note)
   }
 
   autoStatus(): JobsAutoStatus {

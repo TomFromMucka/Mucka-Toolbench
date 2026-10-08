@@ -10,6 +10,7 @@ import type {
   TicketSendStatus
 } from '@shared/types'
 import { Dim, TermButton } from './IntakeBits'
+import { JobStarter } from './JobStarter'
 import { bytes, CATEGORY_LABELS, STATUS_LABELS, when } from './intakeFormat'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
 import { cachedTicket, loadTicket } from '../state/ticketCache'
@@ -46,7 +47,6 @@ export function TicketModal({
   const [tab, setTab] = useState<TicketTab>('ticket')
   const { jobs } = useJobs()
   const job = jobs.find((j) => j.source === `ticket:${reference}`)
-  const [starting, setStarting] = useState(false)
   const [reply, setReply] = useState(() => drafts.get(reference) ?? '')
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
@@ -67,19 +67,6 @@ export function TicketModal({
     void load()
     void window.mucka.markTicketRead(reference)
   }, [load, reference])
-
-  const startJob = (): void => {
-    setStarting(true)
-    setNote(null)
-    window.mucka
-      .startTicketJob(reference)
-      .then((started) => {
-        onJob(started.id)
-        onClose()
-      })
-      .catch((err: unknown) => setNote(err instanceof Error ? err.message : String(err)))
-      .finally(() => setStarting(false))
-  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -189,28 +176,24 @@ export function TicketModal({
             </>
           ) : null}
           <span className="ml-auto" />
-          {job ? (
-            <TermButton
-              onClick={() => {
-                onJob(job.id)
-                onClose()
-              }}
-            >
-              → open its job
-            </TermButton>
-          ) : (
-            <TermButton
-              disabled={starting}
-              onClick={startJob}
-              title="A fresh job that reads this ticket, does the groundwork and drafts the fix"
-            >
-              {starting ? 'starting…' : '▶ start job'}
-            </TermButton>
-          )}
           <TermButton tone="dim" onClick={onClose} title="Close (Esc)">
             × close
           </TermButton>
         </header>
+
+        <JobStarter
+          label={reference}
+          jobId={job?.id ?? null}
+          onOpenJob={(id) => {
+            onJob(id)
+            onClose()
+          }}
+          onStart={(note) => window.mucka.startTicketJob(reference, note)}
+          onStarted={(id) => {
+            onJob(id)
+            onClose()
+          }}
+        />
 
         {error ? <Dim error>{error}</Dim> : null}
 

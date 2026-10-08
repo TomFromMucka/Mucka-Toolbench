@@ -12,6 +12,7 @@ import { Clipboard } from './Clipboard'
 import { Dim, TermButton } from './IntakeBits'
 import { ago } from './intakeFormat'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
+import { SentryModal } from './SentryModal'
 import { TicketsPane } from './TicketsPane'
 
 /**
@@ -56,6 +57,7 @@ export function IntakePanel({
   const [now, setNow] = useState(() => Date.now())
   const [tickets, setTickets] = useState<TicketsState | null>(null)
   const [tab, setTab] = useState<Tab>(savedTab)
+  const [openIssue, setOpenIssue] = useState<SentryIssue | null>(null)
   const pick = (next: Tab): void => {
     setTab(next)
     try {
@@ -179,7 +181,13 @@ export function IntakePanel({
             return (
               <div
                 key={issue.id}
-                className="flex flex-col gap-0.5 px-3 py-2.5"
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpenIssue(issue)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setOpenIssue(issue)
+                }}
+                className="flex cursor-pointer flex-col gap-0.5 px-3 py-2.5 hover:bg-[rgba(234,233,232,0.04)]"
                 style={{ borderBottom: `1px solid ${THEME.black}` }}
               >
                 <div className="flex items-baseline gap-2">
@@ -232,6 +240,7 @@ export function IntakePanel({
                     href={issue.permalink}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
                     className="px-1.5 hover:bg-[rgba(234,233,232,0.1)]"
                     style={{ color: 'var(--dirty-grey)' }}
                   >
@@ -243,6 +252,9 @@ export function IntakePanel({
           })
         )}
       </div>
+      {openIssue ? (
+        <SentryModal issue={openIssue} onClose={() => setOpenIssue(null)} onJob={onSelect} />
+      ) : null}
     </Clipboard>
   )
 }

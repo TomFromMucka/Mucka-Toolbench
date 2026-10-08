@@ -50,9 +50,12 @@ or "Tom, eyes here".
 - Per-agent git badges (branch · ahead/behind · dirty/untracked).
 
 **Jobs layout (third choice under Settings → Agents → *Layout*).**
-- Five columns: Files (folded until clicked), Intake, Job board,
-  the selected job's terminal, and the six-up right column. The 4 and 6
-  layouts are unchanged.
+- Columns: Files (folded until clicked), Intake, the selected job's
+  terminal in the centre of the screen, the Job board (On the tools,
+  Check it, Idle), and Mucka folded to a strip on the right (opens by
+  itself for a confirm). *Waiting on you* is a strip right under the
+  terminal's input, in queue order; click one to bring it up. The 4 and
+  6 layouts are unchanged.
 - **+ New job** (`⌘N`) makes a fresh worktree in `<repo>-jobs/` off the
   latest `origin/main` (env files copied, `node_modules` cloned
   copy-on-write) and opens Claude in it. The card takes its title from
@@ -72,6 +75,8 @@ or "Tom, eyes here".
     on which channels, and whether it's held until 08:00. All of it runs
     through Mucka Pro's `scripts/ticket.ts`, so no credentials live in
     the cockpit. Opening a ticket marks it read, as the web does.
+  - Opening a ticket or a Sentry issue gives a note box: whatever Tom
+    types goes first in the job's opening message.
   - *Start job* (on the row or the open ticket) opens a fresh job told
     to read the ticket with `ticket.ts show`, do the groundwork, reproduce
     it with a failing test and draft the fix, committed but not pushed.
@@ -281,6 +286,12 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-10-08** — Jobs: the terminal is the centre column (Intake left,
+  board right, Mucka folded), with Waiting on you under its input; a note
+  box on tickets and Sentry issues goes first in a new job's brief;
+  ticket jobs read tickets freely and always ask before replying; a
+  resolved or closed ticket leaves the list at once.
 
 - **2026-10-08** — Intake: tickets go straight to a job (Start job), as Tom
   works on a worktree; the read-only scout, auto-scouting and the Scouting

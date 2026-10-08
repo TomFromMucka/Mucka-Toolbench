@@ -331,6 +331,10 @@ function createWindow(): void {
       if (!jobManager) throw new Error('The cockpit window is not ready yet.')
       return jobManager.scoutCheckout()
     },
+    scoutDir: () => {
+      if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+      return jobManager.scoutDir()
+    },
     env: agentShellEnv,
     emit: (state) => {
       if (mainWindow.webContents.isDestroyed()) return
@@ -346,6 +350,7 @@ function createWindow(): void {
     env: agentShellEnv,
     filesDir: join(app.getPath('userData'), 'ticket-files'),
     refresh: () => ticketWatcher?.refresh(),
+    publish: () => ticketWatcher?.publish(),
     openPath: (path) => shell.openPath(path),
     showInFolder: (path) => shell.showItemInFolder(path)
   })
@@ -465,9 +470,9 @@ function registerIpc(): void {
   guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))
   guardedHandle('jobs:dismiss', (_event, id: string) => jobManager?.dismiss(id) ?? false)
   guardedHandle('jobs:close', (_event, id: string) => jobManager?.close(id))
-  guardedHandle('jobs:start-sentry', (_event, issueId: string) => {
+  guardedHandle('jobs:start-sentry', (_event, issueId: string, note?: string) => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
-    return jobManager.startSentryById(issueId)
+    return jobManager.startSentryById(issueId, note)
   })
   guardedHandle('tickets:list', () => {
     if (!ticketWatcher) throw new Error('The cockpit window is not ready yet.')
@@ -488,11 +493,11 @@ function registerIpc(): void {
     desk().open(reference, id)
   )
   guardedHandle('tickets:mark-read', (_event, reference: string) => desk().markRead(reference))
-  guardedHandle('tickets:start-job', async (_event, reference: string) => {
+  guardedHandle('tickets:start-job', async (_event, reference: string, note?: string) => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     // A resolved or closed ticket isn't in the polled list; look it up.
     const ticket = getTicket(reference) ?? (await desk().get(reference))
-    return jobManager.startFromTicket(ticket)
+    return jobManager.startFromTicket(ticket, note)
   })
 
   guardedHandle('jobs:auto-get', () => {

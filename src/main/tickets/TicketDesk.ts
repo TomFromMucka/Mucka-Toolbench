@@ -9,6 +9,7 @@ import type {
   TicketSendPreview,
   TicketSendResult
 } from '@shared/types'
+import { setTicketStatus } from '../db/tickets'
 import {
   lastJsonLine,
   lastLine,
@@ -51,6 +52,8 @@ export interface TicketDeskDeps {
   filesDir: string
   /** Re-read the polled list after something changed a ticket. */
   refresh: () => void
+  /** Send the stored list as it is, after a local change. */
+  publish: () => void
   openPath: (path: string) => Promise<string>
   showInFolder: (path: string) => void
 }
@@ -156,7 +159,13 @@ export class TicketDesk {
   async send(action: TicketAction): Promise<TicketSendResult> {
     const { cmd, vars } = this.actionArgs(action)
     try {
-      return parseResult(await this.run(`${cmd} --send --json`, vars))
+      const result = parseResult(await this.run(`${cmd} --send --json`, vars))
+      if (result.status) {
+        // Off the open list now, not when the next look comes back.
+        setTicketStatus(action.reference, result.status)
+        this.deps.publish()
+      }
+      return result
     } finally {
       this.deps.refresh()
     }

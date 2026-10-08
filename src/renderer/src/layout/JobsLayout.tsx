@@ -6,6 +6,7 @@ import { AgentTerminal } from '../components/AgentTerminal'
 import { Button } from '../components/ui/Button'
 import { Clipboard } from '../components/Clipboard'
 import { IntakePanel } from '../components/IntakePanel'
+import { WaitingStrip } from '../components/WaitingStrip'
 import { useAgentSlots } from '../hooks/useAgentSlots'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useAgentStatuses } from '../state/AgentStatusContext'
@@ -15,8 +16,11 @@ import { useFocusRequests, useNeedsYou } from '../state/NeedsYouContext'
 import { submitPromptAndEnter } from '../mucka/dispatch'
 
 /**
- * The Jobs layout's middle three columns: work coming in, a board of
- * the work in flight, and the selected job's terminal.
+ * The Jobs layout's middle three columns: work coming in, the selected
+ * job's terminal, and a board of the work in flight. The terminal is the
+ * centre of the screen because it's where Tom spends his time, and the
+ * queue of who's waiting on him sits right under its input (Tom's call,
+ * 2026-10-08: the off-centre terminal had his neck turned all day).
  *
  * Two kinds of card share the board. A job (docs/jobs-layout-plan.md) is
  * started with "+ New job": its own fresh worktree and a terminal with
@@ -27,8 +31,8 @@ import { submitPromptAndEnter } from '../mucka/dispatch'
 
 type Lane = 'waiting' | 'working' | 'check' | 'idle'
 
+// Waiting on you isn't a lane here: it's the strip under the terminal.
 const LANES: { lane: Lane; title: string; empty: string }[] = [
-  { lane: 'waiting', title: 'Waiting on you', empty: 'Nobody needs you.' },
   { lane: 'working', title: 'On the tools', empty: 'Nobody is working.' },
   { lane: 'check', title: 'Check it', empty: 'Nothing finished to look at.' },
   { lane: 'idle', title: 'Idle', empty: 'Everyone has something to do.' }
@@ -155,6 +159,58 @@ export function JobsLayout({
       */}
       <IntakePanel onSelect={onSelect} />
 
+      {/*
+        Every agent's clipboard stays mounted, stacked in one cell, and only
+        the selected one is visible. Switching jobs must not remount: a
+        remount throws the xterm away (scrollback replay, "reconnected"
+        banner, split tabs collapsing). `invisible` rather than `hidden`
+        keeps each terminal its real size, so it doesn't refit to zero.
+      */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-2">
+        <div className="grid min-h-0 min-w-0 flex-1">
+          {jobs.map((job) => (
+            <div
+              key={job.id}
+              className={clsx(
+                'col-start-1 row-start-1 grid min-h-0 min-w-0',
+                job.id !== current && 'pointer-events-none invisible'
+              )}
+              aria-hidden={job.id !== current}
+            >
+              <JobTerminal
+                job={job}
+                blocked={placeOf(job.id) !== null}
+                working={WORKING.includes(jobStatusFor(job.id))}
+              />
+            </div>
+          ))}
+          {agents.map((cfg) => {
+            const slot = slotFor(cfg)
+            if (!slot) return null
+            const shown = cfg.id === current
+            return (
+              <div
+                key={slot.key}
+                className={clsx(
+                  'col-start-1 row-start-1 grid min-h-0 min-w-0',
+                  !shown && 'pointer-events-none invisible'
+                )}
+                aria-hidden={!shown}
+              >
+                <AgentClipboard
+                  agent={slot.agent}
+                  config={slot.config}
+                  gitStatus={slot.gitStatus}
+                  contextUsedPercent={slot.contextUsedPercent}
+                  model={slot.model}
+                />
+              </div>
+            )
+          })}
+        </div>
+        <WaitingStrip selected={current} onSelect={onSelect} />
+      </div>
+
       <Clipboard
         title="Job board"
         subtitle={startError ?? 'what everyone is on'}
@@ -172,7 +228,7 @@ export function JobsLayout({
           </Button>
         }
       >
-        <div className="grid h-full min-h-0 grid-cols-4 gap-2 overflow-y-auto p-2">
+        <div className="grid h-full min-h-0 grid-cols-3 gap-2 overflow-y-auto p-2">
           {LANES.map(({ lane, title, empty }) => {
             const list = byLane.get(lane) ?? []
             return (
@@ -216,55 +272,6 @@ export function JobsLayout({
           })}
         </div>
       </Clipboard>
-
-      {/*
-        Every agent's clipboard stays mounted, stacked in one cell, and only
-        the selected one is visible. Switching jobs must not remount: a
-        remount throws the xterm away (scrollback replay, "reconnected"
-        banner, split tabs collapsing). `invisible` rather than `hidden`
-        keeps each terminal its real size, so it doesn't refit to zero.
-      */}
-      <div className="grid min-h-0 min-w-0">
-        {jobs.map((job) => (
-          <div
-            key={job.id}
-            className={clsx(
-              'col-start-1 row-start-1 grid min-h-0 min-w-0',
-              job.id !== current && 'pointer-events-none invisible'
-            )}
-            aria-hidden={job.id !== current}
-          >
-            <JobTerminal
-              job={job}
-              blocked={placeOf(job.id) !== null}
-              working={WORKING.includes(jobStatusFor(job.id))}
-            />
-          </div>
-        ))}
-        {agents.map((cfg) => {
-          const slot = slotFor(cfg)
-          if (!slot) return null
-          const shown = cfg.id === current
-          return (
-            <div
-              key={slot.key}
-              className={clsx(
-                'col-start-1 row-start-1 grid min-h-0 min-w-0',
-                !shown && 'pointer-events-none invisible'
-              )}
-              aria-hidden={!shown}
-            >
-              <AgentClipboard
-                agent={slot.agent}
-                config={slot.config}
-                gitStatus={slot.gitStatus}
-                contextUsedPercent={slot.contextUsedPercent}
-                model={slot.model}
-              />
-            </div>
-          )
-        })}
-      </div>
     </>
   )
 }

@@ -88,3 +88,18 @@ export function syncTickets(listed: Ticket[]): void {
     }
   })()
 }
+
+/**
+ * Record a status Tom just set, before the next poll confirms it, so the
+ * list never shows a done ticket as still open. Resolved and closed leave
+ * the active list at once.
+ */
+export function setTicketStatus(reference: string, status: string): void {
+  const done = status === 'resolved' || status === 'closed'
+  getDb()
+    .prepare(
+      `UPDATE tickets SET status = ?, updated_at = ?, active = CASE WHEN ? THEN 0 ELSE active END
+       WHERE reference = ?`
+    )
+    .run(status, Date.now(), done ? 1 : 0, reference)
+}
