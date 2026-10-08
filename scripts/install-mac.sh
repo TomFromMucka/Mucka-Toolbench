@@ -9,6 +9,8 @@
 # only touches the installed app's own state.
 #
 # Usage:  npm run install:mac
+#         bash scripts/install-mac.sh --no-build   (swap in the last build:mac;
+#         lets a caller build first and only quit the app at a quiet moment)
 
 set -euo pipefail
 
@@ -17,8 +19,10 @@ APP_PATH="/Applications/Mucka Toolbench.app"
 
 cd "$PROJECT_DIR"
 
-echo "→ Building…"
-npm run build:mac
+if [[ "${1:-}" != "--no-build" ]]; then
+  echo "→ Building…"
+  npm run build:mac
+fi
 
 # Locate the built .app — electron-builder names the arch folder
 # `mac-arm64` on Apple Silicon, `mac` on Intel.
