@@ -33,6 +33,7 @@ import {
   getJobBrief,
   insertJob,
   listOpenJobs,
+  setJobHeld,
   terminalIdForJob,
   updateJob
 } from '../db/jobs'
@@ -465,8 +466,16 @@ export class JobManager {
     }
   }
 
+  /** Held ones don't count: parked work shouldn't stop new issues starting. */
   private openSentryJobs(): number {
-    return listOpenJobs().filter((j) => j.source?.startsWith('sentry:')).length
+    return listOpenJobs().filter((j) => j.source?.startsWith('sentry:') && !j.held).length
+  }
+
+  hold(id: JobId, held: boolean): void {
+    setJobHeld(id, held)
+    this.push()
+    // Holding one frees a place for a queued Sentry issue.
+    if (held) void this.drainQueue()
   }
 
   private queue(): string[] {
@@ -542,6 +551,7 @@ export class JobManager {
       needsInstall: false,
       pr: null,
       source: brief?.source ?? null,
+      held: false,
       createdAt: Date.now()
     }
     insertJob(job, brief?.prompt ?? null)

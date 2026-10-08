@@ -52,7 +52,7 @@ or "Tom, eyes here".
 **Jobs layout (third choice under Settings → Agents → *Layout*).**
 - Columns: Files (folded until clicked), Intake, the selected job's
   terminal in the centre of the screen, the Job board (On the tools,
-  Check it, Idle), and Mucka folded to a strip on the right (opens by
+  Check it, Idle / On hold), and Mucka folded to a strip on the right (opens by
   itself for a confirm). *Waiting on you* is a strip right under the
   terminal's input, in queue order; click one to bring it up. The 4 and
   6 layouts are unchanged.
@@ -62,8 +62,9 @@ or "Tom, eyes here".
   Tom's first message and its lane from what Claude reports.
 - Sign-off bar under each job's terminal: *Job done* (Claude checks for
   loose ends, lands the PR with auto-merge, then `/coach job-done` removes
-  the folder and branch), *Amend*, *Dismiss* (asks first, says what would
-  be lost).
+  the folder and branch), *Amend*, *Hold* / *Release* (parks it, tagged,
+  in Idle / On hold; held Sentry jobs don't count toward the auto-start
+  cap), *Dismiss* (asks first, says what would be lost).
 - **Intake** has two tabs in the terminal's font, *support* and
   *sentry*, each with its open count.
   - *support* is the `/admin/support` desk without the browser: the same
@@ -286,6 +287,9 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- **2026-10-08** — Jobs: Hold / Release on the sign-off bar parks a job in
+  the Idle / On hold column; ticket view closes after a status change.
 
 - **2026-10-08** — Jobs: the terminal is the centre column (Intake left,
   board right, Mucka folded), with Waiting on you under its input; a note

@@ -15,6 +15,7 @@ interface JobRow {
   pr_auto_merge: number
   source: string | null
   brief: string | null
+  held: number
   closed: number
   created_at: number
   updated_at: number
@@ -46,6 +47,7 @@ function rowToJob(row: JobRow): Job {
     needsInstall: row.needs_install === 1,
     pr: prOf(row),
     source: row.source,
+    held: row.held === 1,
     createdAt: row.created_at
   }
 }
@@ -115,6 +117,12 @@ export function updateJob(
       Date.now(),
       id
     )
+}
+
+export function setJobHeld(id: JobId, held: boolean): void {
+  getDb()
+    .prepare(`UPDATE jobs SET held = ?, updated_at = ? WHERE id = ?`)
+    .run(held ? 1 : 0, Date.now(), id)
 }
 
 /** Take a job off the board. The row stays, for history and metrics. */

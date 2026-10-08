@@ -231,6 +231,9 @@ function migrate(d: DatabaseType): void {
     d.exec(`ALTER TABLE jobs ADD COLUMN source TEXT`)
     d.exec(`ALTER TABLE jobs ADD COLUMN brief TEXT`)
   }
+  if (!jobCols.has('held')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN held INTEGER NOT NULL DEFAULT 0`)
+  }
   const ticketCols = new Set(
     d.prepare<[], { name: string }>(`PRAGMA table_info(tickets)`).all().map((c) => c.name)
   )

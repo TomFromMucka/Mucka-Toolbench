@@ -470,6 +470,7 @@ function registerIpc(): void {
   guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))
   guardedHandle('jobs:dismiss', (_event, id: string) => jobManager?.dismiss(id) ?? false)
   guardedHandle('jobs:close', (_event, id: string) => jobManager?.close(id))
+  guardedHandle('jobs:hold', (_event, id: string, held: boolean) => jobManager?.hold(id, held))
   guardedHandle('jobs:start-sentry', (_event, issueId: string, note?: string) => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     return jobManager.startSentryById(issueId, note)

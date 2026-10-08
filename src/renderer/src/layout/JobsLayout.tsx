@@ -35,7 +35,7 @@ type Lane = 'waiting' | 'working' | 'check' | 'idle'
 const LANES: { lane: Lane; title: string; empty: string }[] = [
   { lane: 'working', title: 'On the tools', empty: 'Nobody is working.' },
   { lane: 'check', title: 'Check it', empty: 'Nothing finished to look at.' },
-  { lane: 'idle', title: 'Idle', empty: 'Everyone has something to do.' }
+  { lane: 'idle', title: 'Idle / On hold', empty: 'Nothing idle or held.' }
 ]
 
 const WORKING: AgentStatus[] = ['thinking', 'editing', 'running']
@@ -135,6 +135,8 @@ export function JobsLayout({
     if (job.state === 'failed') return 'check'
     // On its way off the board: nothing left for Tom to look at.
     if (job.state === 'finished') return 'idle'
+    // Parked by Tom: shares the last column, tagged, until he releases it.
+    if (job.held) return 'idle'
     if (placeOf(job.id) !== null) return 'waiting'
     if (WORKING.includes(jobStatusFor(job.id))) return 'working'
     return job.title === 'New job' ? 'idle' : 'check'
@@ -412,6 +414,8 @@ function NewJobCard({
           >
             {place}
           </span>
+        ) : job.held ? (
+          <span className="t-body-sm ml-auto text-dirty-grey">on hold</span>
         ) : working ? (
           <span className="t-body-sm ml-auto text-dirty-grey">working</span>
         ) : null}
@@ -585,6 +589,17 @@ function SignOffBar({
         onClick={() => focusTerminal(job.terminalId)}
       >
         Amend
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        trailingIcon={null}
+        title={
+          job.held ? 'Back to its lane' : 'Park it in Idle / On hold until something else lands'
+        }
+        onClick={() => void window.mucka.holdJob(job.id, !job.held)}
+      >
+        {job.held ? 'Release' : 'Hold'}
       </Button>
       {merged ? null : (
         <Button

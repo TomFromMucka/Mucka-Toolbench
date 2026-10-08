@@ -145,6 +145,8 @@ const muckaApi: MuckaApi = {
   discardJob: (id: string) => ipcRenderer.invoke('jobs:discard', id) as Promise<void>,
   dismissJob: (id: string) => ipcRenderer.invoke('jobs:dismiss', id) as Promise<boolean>,
   closeJob: (id: string) => ipcRenderer.invoke('jobs:close', id) as Promise<void>,
+  holdJob: (id: string, held: boolean) =>
+    ipcRenderer.invoke('jobs:hold', id, held) as Promise<void>,
   startSentryJob: (issueId: string, note?: string) =>
     ipcRenderer.invoke('jobs:start-sentry', issueId, note) as Promise<Job>,
   getJobsAuto: () => ipcRenderer.invoke('jobs:auto-get') as Promise<JobsAutoStatus>,
