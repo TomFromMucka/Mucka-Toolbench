@@ -35,6 +35,17 @@ function ago(ms: number, now: number): string {
 
 const sourceOf = (issue: SentryIssue): string => `sentry:${issue.shortId}`
 
+type Tab = 'support' | 'sentry'
+const TAB_KEY = 'mucka.intake.tab'
+
+function savedTab(): Tab {
+  try {
+    return localStorage.getItem(TAB_KEY) === 'sentry' ? 'sentry' : 'support'
+  } catch {
+    return 'support'
+  }
+}
+
 export function IntakePanel({
   onSelect
 }: {
@@ -50,6 +61,15 @@ export function IntakePanel({
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [tickets, setTickets] = useState<TicketsState | null>(null)
+  const [tab, setTab] = useState<Tab>(savedTab)
+  const pick = (next: Tab): void => {
+    setTab(next)
+    try {
+      localStorage.setItem(TAB_KEY, next)
+    } catch {
+      // Remembering the tab is a convenience; it can fail quietly.
+    }
+  }
 
   const load = useCallback((): Promise<void> => {
     const api = window.mucka
@@ -111,7 +131,7 @@ export function IntakePanel({
   return (
     <Clipboard
       title="Intake"
-      subtitle={error ?? 'tickets · sentry'}
+      subtitle={error ?? 'support · sentry'}
       bodyClassName="min-h-0"
       rightSlot={
         auto ? (
@@ -142,16 +162,29 @@ export function IntakePanel({
           lineHeight: 1.45
         }}
       >
-        <Section label="tickets" note={tickets?.error ?? null} />
-        {tickets === null ? (
-          <Dim>Loading…</Dim>
-        ) : tickets.tickets.length === 0 && !tickets.error ? (
-          <Dim>{tickets.polledAt ? 'No open tickets.' : 'Looking at the ticket list…'}</Dim>
-        ) : (
-          tickets.tickets.map((t) => <TicketRow key={t.reference} ticket={t} now={now} />)
-        )}
-        <Section label="sentry" note={null} />
-        {issues.length === 0 ? (
+        <div
+          className="sticky top-0 z-10 flex gap-1 px-2 pt-2 pb-1"
+          style={{ background: THEME.background }}
+        >
+          <TabButton active={tab === 'support'} onClick={() => pick('support')}>
+            support {tickets ? tickets.tickets.length : '…'}
+          </TabButton>
+          <TabButton active={tab === 'sentry'} onClick={() => pick('sentry')}>
+            sentry {status?.kind === 'ok' ? issues.length : '…'}
+          </TabButton>
+        </div>
+        {tab === 'support' ? (
+          <>
+            {tickets?.error ? <Dim error>{tickets.error}</Dim> : null}
+            {tickets === null ? (
+              <Dim>Loading…</Dim>
+            ) : tickets.tickets.length === 0 && !tickets.error ? (
+              <Dim>{tickets.polledAt ? 'No open tickets.' : 'Looking at the ticket list…'}</Dim>
+            ) : (
+              tickets.tickets.map((t) => <TicketRow key={t.reference} ticket={t} now={now} />)
+            )}
+          </>
+        ) : issues.length === 0 ? (
           <Dim>{empty}</Dim>
         ) : (
           issues.map((issue) => {
@@ -227,17 +260,41 @@ export function IntakePanel({
   )
 }
 
-function Section({ label, note }: { label: string; note: string | null }): React.JSX.Element {
+function TabButton({
+  active,
+  onClick,
+  children
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
   return (
-    <div className="px-3 pt-3 pb-1" style={{ color: 'var(--dirty-grey)' }}>
-      ── {label} ──{note ? <span style={{ color: THEME.brightRed }}> {note}</span> : null}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="px-2 py-0.5 hover:bg-[rgba(234,233,232,0.1)]"
+      style={{
+        fontFamily: 'inherit',
+        color: active ? THEME.brightWhite : 'var(--dirty-grey)',
+        background: active ? THEME.black : undefined,
+        fontWeight: active ? 700 : 400
+      }}
+    >
+      {children}
+    </button>
   )
 }
 
-function Dim({ children }: { children: React.ReactNode }): React.JSX.Element {
+function Dim({
+  children,
+  error = false
+}: {
+  children: React.ReactNode
+  error?: boolean
+}): React.JSX.Element {
   return (
-    <span className="px-3 py-2" style={{ color: 'var(--dirty-grey)' }}>
+    <span className="px-3 py-2" style={{ color: error ? THEME.brightRed : 'var(--dirty-grey)' }}>
       {children}
     </span>
   )
