@@ -1,15 +1,18 @@
+const RUNNERS = ['npx tsx', 'tsx', 'node --import tsx']
+const rules = (cmds: string[]): string[] =>
+  cmds.flatMap((cmd) => RUNNERS.map((run) => `Bash(${run} scripts/ticket.ts ${cmd}:*)`))
+
 /**
- * What a ticket job must not do: anything that reaches the customer or
- * changes the ticket. Reading it (`ticket.ts show`) stays open, as it is on
- * Tom's own worktrees. Written to the job's `.claude/settings.local.json`
- * (gitignored). A guard rail, not a sandbox: the brief says the same.
+ * A ticket job's own `.claude/settings.local.json` (gitignored). Reading
+ * tickets is allowed outright: without a rule, auto mode's safety check
+ * judges each read and has refused one for holding customer data. Anything
+ * that reaches the customer or changes the ticket is denied. A guard rail,
+ * not a sandbox: the brief says the same.
  */
-const SENDING = ['reply', 'status', 'create', 'mark-read']
-export const TICKET_JOB_DENY = SENDING.flatMap((cmd) => [
-  `Bash(npx tsx scripts/ticket.ts ${cmd}:*)`,
-  `Bash(tsx scripts/ticket.ts ${cmd}:*)`,
-  `Bash(node --import tsx scripts/ticket.ts ${cmd}:*)`
-])
+export const TICKET_JOB_PERMISSIONS = {
+  allow: rules(['show', 'list']),
+  deny: rules(['reply', 'status', 'create', 'mark-read'])
+}
 
 /**
  * The opening message for a job Tom starts on a support ticket: the same

@@ -25,7 +25,7 @@ import type {
 import { getValue, setValue } from '../db/kv'
 import { logEvent } from '../events/Events'
 import { sentryBrief } from './sentryBrief'
-import { TICKET_JOB_DENY, ticketBrief } from './ticketBrief'
+import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
 import {
   closeJob,
   getJob,
@@ -592,7 +592,7 @@ export class JobManager {
         mkdirSync(join(job.worktreePath, '.claude'), { recursive: true })
         writeFileSync(
           join(job.worktreePath, '.claude', 'settings.local.json'),
-          `${JSON.stringify({ permissions: { deny: TICKET_JOB_DENY } }, null, 2)}\n`
+          `${JSON.stringify({ permissions: TICKET_JOB_PERMISSIONS }, null, 2)}\n`
         )
       }
 
