@@ -99,19 +99,23 @@ export function AgentTerminal({
       theme: THEME
     })
 
-    // VSCode-style Shift+Enter — send ESC+CR (the iTerm2 convention) so
-    // Claude Code's TUI treats it as a multi-line continuation instead
-    // of submitting the prompt. Plain Enter still sends \r.
+    // VSCode-style Shift+Enter — send ESC+CR (the iTerm2 convention, and
+    // what /terminal-setup binds in VS Code) so Claude Code's TUI starts a
+    // new line instead of submitting. Plain Enter still sends \r.
+    // Every event of the press is swallowed, not just keydown: Enter also
+    // fires a keypress, which xterm turns into \r and submits the prompt.
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       if (
-        event.type === 'keydown' &&
         event.key === 'Enter' &&
         event.shiftKey &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey
       ) {
-        window.mucka.writePty({ terminalId, data: '\x1b\r' })
+        if (event.type === 'keydown') {
+          event.preventDefault()
+          window.mucka.writePty({ terminalId, data: '\x1b\r' })
+        }
         return false
       }
       return true
