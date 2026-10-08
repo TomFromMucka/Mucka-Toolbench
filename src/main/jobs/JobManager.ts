@@ -187,6 +187,26 @@ function jobSlug(jobsDir: string, now: Date): string {
   return slug
 }
 
+type Rules = { allow?: string[]; ask?: string[]; deny?: string[] }
+
+/** Add `extra`'s rules to `settings.permissions`, keeping whatever else is there. */
+function mergePermissions(
+  settings: Record<string, unknown>,
+  extra: Rules
+): Record<string, unknown> {
+  const raw = settings.permissions
+  const current: Record<string, unknown> =
+    typeof raw === 'object' && raw !== null ? Object.fromEntries(Object.entries(raw)) : {}
+  const list = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  const merged: Record<string, unknown> = { ...current }
+  for (const key of ['allow', 'ask', 'deny'] as const) {
+    const add = extra[key] ?? []
+    if (add.length > 0) merged[key] = [...new Set([...list(current[key]), ...add])]
+  }
+  return { ...settings, permissions: merged }
+}
+
 function readIfExists(path: string): string | null {
   try {
     return readFileSync(path, 'utf8')
@@ -639,15 +659,7 @@ export class JobManager {
 
       this.progress(job.id, 'Copying local settings…')
       this.copyLocalFiles(root, job.worktreePath)
-      if (job.source?.startsWith('ticket:')) {
-        // Gitignored, and never copied from the main checkout, so this is
-        // the job's whole local settings file.
-        mkdirSync(join(job.worktreePath, '.claude'), { recursive: true })
-        writeFileSync(
-          join(job.worktreePath, '.claude', 'settings.local.json'),
-          `${JSON.stringify({ permissions: TICKET_JOB_PERMISSIONS }, null, 2)}\n`
-        )
-      }
+      this.writeJobSettings(root, job)
 
       const source = await this.matchingNodeModules(root, job.worktreePath)
       if (source) {
@@ -814,6 +826,35 @@ export class JobManager {
   private progress(id: JobId, detail: string): void {
     updateJob(id, { detail })
     this.push()
+  }
+
+  /**
+   * The job's `.claude/settings.local.json` (gitignored): Tom's own, from
+   * the main checkout, so a job commits, pushes and opens PRs without
+   * asking just as his worktrees do. A ticket job's rules go on top; its
+   * `ask` for replies still wins over any allow, because ask beats allow.
+   */
+  private writeJobSettings(root: string, job: Job): void {
+    const ticket = job.source?.startsWith('ticket:') ?? false
+    const sources = [root, ...this.listAgents().map((a) => a.worktreePath)]
+    const from = sources
+      .map((s) => join(s, '.claude', 'settings.local.json'))
+      .find((p) => existsSync(p))
+    let settings: Record<string, unknown> = {}
+    try {
+      const parsed: unknown = from ? JSON.parse(readFileSync(from, 'utf8')) : {}
+      if (typeof parsed === 'object' && parsed !== null)
+        settings = Object.fromEntries(Object.entries(parsed))
+    } catch {
+      settings = {}
+    }
+    if (!ticket && !from) return
+    if (ticket) settings = mergePermissions(settings, TICKET_JOB_PERMISSIONS)
+    mkdirSync(join(job.worktreePath, '.claude'), { recursive: true })
+    writeFileSync(
+      join(job.worktreePath, '.claude', 'settings.local.json'),
+      `${JSON.stringify(settings, null, 2)}\n`
+    )
   }
 
   /** Copy env files from the main checkout, else from any agent worktree that has them. */
