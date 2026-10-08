@@ -264,6 +264,45 @@ export class JobManager {
     this.titleFromPrompts()
     this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_MS)
     void this.sweep()
+    void this.resumeInterrupted()
+  }
+
+  /**
+   * Setup runs in the app, so quitting mid-setup (an install, say) left the
+   * job on "Fetching the latest main…" for good, and Start job on its issue
+   * kept returning it. With no folder yet it simply starts again; one that
+   * got as far as a folder is failed, so Tom decides about what's there.
+   */
+  private async resumeInterrupted(): Promise<void> {
+    const stuck = listOpenJobs().filter((j) => j.state === 'setting-up')
+    if (stuck.length === 0) return
+    let root: string
+    try {
+      root = await this.repoRoot()
+    } catch (err) {
+      const why = err instanceof Error ? err.message.split('\n')[0] : String(err)
+      for (const job of stuck) {
+        updateJob(job.id, {
+          state: 'failed',
+          detail: `Setup was cut off and can't restart: ${why}`
+        })
+      }
+      this.push()
+      return
+    }
+    for (const job of stuck) {
+      if (existsSync(job.worktreePath)) {
+        updateJob(job.id, {
+          state: 'failed',
+          detail: `Setup was cut off when the cockpit closed and left ${job.worktreePath} behind. Remove that folder, then try again.`
+        })
+        this.push()
+        continue
+      }
+      updateJob(job.id, { detail: 'Starting again: setup was cut off when the cockpit closed…' })
+      this.push()
+      await this.setUp(job, root)
+    }
   }
 
   private async sweep(): Promise<void> {
