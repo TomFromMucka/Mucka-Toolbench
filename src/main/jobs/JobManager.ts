@@ -99,9 +99,27 @@ const LOCAL_FILES = ['.env', '.env.local', 'CLAUDE.local.md']
  * of stderr: Node's message is just "Command failed: <the command>",
  * which says nothing about why.
  */
+/**
+ * The environment for git and gh: the cockpit's own GITHUB_TOKEN / GH_TOKEN
+ * removed. Both prefer a token over Tom's gh login (git through gh's
+ * credential helper), and the stored one can be stale: a 401 here is how
+ * jobs lost sight of their PRs, and fetches failed with "Authentication
+ * failed" so jobs started from an old main.
+ */
+function githubEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env.GH_TOKEN
+  delete env.GITHUB_TOKEN
+  return env
+}
+
 async function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
   try {
-    const { stdout } = await execFileAsync('git', args, { cwd, timeout: timeoutMs })
+    const { stdout } = await execFileAsync('git', args, {
+      cwd,
+      env: githubEnv(),
+      timeout: timeoutMs
+    })
     return stdout.trim()
   } catch (err) {
     const stderr =
@@ -119,20 +137,12 @@ async function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<str
 
 const GH_PATHS = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']
 
-/**
- * Run the gh CLI, as Tom does in his terminals, and return stdout. The
- * cockpit's own GITHUB_TOKEN / GH_TOKEN are stripped first: gh prefers
- * them over its login, and the stored one can be stale (a 401 here is
- * how jobs lost sight of their PRs).
- */
+/** Run the gh CLI, as Tom does in his terminals, and return stdout. */
 async function gh(cwd: string, args: string[]): Promise<string> {
   const bin = GH_PATHS.find((p) => existsSync(p))
   if (!bin) throw new Error('the gh CLI is not installed (brew install gh, then gh auth login)')
-  const env = { ...process.env }
-  delete env.GH_TOKEN
-  delete env.GITHUB_TOKEN
   try {
-    const { stdout } = await execFileAsync(bin, args, { cwd, env, timeout: 30_000 })
+    const { stdout } = await execFileAsync(bin, args, { cwd, env: githubEnv(), timeout: 30_000 })
     return stdout.trim()
   } catch (err) {
     const stderr =
