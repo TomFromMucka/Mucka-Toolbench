@@ -171,6 +171,10 @@ export class ClaudeStateWatcher {
     // subdirectory of it. Keep the freshest, or a long-abandoned session
     // could mask the live one.
     const freshest = new Map<AgentId, ClaudeState>()
+    // Jobs too: a job whose Claude moved folder, or a session from before a
+    // restart, leaves a second file behind. Pushing both flipped the job
+    // between waiting and idle on every scan, and the queue flashed with it.
+    const freshestJob = new Map<JobId, ClaudeState>()
 
     for (const file of files) {
       let state: ClaudeState | null = null
@@ -188,7 +192,9 @@ export class ClaudeStateWatcher {
       // A job's terminal is `job:<id>` and its Claude has no agent. Its
       // folder isn't under any agent's worktree, so match on the terminal.
       if (state.terminal?.startsWith('job:')) {
-        this.pushJob(state.terminal.slice('job:'.length), state, now)
+        const jobId = state.terminal.slice('job:'.length)
+        const heldJob = freshestJob.get(jobId)
+        if (!heldJob || state.ts > heldJob.ts) freshestJob.set(jobId, state)
         continue
       }
 
@@ -200,6 +206,8 @@ export class ClaudeStateWatcher {
       const held = freshest.get(agentId)
       if (!held || state.ts > held.ts) freshest.set(agentId, state)
     }
+
+    for (const [jobId, state] of freshestJob) this.pushJob(jobId, state, now)
 
     for (const [agentId, state] of freshest) {
       // A file older than the agent's last clear describes a shell that

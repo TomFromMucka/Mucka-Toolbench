@@ -5,7 +5,8 @@ import { AgentGrid } from '../components/AgentGrid'
 import {
   ExplorerPanel,
   EXPLORER_WIDTH_COLLAPSED,
-  EXPLORER_WIDTH_EXPANDED
+  EXPLORER_WIDTH_EXPANDED,
+  FoldedRail
 } from '../components/ExplorerPanel'
 import { MiddleColumn } from '../components/MiddleColumn'
 import { RightColumn } from '../components/RightColumn'
@@ -22,6 +23,9 @@ const STORAGE_COLLAPSED = 'explorer.collapsed'
 // Jobs keeps its own setting and starts folded: the board and terminal
 // need the width more, and the files are a click away.
 const STORAGE_COLLAPSED_JOBS = 'explorer.collapsed.jobs'
+// Mucka's column folds to a strip in Jobs, like the files, so the
+// terminal can sit in the middle of the screen.
+const STORAGE_MUCKA_JOBS = 'mucka.collapsed.jobs'
 const STORAGE_AGENT = 'explorer.selectedAgent'
 const STORAGE_JOB = 'jobs.selected'
 
@@ -49,7 +53,10 @@ export function Workstation(): React.JSX.Element {
   const agents = useVisibleAgents()
   const { showRightColumn, isJobs } = useLayout()
   const gitStatus = useGitStatus()
-  const { toggle: toggleMucka, restartVersion } = useMuckaSession()
+  const { toggle: toggleMucka, restartVersion, pendingConfirm } = useMuckaSession()
+  const [muckaFolded, setMuckaFolded] = useState<boolean>(() => readBool(STORAGE_MUCKA_JOBS, true))
+  // A confirm waiting on Tom is in the chat, so the column opens for it.
+  const muckaShut = isJobs && muckaFolded && !pendingConfirm
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [gridExplorerCollapsed, setGridExplorerCollapsed] = useState<boolean>(() =>
     readBool(STORAGE_COLLAPSED, false)
@@ -68,10 +75,11 @@ export function Workstation(): React.JSX.Element {
     try {
       localStorage.setItem(STORAGE_COLLAPSED, gridExplorerCollapsed ? '1' : '0')
       localStorage.setItem(STORAGE_COLLAPSED_JOBS, jobsExplorerCollapsed ? '1' : '0')
+      localStorage.setItem(STORAGE_MUCKA_JOBS, muckaFolded ? '1' : '0')
     } catch {
       /* storage disabled */
     }
-  }, [gridExplorerCollapsed, jobsExplorerCollapsed])
+  }, [gridExplorerCollapsed, jobsExplorerCollapsed, muckaFolded])
 
   useEffect(() => {
     if (!explorerAgentId) return
@@ -171,7 +179,11 @@ export function Workstation(): React.JSX.Element {
           gridTemplateColumns: `${
             explorerCollapsed ? EXPLORER_WIDTH_COLLAPSED : EXPLORER_WIDTH_EXPANDED
           } ${
-            isJobs ? '1fr 1.8fr 1.5fr 1.1fr' : showRightColumn ? '2fr 1.1fr 1.2fr' : '3.2fr 1.1fr'
+            isJobs
+              ? `1.2fr 2.4fr 1.2fr ${muckaShut ? EXPLORER_WIDTH_COLLAPSED : '1.1fr'}`
+              : showRightColumn
+                ? '2fr 1.1fr 1.2fr'
+                : '3.2fr 1.1fr'
           }`,
           transition: 'grid-template-columns 180ms ease'
         }}
@@ -199,7 +211,25 @@ export function Workstation(): React.JSX.Element {
         ) : (
           <AgentGrid agents={agents} gitStatus={gitStatus} restartVersion={restartVersion} />
         )}
-        <MiddleColumn />
+        {!isJobs ? (
+          <MiddleColumn />
+        ) : muckaShut ? (
+          <FoldedRail label="MUCKA" title="Show Mucka" onOpen={() => setMuckaFolded(false)} />
+        ) : (
+          <div className="flex min-h-0 flex-col gap-1">
+            <button
+              type="button"
+              onClick={() => setMuckaFolded(true)}
+              className="t-label-sm self-end px-1 text-dirty-grey hover:text-van-white"
+              title="Fold Mucka away"
+            >
+              fold ›
+            </button>
+            <div className="grid min-h-0 flex-1">
+              <MiddleColumn />
+            </div>
+          </div>
+        )}
         {showRightColumn ? <RightColumn /> : null}
       </main>
 

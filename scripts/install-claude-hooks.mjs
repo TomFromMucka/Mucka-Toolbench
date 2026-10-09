@@ -7,7 +7,8 @@
  *
  * Copies scripts/claude-hooks/mucka-pending.sh to ~/.claude/ and wires it
  * into ~/.claude/settings.json as the PermissionRequest hook plus the
- * PostToolUse / Stop / UserPromptSubmit hooks that clear it. Hooks are
+ * PostToolUse / Stop / UserPromptSubmit hooks that clear it, plus Pre/PostToolUse
+ * hooks that tell mucka-agent-state.sh a Claude is working again. Hooks are
  * user-wide, but the script exits at once unless $MUCKA_TERMINAL is set,
  * so only Claudes the cockpit launched are affected.
  *
@@ -26,12 +27,24 @@ const claudeDir = join(homedir(), '.claude')
 const target = join(claudeDir, 'mucka-pending.sh')
 const settingsPath = join(claudeDir, 'settings.json')
 
+const stateScript = join(claudeDir, 'mucka-agent-state.sh')
+
 // The hook waits up to 580s for Tom; give it the full default window.
 const WANTED = [
-  { event: 'PermissionRequest', matcher: '', arg: 'permission', timeout: 600 },
-  { event: 'PostToolUse', matcher: '', arg: 'clear' },
-  { event: 'Stop', arg: 'clear' },
-  { event: 'UserPromptSubmit', arg: 'clear' }
+  { event: 'PermissionRequest', matcher: '', command: `${target} permission`, timeout: 600 },
+  { event: 'PostToolUse', matcher: '', command: `${target} clear` },
+  { event: 'Stop', command: `${target} clear` },
+  { event: 'UserPromptSubmit', command: `${target} clear` },
+  // A Claude that was waiting on Tom goes back to work the moment he
+  // answers in its terminal, and the next tool call is the first sign.
+  // Without these its state stays "waiting" until the turn ends, and the
+  // job sits in the board's Waiting lane while it's busy.
+  ...(existsSync(stateScript)
+    ? [
+        { event: 'PreToolUse', matcher: '', command: `${stateScript} --activity working` },
+        { event: 'PostToolUse', matcher: '', command: `${stateScript} --activity working` }
+      ]
+    : [])
 ]
 
 const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {}
@@ -39,7 +52,7 @@ settings.hooks ??= {}
 
 const changes = []
 for (const want of WANTED) {
-  const command = `${target} ${want.arg}`
+  const { command } = want
   const groups = (settings.hooks[want.event] ??= [])
   const present = groups.some((g) => (g.hooks ?? []).some((h) => h.command === command))
   if (present) continue

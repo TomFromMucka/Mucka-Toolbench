@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css'
 import type { AgentId, JobId, TerminalId } from '@shared/types'
 import { requestPreviewNavigation } from '../state/previewBus'
 import { useFocusRequests } from '../state/NeedsYouContext'
+import { TERMINAL_FONT, THEME } from './terminalTheme'
 
 /** A terminal belongs to exactly one agent or one job. */
 type AgentTerminalProps = {
@@ -31,30 +32,6 @@ type AgentTerminalProps = {
    */
   autoCommand?: string
 } & ({ agentId: AgentId; jobId?: never } | { jobId: JobId; agentId?: never })
-
-const THEME = {
-  background: '#1a1612',
-  foreground: '#f5f0e6',
-  cursor: '#eae9e8',
-  cursorAccent: '#1a1612',
-  selectionBackground: 'rgba(234, 233, 232, 0.25)',
-  black: '#2a2520',
-  red: '#a13a2a',
-  green: '#7a9a5a',
-  yellow: '#c08a30',
-  blue: '#6a8aa5',
-  magenta: '#a76090',
-  cyan: '#5fa5a0',
-  white: '#e6dfd0',
-  brightBlack: '#5a4f42',
-  brightRed: '#c64a3a',
-  brightGreen: '#9abf6a',
-  brightYellow: '#e0a040',
-  brightBlue: '#85a8c8',
-  brightMagenta: '#c878b0',
-  brightCyan: '#7fc8c2',
-  brightWhite: '#f5f0e6'
-} as const
 
 /**
  * Turns off every input-reporting mode a TUI might have switched on.
@@ -109,33 +86,56 @@ export function AgentTerminal({
 
     let cancelled = false
 
+    // Cmd-click (Ctrl on Linux/Win) on a link opens it; a plain click
+    // doesn't, VS Code style. Plain ⌘-click routes into the cockpit's
+    // preview pane bound to this agent (or any pane if none bound) at
+    // desktop viewport size; ⌘-Shift-click is the escape hatch to the
+    // system browser, via the main process's setWindowOpenHandler.
+    const openLink = (event: MouseEvent, url: string): void => {
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.shiftKey) {
+        window.open(url, '_blank')
+        return
+      }
+      const routed = agentId ? requestPreviewNavigation({ url, fromAgent: agentId }) : false
+      if (!routed) window.open(url, '_blank')
+    }
+
     const term = new Terminal({
       // Off deliberately. On the DOM renderer this was the only thing
       // repainting a settled cockpit — six panes blinking forever with no
       // output. Cheap again under WebGL, so flip it back if you miss it.
       cursorBlink: false,
-      fontFamily:
-        'ui-monospace, "SF Mono", Menlo, "JetBrains Mono", "Fira Code", monospace',
+      fontFamily: TERMINAL_FONT,
       fontSize: 12,
       lineHeight: 1.25,
       scrollback: 5000,
       allowProposedApi: true,
-      theme: THEME
+      theme: THEME,
+      // Claude Code writes its links as OSC 8 hyperlinks, which skip the
+      // web-links addon. Without a handler xterm asks "Do you want to
+      // navigate to…? This link could potentially be dangerous" on every
+      // click; this sends them the same way as typed URLs instead.
+      linkHandler: { activate: openLink }
     })
 
-    // VSCode-style Shift+Enter — send ESC+CR (the iTerm2 convention) so
-    // Claude Code's TUI treats it as a multi-line continuation instead
-    // of submitting the prompt. Plain Enter still sends \r.
+    // VSCode-style Shift+Enter — send ESC+CR (the iTerm2 convention, and
+    // what /terminal-setup binds in VS Code) so Claude Code's TUI starts a
+    // new line instead of submitting. Plain Enter still sends \r.
+    // Every event of the press is swallowed, not just keydown: Enter also
+    // fires a keypress, which xterm turns into \r and submits the prompt.
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       if (
-        event.type === 'keydown' &&
         event.key === 'Enter' &&
         event.shiftKey &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey
       ) {
-        window.mucka.writePty({ terminalId, data: '\x1b\r' })
+        if (event.type === 'keydown') {
+          event.preventDefault()
+          window.mucka.writePty({ terminalId, data: '\x1b\r' })
+        }
         return false
       }
       return true
@@ -143,27 +143,7 @@ export function AgentTerminal({
 
     const fit = new FitAddon()
     term.loadAddon(fit)
-    // Web links: Cmd-click (Ctrl on Linux/Win) on any http/https URL in
-    // the terminal opens it in the system browser via the main process's
-    // setWindowOpenHandler (→ shell.openExternal). Hover gets a tooltip
-    // + underline automatically.
-    term.loadAddon(
-      new WebLinksAddon((event, url) => {
-        // Default behaviour also fires on plain click — VSCode-style
-        // requires the modifier key. Only react when ⌘/Ctrl is held.
-        if (!(event.metaKey || event.ctrlKey)) return
-        // ⌘-Shift-click is the escape hatch — opens in the system
-        // browser (the old behaviour). Plain ⌘-click routes into the
-        // cockpit's preview pane bound to this agent (or any pane if
-        // none bound) at desktop viewport size.
-        if (event.shiftKey) {
-          window.open(url, '_blank')
-          return
-        }
-        const routed = agentId ? requestPreviewNavigation({ url, fromAgent: agentId }) : false
-        if (!routed) window.open(url, '_blank')
-      })
-    )
+    term.loadAddon(new WebLinksAddon(openLink))
     term.open(host)
 
     // WebGL renderer. Must be loaded *after* open() — it needs the element.

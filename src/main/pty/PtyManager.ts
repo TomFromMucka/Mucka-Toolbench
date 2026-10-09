@@ -27,7 +27,8 @@ const WITHHELD_ENV = new Set<string>([
   'GH_TOKEN'
 ])
 
-function agentShellEnv(): NodeJS.ProcessEnv {
+/** The process env minus the cockpit's own secrets, for anything it launches. */
+export function agentShellEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (!WITHHELD_ENV.has(key)) env[key] = value
@@ -51,6 +52,7 @@ interface ShellSpec {
   cwd: string
   /** Tells the hooks which agent or job this Claude belongs to. */
   owner: { MUCKA_AGENT: string } | { MUCKA_JOB: string }
+  env?: Record<string, string>
 }
 
 function signatureFor(spec: ShellSpec): string {
@@ -93,9 +95,12 @@ export class PtyManager {
   }
 
   spawn(req: PtySpawnRequest): void {
-    // A finished job's folder is gone, so there's no shell to ask for, but
-    // its Claude may still be on screen with the report Tom wants to read.
-    if (req.jobId !== undefined && this.ptys.has(req.terminalId) && jobShell(req.jobId) === null) {
+    // A job's terminal only ever runs one shell, so a live one is always
+    // the right one. Its command does change over the job's life (`claude`
+    // becomes `claude --continue` once there's history, and a finished
+    // job has no folder left to ask for), and comparing it would kill a
+    // working Claude whenever the layout remounted its terminal.
+    if (req.jobId !== undefined && this.ptys.has(req.terminalId)) {
       this.resize({ terminalId: req.terminalId, cols: req.cols, rows: req.rows })
       return
     }
@@ -125,6 +130,7 @@ export class PtyManager {
         ...agentShellEnv(),
         TERM: 'xterm-256color',
         ...spec.owner,
+        ...spec.env,
         MUCKA_TERMINAL: req.terminalId
       }
     })
@@ -229,5 +235,35 @@ export class PtyManager {
     for (const id of [...this.ptys.keys()]) {
       this.release(id)
     }
+  }
+
+  /**
+   * Kill every PTY and wait for each to report its exit, for quit. node-pty
+   * delivers the exit on a native callback; one that lands after Electron
+   * has started tearing Node down throws there and aborts the app, which
+   * is the "quit unexpectedly" report every install left behind. A shell
+   * that ignores the hang-up gets SIGKILL before the wait gives up.
+   */
+  async killAllAndWait(timeoutMs: number): Promise<void> {
+    const procs = [...this.ptys.values()].map((e) => e.proc)
+    const exited = procs.map(
+      (proc) =>
+        new Promise<void>((resolve) => {
+          proc.onExit(() => resolve())
+        })
+    )
+    this.killAll()
+    const all = Promise.all(exited).then(() => true)
+    const later = (ms: number): Promise<false> =>
+      new Promise((resolve) => setTimeout(() => resolve(false), ms))
+    if (await Promise.race([all, later(timeoutMs / 2)])) return
+    for (const proc of procs) {
+      try {
+        proc.kill('SIGKILL')
+      } catch {
+        /* already dead */
+      }
+    }
+    await Promise.race([all, later(timeoutMs / 2)])
   }
 }

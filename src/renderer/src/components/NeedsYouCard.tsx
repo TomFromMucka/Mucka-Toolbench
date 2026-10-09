@@ -4,7 +4,7 @@ import type { QueueEntry } from '../state/NeedsYouContext'
 import { useNeedsYou } from '../state/NeedsYouContext'
 import { useAgentsState } from '../state/AgentsContext'
 import { useJobs } from '../state/JobsContext'
-import { Button } from './ui/Button'
+import { TERMINAL_FONT, THEME } from './terminalTheme'
 
 interface NeedsYouCardProps {
   entry: QueueEntry
@@ -19,11 +19,15 @@ function waited(since: number, now: number): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`
 }
 
+const DIM = 'var(--dirty-grey)'
+
 /**
- * One agent waiting on Tom. A permission prompt or a single-choice
- * question is answered right here. Anything the buttons can't express
- * (multi-select, typed answers) sends him to the terminal, which is always
- * one click away and always still able to answer.
+ * One agent or job waiting on Tom, drawn the way Claude's own prompt
+ * looks in the terminal: numbered options, each with its explanation
+ * underneath, because the label alone is rarely enough to decide on.
+ * Permission prompts and single-choice questions are answered here;
+ * anything else (several picks, a typed answer) opens the terminal,
+ * which can always still answer.
  */
 export function NeedsYouCard({ entry, place, now }: NeedsYouCardProps): React.JSX.Element {
   const { agents } = useAgentsState()
@@ -36,6 +40,9 @@ export function NeedsYouCard({ entry, place, now }: NeedsYouCardProps): React.JS
   const name = agent?.displayName ?? job?.title ?? entry.key
   const p = entry.pending
   const first = place === 1
+  const openTerminal = (): void => {
+    if (entry.terminalId) focusTerminal(entry.terminalId)
+  }
 
   const send = async (run: () => Promise<PendingAnswerResult>): Promise<void> => {
     setBusy(true)
@@ -53,34 +60,22 @@ export function NeedsYouCard({ entry, place, now }: NeedsYouCardProps): React.JS
 
   return (
     <div
-      className="chamfer-sm flex flex-col gap-2 px-3 py-2.5"
+      className="flex flex-col gap-2 px-3 py-2.5"
       style={{
-        background: 'var(--surface2)',
-        boxShadow: first ? 'inset 0 0 0 1px var(--orange)' : 'inset 0 0 0 1px var(--border-mid)'
+        background: THEME.background,
+        color: THEME.foreground,
+        fontFamily: TERMINAL_FONT,
+        fontSize: 12,
+        lineHeight: 1.45,
+        boxShadow: first ? 'inset 0 0 0 1px var(--orange)' : `inset 0 0 0 1px ${THEME.brightBlack}`
       }}
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className="chamfer-sm px-1.5 font-mono text-[0.68rem]"
-          style={
-            first
-              ? { background: 'var(--orange)', color: 'var(--surface2)' }
-              : { boxShadow: 'inset 0 0 0 1px var(--border-mid)', color: 'var(--dirty-grey)' }
-          }
-        >
-          {place}
-        </span>
-        <span
-          className="truncate"
-          style={{
-            fontFamily: 'var(--font-soehne-breit)',
-            fontWeight: 500,
-            color: 'var(--van-white)'
-          }}
-        >
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span style={{ color: first ? 'var(--orange)' : DIM }}>{place}</span>
+        <span className="truncate" style={{ fontWeight: 700 }}>
           {name}
         </span>
-        <span className="t-body-sm shrink-0 text-dirty-grey">
+        <span className="shrink-0" style={{ color: DIM }}>
           {p
             ? `${p.kind === 'question' ? 'asks' : 'needs a yes'} · ${waited(p.since, now)}`
             : agent?.needsAttention
@@ -88,16 +83,14 @@ export function NeedsYouCard({ entry, place, now }: NeedsYouCardProps): React.JS
               : 'waiting for you'}
         </span>
         {entry.terminalId ? (
-          <span className="ml-auto shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              trailingIcon={null}
-              onClick={() => entry.terminalId && focusTerminal(entry.terminalId)}
-            >
-              Open terminal
-            </Button>
-          </span>
+          <button
+            type="button"
+            onClick={openTerminal}
+            className="ml-auto shrink-0 px-1 hover:bg-[rgba(234,233,232,0.1)]"
+            style={{ fontFamily: 'inherit', color: DIM }}
+          >
+            open terminal →
+          </button>
         ) : null}
       </div>
 
@@ -105,18 +98,59 @@ export function NeedsYouCard({ entry, place, now }: NeedsYouCardProps): React.JS
         p.kind === 'permission' ? (
           <PermissionBody item={p} busy={busy} onSend={send} />
         ) : (
-          <QuestionBody item={p} busy={busy} onSend={send} />
+          <QuestionBody item={p} busy={busy} onSend={send} onType={openTerminal} />
         )
       ) : (
-        <span className="t-body-sm text-ink-soft">
+        <span style={{ color: DIM }}>
           {agent?.needsAttention
             ? (agent.attentionReason ?? 'Flagged for your attention.')
             : 'Finished its turn and is waiting for its next instruction.'}
         </span>
       )}
 
-      {note ? <span className="t-body-sm text-dirty-grey">{note}</span> : null}
+      {note ? <span style={{ color: DIM }}>{note}</span> : null}
     </div>
+  )
+}
+
+/** One numbered choice, as Claude's prompt shows it. */
+function Option({
+  n,
+  label,
+  description,
+  picked,
+  disabled,
+  onClick
+}: {
+  n: number
+  label: string
+  description?: string | null
+  picked?: boolean
+  disabled?: boolean
+  onClick: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="group flex w-full gap-1.5 px-1 py-0.5 text-left hover:bg-[rgba(234,233,232,0.08)] disabled:opacity-50"
+      style={{
+        fontFamily: 'inherit',
+        color: 'inherit',
+        background: picked ? 'rgba(234, 233, 232, 0.16)' : undefined
+      }}
+    >
+      <span className="w-3 shrink-0" style={{ color: picked ? THEME.foreground : 'transparent' }}>
+        ❯
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span>
+          {n}. {label}
+        </span>
+        {description ? <span style={{ color: DIM }}>{description}</span> : null}
+      </span>
+    </button>
   )
 }
 
@@ -134,50 +168,40 @@ function PermissionBody({ item, busy, onSend }: BodyProps): React.JSX.Element {
     )
   }
   return (
-    <>
+    <div className="flex flex-col gap-1">
+      <span style={{ fontWeight: 700 }}>{item.tool}</span>
       <code
-        className="block truncate px-2 py-1 font-mono text-[0.8rem]"
-        style={{ background: 'var(--surface)', color: 'var(--van-white)' }}
-        title={item.summary}
+        className="block whitespace-pre-wrap break-words px-2 py-1"
+        style={{ background: THEME.black, fontFamily: 'inherit' }}
       >
         {item.summary}
       </code>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="primary"
-          size="sm"
-          trailingIcon={null}
+      <span className="pt-1">Do you want to proceed?</span>
+      <Option n={1} label="Yes" disabled={busy} onClick={() => reply('allow', false)} />
+      {item.alwaysLabel ? (
+        <Option
+          n={2}
+          label={item.alwaysLabel}
           disabled={busy}
-          onClick={() => reply('allow', false)}
-        >
-          Yes
-        </Button>
-        {item.alwaysLabel ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            trailingIcon={null}
-            disabled={busy}
-            onClick={() => reply('allow', true)}
-          >
-            {item.alwaysLabel}
-          </Button>
-        ) : null}
-        <Button
-          variant="tertiary"
-          size="sm"
-          trailingIcon={null}
-          disabled={busy}
-          onClick={() => reply('deny', false)}
-        >
-          No
-        </Button>
-      </div>
-    </>
+          onClick={() => reply('allow', true)}
+        />
+      ) : null}
+      <Option
+        n={item.alwaysLabel ? 3 : 2}
+        label="No"
+        disabled={busy}
+        onClick={() => reply('deny', false)}
+      />
+    </div>
   )
 }
 
-function QuestionBody({ item, busy, onSend }: BodyProps): React.JSX.Element {
+function QuestionBody({
+  item,
+  busy,
+  onSend,
+  onType
+}: BodyProps & { onType: () => void }): React.JSX.Element {
   const { answer } = useNeedsYou()
   const [picks, setPicks] = useState<Record<string, string>>({})
   const answerable = item.questions.length > 0 && item.questions.every((q) => !q.multiSelect)
@@ -200,49 +224,43 @@ function QuestionBody({ item, busy, onSend }: BodyProps): React.JSX.Element {
   const complete = item.questions.every((q) => picks[q.question])
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-3">
       {item.questions.map((q) => (
-        <div key={q.question} className="flex flex-col gap-1.5">
-          <span className="t-body-sm text-van-white">{q.question}</span>
-          {answerable ? (
-            <div className="flex flex-wrap gap-2">
-              {q.options.map((o) => (
-                <Button
-                  key={o.label}
-                  variant={picks[q.question] === o.label ? 'primary' : 'secondary'}
-                  size="sm"
-                  trailingIcon={null}
-                  disabled={busy}
-                  title={o.description ?? undefined}
-                  onClick={() => choose(q, o.label)}
-                >
-                  {o.label}
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <span className="t-body-sm text-dirty-grey">
-              {q.options.map((o) => o.label).join(' · ')}
+        <div key={q.question} className="flex flex-col gap-0.5">
+          {q.header ? (
+            <span style={{ color: DIM }}>
+              {picks[q.question] ? '☒' : '☐'} {q.header}
             </span>
-          )}
+          ) : null}
+          <span className="pb-1" style={{ fontWeight: 700 }}>
+            {q.question}
+          </span>
+          {q.options.map((o, i) => (
+            <Option
+              key={o.label}
+              n={i + 1}
+              label={o.label}
+              description={o.description}
+              picked={picks[q.question] === o.label}
+              disabled={busy || !answerable}
+              onClick={() => choose(q, o.label)}
+            />
+          ))}
+          <Option n={q.options.length + 1} label="Type something → terminal" onClick={onType} />
         </div>
       ))}
       {!answerable ? (
-        <span className="t-body-sm text-dirty-grey">
-          This one takes several picks. Answer it in the terminal.
-        </span>
+        <span style={{ color: DIM }}>This one takes several picks. Answer it in the terminal.</span>
       ) : !single ? (
-        <div>
-          <Button
-            variant="primary"
-            size="sm"
-            trailingIcon={null}
-            disabled={busy || !complete}
-            onClick={() => submit(picks)}
-          >
-            Send answers
-          </Button>
-        </div>
+        <button
+          type="button"
+          disabled={busy || !complete}
+          onClick={() => submit(picks)}
+          className="self-start px-1.5 hover:bg-[rgba(234,233,232,0.1)] disabled:opacity-40"
+          style={{ fontFamily: 'inherit', color: THEME.brightWhite }}
+        >
+          [ ✔ submit answers ]
+        </button>
       ) : null}
     </div>
   )

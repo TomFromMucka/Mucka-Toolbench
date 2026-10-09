@@ -246,6 +246,11 @@ Built (2026-10-07):
   report until he closes the card. *Dismiss* throws an unmerged job away
   after a native dialog that names what would be lost. Each job's PR is
   polled every minute, and again whenever its Claude stops.
+- **Ship and Finish became one *Job done* button** (Tom, later the same
+  day: shipping tends to happen in the conversation anyway). It asks the
+  job's Claude to check for loose ends and stop if there are any;
+  otherwise to open the PR with auto-merge if there isn't one, wait for
+  the merge, and run `/coach job-done`.
 
 - **No "trust this folder?" prompt in jobs, and nothing to build for it.**
   Tested on Claude Code 2.1.292: a worktree inherits trust from its repo's
@@ -263,6 +268,38 @@ Agent count stops being tied to screen seats. Ten is a screen limit, not a
 job limit.
 
 ### Slice 5 — Intake
+
+**Started 2026-10-07: Intake replaces the Needs you column in Jobs.** Tom's
+call: with many jobs running, a question needs the context its terminal
+gives (each option's explanation, typing an answer), and the Waiting lane,
+⌘J and the banner already lead there. The column now lists unresolved
+Sentry issues in the terminal's font. *Start job* opens a fresh job whose
+Claude starts with the issue and the groundwork rules as its first
+message (passed through the environment, not typed). Tickets join next.
+The banner's Needs you cards stay, restyled to look like Claude's own
+prompt, with each option's explanation.
+
+**Tickets (Tom's calls, 2026-10-08): scout, then fix; reply after it's live.**
+Intake polls `scripts/ticket.ts list --json` (Mucka Pro #3323) every five
+minutes from a read-only `scout` checkout on the latest main. Every
+ticket that arrives after the first look gets a brief from a scout Claude
+run `--restricted --strict-mcp-config --permission-mode dontAsk`, with
+Read/Grep/Glob and only `ticket.ts show` allowed. That gives it customer
+text plus production reads, but no way to change code or reach anyone.
+Measured: ~$0.18 and half a minute a ticket. Tickets already open at the
+first look wait for a click, so the backlog isn't billed at once. Next:
+*Start fix* (a job from the brief, with ticket and production tools
+denied in its folder), then a support-reply draft once the fix is live,
+for Tom to sign off before it's sent.
+
+**Auto-start (Tom's call, 2026-10-07: up to a draft fix).** When Mucka's
+triage rules a Sentry issue a *ticket*, a job starts on it by itself and
+goes as far as a draft fix under the supervised scope; nothing is pushed
+until Tom presses Job done. About five new issues arrive a day, so at most 3
+Sentry jobs are open at once. A job counts until it's signed off, and the
+rest queue in Intake, so a noisy day backs up instead of burying Tom. The
+issue's text is fenced as untrusted data in the brief, because the job
+can run with nobody watching. A switch in the Intake header turns it off.
 
 **Toil first.** The first automatic intake is work where "done" can be
 checked without judgement:

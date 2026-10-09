@@ -66,7 +66,14 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
     const visible = new Set<string>(agents.map((a) => a.id))
     const openJobs = new Set<string>(jobs.map((j) => j.id))
     const blocked: QueueEntry[] = []
+    // One entry per agent or job: a second prompt from the same one (a
+    // sub-agent's, say) would repeat its key, and React can't keep two
+    // cards with one key apart. `pending` is oldest first, so the oldest wins.
+    const seen = new Set<string>()
     for (const p of pending) {
+      const owner = p.agentId ?? p.jobId
+      if (!owner || seen.has(owner)) continue
+      seen.add(owner)
       if (p.agentId && visible.has(p.agentId)) {
         blocked.push({
           key: p.agentId,

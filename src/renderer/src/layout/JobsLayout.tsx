@@ -5,7 +5,8 @@ import { AgentClipboard } from '../components/AgentClipboard'
 import { AgentTerminal } from '../components/AgentTerminal'
 import { Button } from '../components/ui/Button'
 import { Clipboard } from '../components/Clipboard'
-import { NeedsYouCard } from '../components/NeedsYouCard'
+import { IntakePanel } from '../components/IntakePanel'
+import { WaitingStrip } from '../components/WaitingStrip'
 import { useAgentSlots } from '../hooks/useAgentSlots'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useAgentStatuses } from '../state/AgentStatusContext'
@@ -15,8 +16,11 @@ import { useFocusRequests, useNeedsYou } from '../state/NeedsYouContext'
 import { submitPromptAndEnter } from '../mucka/dispatch'
 
 /**
- * The Jobs layout's middle three columns: who needs Tom, a board of the
- * work in flight, and the selected job's terminal.
+ * The Jobs layout's middle three columns: work coming in, the selected
+ * job's terminal, and a board of the work in flight. The terminal is the
+ * centre of the screen because it's where Tom spends his time, and the
+ * queue of who's waiting on him sits right under its input (Tom's call,
+ * 2026-10-08: the off-centre terminal had his neck turned all day).
  *
  * Two kinds of card share the board. A job (docs/jobs-layout-plan.md) is
  * started with "+ New job": its own fresh worktree and a terminal with
@@ -27,11 +31,11 @@ import { submitPromptAndEnter } from '../mucka/dispatch'
 
 type Lane = 'waiting' | 'working' | 'check' | 'idle'
 
+// Waiting on you isn't a lane here: it's the strip under the terminal.
 const LANES: { lane: Lane; title: string; empty: string }[] = [
-  { lane: 'waiting', title: 'Waiting on you', empty: 'Nobody needs you.' },
   { lane: 'working', title: 'On the tools', empty: 'Nobody is working.' },
   { lane: 'check', title: 'Check it', empty: 'Nothing finished to look at.' },
-  { lane: 'idle', title: 'Idle', empty: 'Everyone has something to do.' }
+  { lane: 'idle', title: 'Idle / On hold', empty: 'Nothing idle or held.' }
 ]
 
 const WORKING: AgentStatus[] = ['thinking', 'editing', 'running']
@@ -66,12 +70,15 @@ export function JobsLayout({
   selected,
   onSelect
 }: JobsLayoutProps): React.JSX.Element {
-  const { queue, placeOf } = useNeedsYou()
+  const { placeOf, queue } = useNeedsYou()
+  // Only a real question or permission prompt holds the sign-off bar. A job
+  // also queues once it has just gone quiet ("waiting for your input"), and
+  // that's exactly when Job done is wanted.
+  const askingNow = (id: string): boolean => queue.some((e) => e.key === id && e.pending !== null)
   const { statusFor } = useAgentStatuses()
   const { summaries } = useGitHubState()
   const slotFor = useAgentSlots(gitStatus, restartVersion)
   const { jobs, jobStatusFor, createJob } = useJobs()
-  const [now, setNow] = useState(() => Date.now())
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -94,11 +101,6 @@ export function JobsLayout({
     window.addEventListener('mucka:new-job', onNew)
     return () => window.removeEventListener('mucka:new-job', onNew)
   }, [newJob])
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(timer)
-  }, [])
 
   // ⌘J and "Open terminal" name a terminal; in this layout that also means
   // "make that agent the job on screen". Split tabs are `<agent>:t<n>`.
@@ -135,6 +137,10 @@ export function JobsLayout({
   const laneOfJob = (job: Job): Lane => {
     if (job.state === 'setting-up') return 'working'
     if (job.state === 'failed') return 'check'
+    // On its way off the board: nothing left for Tom to look at.
+    if (job.state === 'finished') return 'idle'
+    // Parked by Tom: shares the last column, tagged, until he releases it.
+    if (job.held) return 'idle'
     if (placeOf(job.id) !== null) return 'waiting'
     if (WORKING.includes(jobStatusFor(job.id))) return 'working'
     return job.title === 'New job' ? 'idle' : 'check'
@@ -151,24 +157,65 @@ export function JobsLayout({
 
   return (
     <>
-      <Clipboard title="Needs you" subtitle="blocked first, oldest first" bodyClassName="min-h-0">
-        <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto p-2">
-          {queue.length === 0 ? (
-            <span className="t-body-sm px-1 py-2 text-dirty-grey">
-              Nobody is waiting on you. Questions and permission prompts land here as they come in.
-            </span>
-          ) : (
-            queue.map((entry, i) => (
-              <NeedsYouCard
-                key={entry.pending?.id ?? entry.key}
-                entry={entry}
-                place={i + 1}
-                now={now}
+      {/*
+        Intake, not a Needs-you column: with many jobs running, a question
+        needs the context its terminal gives (each option's explanation,
+        typing an answer), and the Waiting lane, ⌘J and the banner already
+        lead there. Tom's call, 2026-10-07.
+      */}
+      <IntakePanel onSelect={onSelect} />
+
+      {/*
+        Every agent's clipboard stays mounted, stacked in one cell, and only
+        the selected one is visible. Switching jobs must not remount: a
+        remount throws the xterm away (scrollback replay, "reconnected"
+        banner, split tabs collapsing). `invisible` rather than `hidden`
+        keeps each terminal its real size, so it doesn't refit to zero.
+      */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-2">
+        <div className="grid min-h-0 min-w-0 flex-1">
+          {jobs.map((job) => (
+            <div
+              key={job.id}
+              className={clsx(
+                'col-start-1 row-start-1 grid min-h-0 min-w-0',
+                job.id !== current && 'pointer-events-none invisible'
+              )}
+              aria-hidden={job.id !== current}
+            >
+              <JobTerminal
+                job={job}
+                blocked={askingNow(job.id)}
+                working={WORKING.includes(jobStatusFor(job.id))}
               />
-            ))
-          )}
+            </div>
+          ))}
+          {agents.map((cfg) => {
+            const slot = slotFor(cfg)
+            if (!slot) return null
+            const shown = cfg.id === current
+            return (
+              <div
+                key={slot.key}
+                className={clsx(
+                  'col-start-1 row-start-1 grid min-h-0 min-w-0',
+                  !shown && 'pointer-events-none invisible'
+                )}
+                aria-hidden={!shown}
+              >
+                <AgentClipboard
+                  agent={slot.agent}
+                  config={slot.config}
+                  gitStatus={slot.gitStatus}
+                  contextUsedPercent={slot.contextUsedPercent}
+                  model={slot.model}
+                />
+              </div>
+            )
+          })}
         </div>
-      </Clipboard>
+        <WaitingStrip selected={current} onSelect={onSelect} />
+      </div>
 
       <Clipboard
         title="Job board"
@@ -187,7 +234,7 @@ export function JobsLayout({
           </Button>
         }
       >
-        <div className="grid h-full min-h-0 grid-cols-4 gap-2 overflow-y-auto p-2">
+        <div className="grid h-full min-h-0 grid-cols-3 gap-2 overflow-y-auto p-2">
           {LANES.map(({ lane, title, empty }) => {
             const list = byLane.get(lane) ?? []
             return (
@@ -231,55 +278,6 @@ export function JobsLayout({
           })}
         </div>
       </Clipboard>
-
-      {/*
-        Every agent's clipboard stays mounted, stacked in one cell, and only
-        the selected one is visible. Switching jobs must not remount: a
-        remount throws the xterm away (scrollback replay, "reconnected"
-        banner, split tabs collapsing). `invisible` rather than `hidden`
-        keeps each terminal its real size, so it doesn't refit to zero.
-      */}
-      <div className="grid min-h-0 min-w-0">
-        {jobs.map((job) => (
-          <div
-            key={job.id}
-            className={clsx(
-              'col-start-1 row-start-1 grid min-h-0 min-w-0',
-              job.id !== current && 'pointer-events-none invisible'
-            )}
-            aria-hidden={job.id !== current}
-          >
-            <JobTerminal
-              job={job}
-              blocked={placeOf(job.id) !== null}
-              working={WORKING.includes(jobStatusFor(job.id))}
-            />
-          </div>
-        ))}
-        {agents.map((cfg) => {
-          const slot = slotFor(cfg)
-          if (!slot) return null
-          const shown = cfg.id === current
-          return (
-            <div
-              key={slot.key}
-              className={clsx(
-                'col-start-1 row-start-1 grid min-h-0 min-w-0',
-                !shown && 'pointer-events-none invisible'
-              )}
-              aria-hidden={!shown}
-            >
-              <AgentClipboard
-                agent={slot.agent}
-                config={slot.config}
-                gitStatus={slot.gitStatus}
-                contextUsedPercent={slot.contextUsedPercent}
-                model={slot.model}
-              />
-            </div>
-          )
-        })}
-      </div>
     </>
   )
 }
@@ -319,15 +317,14 @@ function JobCard({
     <button
       type="button"
       onClick={onSelect}
-      className="chamfer-sm flex flex-col gap-1 px-2.5 py-2 text-left"
-      style={{
-        background: 'var(--surface2)',
-        boxShadow: selected
-          ? 'inset 0 0 0 1px var(--van-white)'
+      className={clsx(
+        'chamfer-frame-sm flex flex-col gap-1 px-2.5 py-2 text-left [--fill:var(--surface2)]',
+        selected
+          ? '[--ring:var(--van-white)]'
           : place === 1
-            ? 'inset 0 0 0 1px var(--orange)'
-            : 'inset 0 0 0 1px var(--border)'
-      }}
+            ? '[--ring:var(--orange)]'
+            : '[--ring:var(--border)]'
+      )}
       title={branch ?? undefined}
     >
       <span className="flex min-w-0 items-center gap-1.5">
@@ -343,11 +340,16 @@ function JobCard({
         </span>
         {place !== null ? (
           <span
-            className="chamfer-sm ml-auto px-1 font-mono text-[0.62rem]"
+            className={clsx(
+              'ml-auto px-1 font-mono text-[0.62rem]',
+              place === 1
+                ? 'chamfer-sm'
+                : 'chamfer-frame-sm [--fill:var(--surface2)] [--ring:var(--orange)]'
+            )}
             style={
               place === 1
                 ? { background: 'var(--orange)', color: 'var(--surface2)' }
-                : { boxShadow: 'inset 0 0 0 1px var(--orange)', color: 'var(--orange)' }
+                : { color: 'var(--orange)' }
             }
           >
             {place}
@@ -367,7 +369,7 @@ function JobCard({
 function prLine(job: Job): string | null {
   const pr = job.pr
   if (!pr) return null
-  if (pr.state === 'merged') return `PR #${pr.number} merged · ready to finish`
+  if (pr.state === 'merged') return `PR #${pr.number} merged`
   if (pr.state === 'closed') return `PR #${pr.number} closed`
   return `PR #${pr.number} · ${pr.autoMerge ? 'merges when checks pass' : 'open, auto-merge off'}`
 }
@@ -400,26 +402,32 @@ function NewJobCard({
     <button
       type="button"
       onClick={onSelect}
-      className="chamfer-sm flex flex-col gap-1 px-2.5 py-2 text-left"
-      style={{
-        background: 'var(--surface2)',
-        boxShadow: selected ? 'inset 0 0 0 1px var(--van-white)' : 'inset 0 0 0 1px var(--border)'
-      }}
+      className={clsx(
+        'chamfer-frame-sm flex flex-col gap-1 px-2.5 py-2 text-left [--fill:var(--surface2)]',
+        selected ? '[--ring:var(--van-white)]' : '[--ring:var(--border)]'
+      )}
       title={job.worktreePath}
     >
       <span className="flex items-center gap-1.5">
         <span className="t-label-sm text-dirty-grey">Job</span>
         {place !== null ? (
           <span
-            className="chamfer-sm ml-auto px-1 font-mono text-[0.62rem]"
+            className={clsx(
+              'ml-auto px-1 font-mono text-[0.62rem]',
+              place === 1
+                ? 'chamfer-sm'
+                : 'chamfer-frame-sm [--fill:var(--surface2)] [--ring:var(--orange)]'
+            )}
             style={
               place === 1
                 ? { background: 'var(--orange)', color: 'var(--surface2)' }
-                : { boxShadow: 'inset 0 0 0 1px var(--orange)', color: 'var(--orange)' }
+                : { color: 'var(--orange)' }
             }
           >
             {place}
           </span>
+        ) : job.held ? (
+          <span className="t-body-sm ml-auto text-dirty-grey">on hold</span>
         ) : working ? (
           <span className="t-body-sm ml-auto text-dirty-grey">working</span>
         ) : null}
@@ -438,16 +446,20 @@ function NewJobCard({
 }
 
 /**
- * Ship and Finish are instructions to the job's own Claude, typed into its
- * terminal the way Tom would. The work happens where he can watch it, and
- * the skill's own checks apply. `/coach job-done` is in Mucka Pro's
- * worktree-coach skill.
+ * Job done is an instruction to the job's own Claude, typed into its
+ * terminal the way Tom would, so the wrap-up happens where he can watch it
+ * and the skill's own checks apply. Shipping itself tends to happen in the
+ * conversation, so this one button covers whatever's left: it stops on
+ * loose ends, otherwise lands the PR and runs `/coach job-done` (Mucka
+ * Pro's worktree-coach skill), which removes the folder once merged.
  */
-const SHIP_PROMPT =
-  'Ship this job. Commit anything outstanding with a clear message, then push and open a PR ' +
-  "with /coach pr if there isn't one yet. Then turn on auto-merge with " +
-  '`gh pr merge --squash --auto --delete-branch`, and reply with the PR link.'
-const FINISH_PROMPT = '/coach job-done'
+const JOB_DONE_PROMPT = [
+  'Wrap this job up.',
+  'First check for loose ends: uncommitted work, failing tests or typecheck, anything I asked for that is not done, or an open question. If there are any, list them and stop.',
+  "Otherwise, if there's no PR yet, commit, push and open one with /coach pr, and turn on auto-merge with `gh pr merge --squash --auto --delete-branch`.",
+  'Wait for it to merge with `gh pr checks --watch --interval 60`, and never poll GitHub more often than once a minute: every job shares one GitHub allowance. If a check fails, read the failure and tell me rather than going on.',
+  'Once it has merged, run /coach job-done.'
+].join('\n')
 
 /** A job's own terminal, with Claude started in its worktree, and its sign-off bar. */
 function JobTerminal({
@@ -555,7 +567,6 @@ function SignOffBar({
   }
   const pr = job.pr
   const merged = pr?.state === 'merged'
-  const inFlight = pr !== null && (pr.state === 'open' || pr.state === 'draft')
 
   return (
     <Bar
@@ -565,57 +576,54 @@ function SignOffBar({
             {prLine(job)}
           </a>
         ) : (
-          (notNow ?? 'Ship when it’s ready: PR, then merged once checks pass.')
+          (notNow ?? 'When it’s finished: Job done checks for loose ends, lands it and tidies up.')
         )
       }
     >
-      {merged ? (
+      <Button
+        variant="primary"
+        size="sm"
+        trailingIcon={null}
+        disabled={notNow !== null}
+        title={
+          notNow ??
+          'Claude checks for loose ends, opens the PR with auto-merge if needed, waits for the merge, then runs /coach job-done'
+        }
+        onClick={() => tell(JOB_DONE_PROMPT)}
+      >
+        Job done
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        trailingIcon={null}
+        title="Put the cursor in the terminal to tell Claude what to change"
+        onClick={() => focusTerminal(job.terminalId)}
+      >
+        Amend
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        trailingIcon={null}
+        title={
+          job.held ? 'Back to its lane' : 'Park it in Idle / On hold until something else lands'
+        }
+        onClick={() => void window.mucka.holdJob(job.id, !job.held)}
+      >
+        {job.held ? 'Release' : 'Hold'}
+      </Button>
+      {merged ? null : (
         <Button
-          variant="primary"
+          variant="tertiary"
           size="sm"
           trailingIcon={null}
-          disabled={notNow !== null}
-          title={
-            notNow ?? 'Checks it landed, stops its dev server, then removes the folder and branch'
-          }
-          onClick={() => tell(FINISH_PROMPT)}
+          disabled={busy}
+          title="Close its PR and delete its folder and branch. Asks first."
+          onClick={dismiss}
         >
-          Finish
+          Dismiss
         </Button>
-      ) : (
-        <>
-          {!inFlight || !pr.autoMerge ? (
-            <Button
-              variant="primary"
-              size="sm"
-              trailingIcon={null}
-              disabled={notNow !== null}
-              title={notNow ?? 'Commit, push, open the PR and turn on auto-merge'}
-              onClick={() => tell(SHIP_PROMPT)}
-            >
-              Ship
-            </Button>
-          ) : null}
-          <Button
-            variant="secondary"
-            size="sm"
-            trailingIcon={null}
-            title="Put the cursor in the terminal to tell Claude what to change"
-            onClick={() => focusTerminal(job.terminalId)}
-          >
-            Amend
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            trailingIcon={null}
-            disabled={busy}
-            title="Close its PR and delete its folder and branch. Asks first."
-            onClick={dismiss}
-          >
-            Dismiss
-          </Button>
-        </>
       )}
     </Bar>
   )

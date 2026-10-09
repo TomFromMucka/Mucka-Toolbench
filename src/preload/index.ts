@@ -4,6 +4,16 @@ import type {
   AgentId,
   AgentStatusEvent,
   Job,
+  JobBrief,
+  JobsAutoStatus,
+  Ticket,
+  TicketAction,
+  TicketDetail,
+  TicketFile,
+  TicketFilter,
+  TicketSendPreview,
+  TicketSendResult,
+  TicketsState,
   JobStatusEvent,
   PendingAnswer,
   PendingAnswerResult,
@@ -88,23 +98,19 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('agents:await-claude', agentId, timeoutMs) as Promise<boolean>,
   pickDirectory: (opts?: { defaultPath?: string }) =>
     ipcRenderer.invoke('dialog:pickDirectory', opts) as Promise<string | null>,
-  spawnPty: (req: PtySpawnRequest) =>
-    ipcRenderer.invoke('pty:spawn', req) as Promise<void>,
+  spawnPty: (req: PtySpawnRequest) => ipcRenderer.invoke('pty:spawn', req) as Promise<void>,
   writePty: (req: PtyWriteRequest) => ipcRenderer.send('pty:write', req),
   resizePty: (req: PtyResizeRequest) => ipcRenderer.send('pty:resize', req),
-  killPty: (terminalId: TerminalId) =>
-    ipcRenderer.invoke('pty:kill', terminalId) as Promise<void>,
+  killPty: (terminalId: TerminalId) => ipcRenderer.invoke('pty:kill', terminalId) as Promise<void>,
 
   onPtyData: (handler: (event: PtyDataEvent) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: PtyDataEvent) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: PtyDataEvent) => handler(payload)
     ipcRenderer.on('pty:data', listener)
     return () => ipcRenderer.off('pty:data', listener)
   },
 
   onPtyExit: (handler: (event: PtyExitEvent) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: PtyExitEvent) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: PtyExitEvent) => handler(payload)
     ipcRenderer.on('pty:exit', listener)
     return () => ipcRenderer.off('pty:exit', listener)
   },
@@ -113,15 +119,13 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('git:refresh', agentId) as Promise<GitStatus>,
 
   onGitStatus: (handler: (event: GitStatusEvent) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: GitStatusEvent) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: GitStatusEvent) => handler(payload)
     ipcRenderer.on('git:status', listener)
     return () => ipcRenderer.off('git:status', listener)
   },
 
   onAgentStatus: (handler: (event: AgentStatusEvent) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: AgentStatusEvent) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: AgentStatusEvent) => handler(payload)
     ipcRenderer.on('agent:status', listener)
     return () => ipcRenderer.off('agent:status', listener)
   },
@@ -136,11 +140,40 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('pending:answer', answer) as Promise<PendingAnswerResult>,
 
   listJobs: () => ipcRenderer.invoke('jobs:list') as Promise<Job[]>,
-  createJob: () => ipcRenderer.invoke('jobs:create') as Promise<Job>,
+  createJob: (brief?: JobBrief) => ipcRenderer.invoke('jobs:create', brief) as Promise<Job>,
   retryJob: (id: string) => ipcRenderer.invoke('jobs:retry', id) as Promise<void>,
   discardJob: (id: string) => ipcRenderer.invoke('jobs:discard', id) as Promise<void>,
   dismissJob: (id: string) => ipcRenderer.invoke('jobs:dismiss', id) as Promise<boolean>,
   closeJob: (id: string) => ipcRenderer.invoke('jobs:close', id) as Promise<void>,
+  holdJob: (id: string, held: boolean) =>
+    ipcRenderer.invoke('jobs:hold', id, held) as Promise<void>,
+  startSentryJob: (issueId: string, note?: string) =>
+    ipcRenderer.invoke('jobs:start-sentry', issueId, note) as Promise<Job>,
+  getJobsAuto: () => ipcRenderer.invoke('jobs:auto-get') as Promise<JobsAutoStatus>,
+  listTickets: () => ipcRenderer.invoke('tickets:list') as Promise<TicketsState>,
+  onTicketsUpdate: (handler: (state: TicketsState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: TicketsState): void => handler(state)
+    ipcRenderer.on('tickets:update', listener)
+    return () => ipcRenderer.off('tickets:update', listener)
+  },
+  browseTickets: (filter: TicketFilter) =>
+    ipcRenderer.invoke('tickets:browse', filter) as Promise<Ticket[]>,
+  getTicket: (reference: string) =>
+    ipcRenderer.invoke('tickets:get', reference) as Promise<TicketDetail>,
+  previewTicketAction: (action: TicketAction) =>
+    ipcRenderer.invoke('tickets:preview', action) as Promise<TicketSendPreview>,
+  sendTicketAction: (action: TicketAction) =>
+    ipcRenderer.invoke('tickets:send', action) as Promise<TicketSendResult>,
+  getTicketFile: (reference: string, attachmentId: string) =>
+    ipcRenderer.invoke('tickets:file', reference, attachmentId) as Promise<TicketFile>,
+  markTicketRead: (reference: string) =>
+    ipcRenderer.invoke('tickets:mark-read', reference) as Promise<void>,
+  startTicketJob: (reference: string, note?: string) =>
+    ipcRenderer.invoke('tickets:start-job', reference, note) as Promise<Job>,
+  openTicketFile: (reference: string, attachmentId: string) =>
+    ipcRenderer.invoke('tickets:open-file', reference, attachmentId) as Promise<void>,
+  setJobsAuto: (enabled: boolean) =>
+    ipcRenderer.invoke('jobs:auto-set', enabled) as Promise<JobsAutoStatus>,
   onJobsUpdate: (handler: (jobs: Job[]) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, jobs: Job[]) => handler(jobs)
     ipcRenderer.on('jobs:update', listener)
@@ -169,27 +202,18 @@ const muckaApi: MuckaApi = {
   getWorktreeLog: (agentId: AgentId, limit: number, branchOnly: boolean) =>
     ipcRenderer.invoke('worktree:log', agentId, limit, branchOnly) as Promise<WorktreeReadResult>,
 
-  notifyAttention: (count: number) =>
-    ipcRenderer.send('app:notify-attention', count),
+  notifyAttention: (count: number) => ipcRenderer.send('app:notify-attention', count),
 
-  getMuckaStatus: () =>
-    ipcRenderer.invoke('mucka:status') as Promise<MuckaStatus>,
-  mintMuckaSignedUrl: () =>
-    ipcRenderer.invoke('mucka:signedUrl') as Promise<string>,
-  requestMicAccess: () =>
-    ipcRenderer.invoke('mucka:requestMic') as Promise<MicAccess>,
-  openMicSettings: () =>
-    ipcRenderer.invoke('mucka:openMicSettings') as Promise<void>,
+  getMuckaStatus: () => ipcRenderer.invoke('mucka:status') as Promise<MuckaStatus>,
+  mintMuckaSignedUrl: () => ipcRenderer.invoke('mucka:signedUrl') as Promise<string>,
+  requestMicAccess: () => ipcRenderer.invoke('mucka:requestMic') as Promise<MicAccess>,
+  openMicSettings: () => ipcRenderer.invoke('mucka:openMicSettings') as Promise<void>,
 
-  getMuckaTextStatus: () =>
-    ipcRenderer.invoke('mucka:text-status') as Promise<MuckaTextStatus>,
-  listChatHistory: () =>
-    ipcRenderer.invoke('mucka:text-history') as Promise<MuckaTextMessage[]>,
-  sendChatMessage: (text: string) =>
-    ipcRenderer.invoke('mucka:text-send', text) as Promise<void>,
+  getMuckaTextStatus: () => ipcRenderer.invoke('mucka:text-status') as Promise<MuckaTextStatus>,
+  listChatHistory: () => ipcRenderer.invoke('mucka:text-history') as Promise<MuckaTextMessage[]>,
+  sendChatMessage: (text: string) => ipcRenderer.invoke('mucka:text-send', text) as Promise<void>,
   abortChatTurn: () => ipcRenderer.invoke('mucka:text-abort') as Promise<boolean>,
-  clearChatHistory: () =>
-    ipcRenderer.invoke('mucka:text-clear') as Promise<void>,
+  clearChatHistory: () => ipcRenderer.invoke('mucka:text-clear') as Promise<void>,
   searchHistory: (query: string, limit?: number) =>
     ipcRenderer.invoke('mucka:text-search', query, limit) as Promise<string>,
   sendChatToolResult: (result: MuckaTextToolResult) =>
@@ -203,23 +227,19 @@ const muckaApi: MuckaApi = {
 
   listMemories: (query?: MemoryListQuery) =>
     ipcRenderer.invoke('memory:list', query) as Promise<MemoryListItem[]>,
-  getMemory: (topic: string) =>
-    ipcRenderer.invoke('memory:get', topic) as Promise<Memory | null>,
+  getMemory: (topic: string) => ipcRenderer.invoke('memory:get', topic) as Promise<Memory | null>,
   rememberMemory: (input: MemoryWriteInput) =>
     ipcRenderer.invoke('memory:remember', input) as Promise<Memory>,
-  forgetMemory: (topic: string) =>
-    ipcRenderer.invoke('memory:forget', topic) as Promise<boolean>,
+  forgetMemory: (topic: string) => ipcRenderer.invoke('memory:forget', topic) as Promise<boolean>,
 
-  listRoadmap: () =>
-    ipcRenderer.invoke('roadmap:list') as Promise<RoadmapCard[]>,
+  listRoadmap: () => ipcRenderer.invoke('roadmap:list') as Promise<RoadmapCard[]>,
   createRoadmapCard: (input: RoadmapCreateInput) =>
     ipcRenderer.invoke('roadmap:create', input) as Promise<RoadmapCard>,
   updateRoadmapCard: (input: RoadmapUpdateInput) =>
     ipcRenderer.invoke('roadmap:update', input) as Promise<RoadmapCard>,
   moveRoadmapCard: (input: RoadmapMoveInput) =>
     ipcRenderer.invoke('roadmap:move', input) as Promise<RoadmapCard>,
-  deleteRoadmapCard: (id: string) =>
-    ipcRenderer.invoke('roadmap:delete', id) as Promise<boolean>,
+  deleteRoadmapCard: (id: string) => ipcRenderer.invoke('roadmap:delete', id) as Promise<boolean>,
   onRoadmapUpdate: (handler: () => void) => {
     const listener = (): void => handler()
     ipcRenderer.on('roadmap:update', listener)
@@ -231,24 +251,20 @@ const muckaApi: MuckaApi = {
   broadcastToAgents: (input: { text: string; agentIds?: AgentId[] }) =>
     ipcRenderer.invoke('broadcast:send', input) as Promise<BroadcastResult>,
 
-  listDir: (path: string) =>
-    ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,
+  listDir: (path: string) => ipcRenderer.invoke('fs:listDir', path) as Promise<FsListing>,
   readFilePreview: (path: string) =>
     ipcRenderer.invoke('fs:readFile', path) as Promise<FilePreview>,
   writeFile: (path: string, content: string) =>
     ipcRenderer.invoke('fs:writeFile', path, content) as Promise<void>,
-  revealInOs: (path: string) =>
-    ipcRenderer.invoke('fs:reveal', path) as Promise<void>,
-  openPathInOs: (path: string) =>
-    ipcRenderer.invoke('fs:openPath', path) as Promise<void>,
+  revealInOs: (path: string) => ipcRenderer.invoke('fs:reveal', path) as Promise<void>,
+  openPathInOs: (path: string) => ipcRenderer.invoke('fs:openPath', path) as Promise<void>,
   createFile: (parentPath: string, name: string) =>
     ipcRenderer.invoke('fs:createFile', parentPath, name) as Promise<string>,
   createFolder: (parentPath: string, name: string) =>
     ipcRenderer.invoke('fs:createFolder', parentPath, name) as Promise<string>,
   renamePath: (fromPath: string, toName: string) =>
     ipcRenderer.invoke('fs:rename', fromPath, toName) as Promise<string>,
-  deletePath: (path: string) =>
-    ipcRenderer.invoke('fs:delete', path) as Promise<void>,
+  deletePath: (path: string) => ipcRenderer.invoke('fs:delete', path) as Promise<void>,
   onChatStream: (handler: (event: MuckaTextStreamEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextStreamEvent) =>
       handler(payload)
@@ -256,69 +272,54 @@ const muckaApi: MuckaApi = {
     return () => ipcRenderer.off('mucka:text-stream', listener)
   },
   onChatToolCall: (handler: (call: MuckaTextToolCall) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextToolCall) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextToolCall) => handler(payload)
     ipcRenderer.on('mucka:text-tool-call', listener)
     return () => ipcRenderer.off('mucka:text-tool-call', listener)
   },
   onChatMessage: (handler: (message: MuckaTextMessage) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextMessage) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: MuckaTextMessage) => handler(payload)
     ipcRenderer.on('mucka:text-message', listener)
     return () => ipcRenderer.off('mucka:text-message', listener)
   },
 
   getNote: () => ipcRenderer.invoke('notes:get') as Promise<string>,
-  setNote: (value: string) =>
-    ipcRenderer.invoke('notes:set', value) as Promise<void>,
-  appendNote: (chunk: string) =>
-    ipcRenderer.invoke('notes:append', chunk) as Promise<string>,
+  setNote: (value: string) => ipcRenderer.invoke('notes:set', value) as Promise<void>,
+  appendNote: (chunk: string) => ipcRenderer.invoke('notes:append', chunk) as Promise<string>,
   onNoteUpdate: (handler: (value: string) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: string) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: string) => handler(payload)
     ipcRenderer.on('notes:update', listener)
     return () => ipcRenderer.off('notes:update', listener)
   },
 
-  listEvents: (limit?: number) =>
-    ipcRenderer.invoke('events:list', limit) as Promise<JobEvent[]>,
+  listEvents: (limit?: number) => ipcRenderer.invoke('events:list', limit) as Promise<JobEvent[]>,
   onEventAppend: (handler: (event: JobEvent) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: JobEvent) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: JobEvent) => handler(payload)
     ipcRenderer.on('events:append', listener)
     return () => ipcRenderer.off('events:append', listener)
   },
 
-  getVercelStatus: () =>
-    ipcRenderer.invoke('vercel:status') as Promise<VercelStatus>,
+  getVercelStatus: () => ipcRenderer.invoke('vercel:status') as Promise<VercelStatus>,
   listVercelDeployments: (agentId: AgentId) =>
     ipcRenderer.invoke('vercel:get', agentId) as Promise<VercelAgentSummary>,
   listAllVercelDeployments: () =>
-    ipcRenderer.invoke('vercel:getAll') as Promise<
-      Record<AgentId, VercelAgentSummary>
-    >,
+    ipcRenderer.invoke('vercel:getAll') as Promise<Record<AgentId, VercelAgentSummary>>,
   refreshVercel: (agentId: AgentId) =>
     ipcRenderer.invoke('vercel:refresh', agentId) as Promise<VercelAgentSummary>,
   onVercelUpdate: (handler: (event: VercelUpdateEvent) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: VercelUpdateEvent) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: VercelUpdateEvent) => handler(payload)
     ipcRenderer.on('vercel:update', listener)
     return () => ipcRenderer.off('vercel:update', listener)
   },
 
-  getGitHubStatus: () =>
-    ipcRenderer.invoke('github:status') as Promise<GitHubStatus>,
+  getGitHubStatus: () => ipcRenderer.invoke('github:status') as Promise<GitHubStatus>,
   listGitHubSummary: (agentId: AgentId) =>
     ipcRenderer.invoke('github:get', agentId) as Promise<GitHubAgentSummary>,
   listAllGitHubSummaries: () =>
-    ipcRenderer.invoke('github:getAll') as Promise<
-      Record<AgentId, GitHubAgentSummary>
-    >,
+    ipcRenderer.invoke('github:getAll') as Promise<Record<AgentId, GitHubAgentSummary>>,
   refreshGitHub: (agentId: AgentId) =>
     ipcRenderer.invoke('github:refresh', agentId) as Promise<GitHubAgentSummary>,
   onGitHubUpdate: (handler: (event: GitHubUpdateEvent) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: GitHubUpdateEvent) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: GitHubUpdateEvent) => handler(payload)
     ipcRenderer.on('github:update', listener)
     return () => ipcRenderer.off('github:update', listener)
   },
@@ -338,14 +339,11 @@ const muckaApi: MuckaApi = {
     count?: number
     userCount?: number
   }) => ipcRenderer.invoke('sentry:triage', input) as Promise<void>,
-  listUntriagedSentry: () =>
-    ipcRenderer.invoke('sentry:untriaged') as Promise<SentryTriage[]>,
+  listUntriagedSentry: () => ipcRenderer.invoke('sentry:untriaged') as Promise<SentryTriage[]>,
   getSentryHealth: () => ipcRenderer.invoke('sentry:health') as Promise<SentryHealth>,
   onSentryNewIssue: (handler: (event: SentryNewIssueEvent) => void): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      payload: SentryNewIssueEvent
-    ): void => handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: SentryNewIssueEvent): void =>
+      handler(payload)
     ipcRenderer.on('sentry:new-issue', listener)
     return () => ipcRenderer.off('sentry:new-issue', listener)
   },
@@ -354,10 +352,8 @@ const muckaApi: MuckaApi = {
   ackSentryStatusChange: (issueId: string) =>
     ipcRenderer.invoke('sentry:ack-status', issueId) as Promise<void>,
   onSentryStatusChange: (handler: (change: SentryStatusChange) => void): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      payload: SentryStatusChange
-    ): void => handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: SentryStatusChange): void =>
+      handler(payload)
     ipcRenderer.on('sentry:status-change', listener)
     return () => ipcRenderer.off('sentry:status-change', listener)
   },
@@ -373,48 +369,35 @@ const muckaApi: MuckaApi = {
     // set this at startup.
     return (window as unknown as { __muckaVersion?: string }).__muckaVersion ?? ''
   },
-  checkForUpdates: () =>
-    ipcRenderer.invoke('updater:check') as Promise<UpdaterStatus>,
-  downloadUpdate: () =>
-    ipcRenderer.invoke('updater:download') as Promise<void>,
-  installUpdate: () =>
-    ipcRenderer.invoke('updater:install') as Promise<void>,
+  checkForUpdates: () => ipcRenderer.invoke('updater:check') as Promise<UpdaterStatus>,
+  downloadUpdate: () => ipcRenderer.invoke('updater:download') as Promise<void>,
+  installUpdate: () => ipcRenderer.invoke('updater:install') as Promise<void>,
   onUpdaterStatus: (handler: (status: UpdaterStatus) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: UpdaterStatus) =>
-      handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: UpdaterStatus) => handler(payload)
     ipcRenderer.on('updater:status', listener)
     return () => ipcRenderer.off('updater:status', listener)
   },
-  listSecrets: () =>
-    ipcRenderer.invoke('secrets:list') as Promise<SecretStatus[]>,
+  listSecrets: () => ipcRenderer.invoke('secrets:list') as Promise<SecretStatus[]>,
   setSecret: (id: SecretId, value: string) =>
     ipcRenderer.invoke('secrets:set', id, value) as Promise<SecretStatus[]>,
-  clearSecret: (id: SecretId) =>
-    ipcRenderer.invoke('secrets:clear', id) as Promise<SecretStatus[]>,
-  testSecret: (id: SecretId) =>
-    ipcRenderer.invoke('secrets:test', id) as Promise<SecretTestResult>,
-  listCredentials: () =>
-    ipcRenderer.invoke('credentials:list') as Promise<CredentialSummary[]>,
+  clearSecret: (id: SecretId) => ipcRenderer.invoke('secrets:clear', id) as Promise<SecretStatus[]>,
+  testSecret: (id: SecretId) => ipcRenderer.invoke('secrets:test', id) as Promise<SecretTestResult>,
+  listCredentials: () => ipcRenderer.invoke('credentials:list') as Promise<CredentialSummary[]>,
   createCredential: (input: CredentialCreateInput) =>
     ipcRenderer.invoke('credentials:create', input) as Promise<CredentialSummary[]>,
   updateCredential: (input: CredentialUpdateInput) =>
     ipcRenderer.invoke('credentials:update', input) as Promise<CredentialSummary[]>,
   deleteCredential: (id: string) =>
     ipcRenderer.invoke('credentials:delete', id) as Promise<CredentialSummary[]>,
-  watchDir: (path: string) =>
-    ipcRenderer.invoke('fs:watch', path) as Promise<void>,
-  unwatchDir: (path: string) =>
-    ipcRenderer.invoke('fs:unwatch', path) as Promise<void>,
+  watchDir: (path: string) => ipcRenderer.invoke('fs:watch', path) as Promise<void>,
+  unwatchDir: (path: string) => ipcRenderer.invoke('fs:unwatch', path) as Promise<void>,
   onFsChange: (handler: (event: { path: string }) => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      payload: { path: string }
-    ): void => handler(payload)
+    const listener = (_e: Electron.IpcRendererEvent, payload: { path: string }): void =>
+      handler(payload)
     ipcRenderer.on('fs:changed', listener)
     return () => ipcRenderer.off('fs:changed', listener)
   },
-  listBrowserTabs: () =>
-    ipcRenderer.invoke('browser:list') as Promise<BrowserTabState[]>,
+  listBrowserTabs: () => ipcRenderer.invoke('browser:list') as Promise<BrowserTabState[]>,
   openBrowserTab: (input: BrowserOpenTabInput) =>
     ipcRenderer.invoke('browser:open', input) as Promise<BrowserTabId | null>,
   closeBrowserTab: (tabId: BrowserTabId) =>
@@ -423,8 +406,7 @@ const muckaApi: MuckaApi = {
     ipcRenderer.invoke('browser:switch', tabId) as Promise<void>,
   navigateBrowserTab: (tabId: BrowserTabId, url: string) =>
     ipcRenderer.invoke('browser:navigate', tabId, url) as Promise<void>,
-  browserBack: (tabId: BrowserTabId) =>
-    ipcRenderer.invoke('browser:back', tabId) as Promise<void>,
+  browserBack: (tabId: BrowserTabId) => ipcRenderer.invoke('browser:back', tabId) as Promise<void>,
   browserForward: (tabId: BrowserTabId) =>
     ipcRenderer.invoke('browser:forward', tabId) as Promise<void>,
   browserReload: (tabId: BrowserTabId) =>
@@ -436,10 +418,7 @@ const muckaApi: MuckaApi = {
   raiseBrowserSlot: (slotId: BrowserSlotId) =>
     ipcRenderer.invoke('browser:raise', slotId) as Promise<void>,
   onBrowserState: (handler: (tabs: BrowserTabState[]) => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      tabs: BrowserTabState[]
-    ): void => handler(tabs)
+    const listener = (_e: Electron.IpcRendererEvent, tabs: BrowserTabState[]): void => handler(tabs)
     ipcRenderer.on('browser:state', listener)
     return () => ipcRenderer.off('browser:state', listener)
   }
