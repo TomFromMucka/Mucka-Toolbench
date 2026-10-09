@@ -288,6 +288,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-10 — Release builds leave out `.claude/`, `docs/` and `scripts/`; every release up to 0.6.0 shipped the builder's local `.claude/settings.local.json`.
 - 2026-10-09 — Quitting waits (up to 2s) for every terminal to exit before shutting down, so an install no longer leaves a "quit unexpectedly" report behind.
 - 2026-10-09 — Ticket jobs send a reply and change status without a Yes/No prompt once Tom says send in the chat; before, the preview and the send each asked.
 - 2026-10-09 — ⌘-clicking a link Claude wrote opens it like any other link, without xterm's "This link could potentially be dangerous" box.
