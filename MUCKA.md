@@ -50,16 +50,45 @@ or "Tom, eyes here".
 - Per-agent git badges (branch · ahead/behind · dirty/untracked).
 
 **Jobs layout (third choice under Settings → Agents → *Layout*).**
-- Five columns: Files (folded until clicked), Needs you, Job board,
-  the selected job's terminal, and the six-up right column. The 4 and 6
-  layouts are unchanged.
+- Columns: Files (folded until clicked), Intake, the selected job's
+  terminal in the centre of the screen, the Job board (On the tools,
+  Check it, Idle / On hold), and Mucka folded to a strip on the right (opens by
+  itself for a confirm). *Waiting on you* is a strip right under the
+  terminal's input, in queue order; click one to bring it up. The 4 and
+  6 layouts are unchanged.
 - **+ New job** (`⌘N`) makes a fresh worktree in `<repo>-jobs/` off the
   latest `origin/main` (env files copied, `node_modules` cloned
   copy-on-write) and opens Claude in it. The card takes its title from
   Tom's first message and its lane from what Claude reports.
-- Sign-off bar under each job's terminal: *Ship* (PR with auto-merge),
-  *Amend*, *Finish* once merged (`/coach job-done` removes the folder and
-  branch), *Dismiss* (asks first, says what would be lost).
+- Sign-off bar under each job's terminal: *Job done* (Claude checks for
+  loose ends, lands the PR with auto-merge, then `/coach job-done` removes
+  the folder and branch), *Amend*, *Hold* / *Release* (parks it, tagged,
+  in Idle / On hold; held Sentry jobs don't count toward the auto-start
+  cap), *Dismiss* (asks first, says what would be lost).
+- **Intake** has two tabs in the terminal's font, *support* and
+  *sentry*, each with its open count.
+  - *support* is the `/admin/support` desk without the browser: the same
+    status and kind filters, search, grouping and badges (awaiting reply,
+    chase / follow up). Clicking a ticket opens it in full: thread,
+    attachments (pictures inline, PDFs in Preview, anything else only in
+    Finder), the AI conversation, and Reply, Reply + resolve, In
+    progress, Resolve and Close. Every send first shows who it reaches,
+    on which channels, and whether it's held until 08:00. All of it runs
+    through Mucka Pro's `scripts/ticket.ts`, so no credentials live in
+    the cockpit. Opening a ticket marks it read, as the web does.
+  - Opening a ticket or a Sentry issue gives a note box: whatever Tom
+    types goes first in the job's opening message.
+  - *Start job* (on the row or the open ticket) opens a fresh job told
+    to read the ticket with `ticket.ts show`, do the groundwork, reproduce
+    it with a failing test and draft the fix, committed but not pushed.
+    Replying and status changes are denied in its own
+    `.claude/settings.local.json`; Tom signs replies off himself. Tickets
+    never start jobs by themselves.
+  - Hovering a ticket fetches it, so it usually opens instantly.
+  - *sentry*: *Start job* opens a job whose Claude begins with the issue
+    and the groundwork rules. With auto on (header switch), an issue
+    Mucka triages as a ticket starts its own job, 3 open at most, the
+    rest queued.
 
 **Needs you (all layouts).** One queue of agents' and jobs' permission
 prompts and questions, blocked first then oldest. Answered with buttons
@@ -258,6 +287,41 @@ shared primitives in `components/ui/`:
 ## Recent changes
 
 (newest first — append here when shipping)
+
+- 2026-10-09 — Quitting waits (up to 2s) for every terminal to exit before shutting down, so an install no longer leaves a "quit unexpectedly" report behind.
+- 2026-10-09 — Ticket jobs send a reply and change status without a Yes/No prompt once Tom says send in the chat; before, the preview and the send each asked.
+- 2026-10-09 — ⌘-clicking a link Claude wrote opens it like any other link, without xterm's "This link could potentially be dangerous" box.
+- 2026-10-09 — Toolbench clears gh's cached "rate limit exceeded" replies once the limit has reset, so a real run-out lasts the hour rather than a day (cli/cli#12812).
+- 2026-10-09 — A job with a second, older status file no longer flips between waiting and idle on every update, which made the waiting strip, the job board and the banner badge flash.
+- **2026-10-09** — Jobs open their own PR (no auto-merge, so Tom can look
+  at the preview; Job done lands it) when the work is done and checks
+  pass (standing rules in every job's system prompt, plus a carve-out in
+  Tom's global CLAUDE.md); one GitHub query a minute for
+  all job PRs, and merge waits poll once a minute.
+
+- **2026-10-08** — Jobs: Hold / Release on the sign-off bar parks a job in
+  the Idle / On hold column; ticket view closes after a status change.
+
+- **2026-10-08** — Jobs: the terminal is the centre column (Intake left,
+  board right, Mucka folded), with Waiting on you under its input; a note
+  box on tickets and Sentry issues goes first in a new job's brief;
+  ticket jobs read tickets freely and always ask before replying; a
+  resolved or closed ticket leaves the list at once.
+
+- **2026-10-08** — Intake: tickets go straight to a job (Start job), as Tom
+  works on a worktree; the read-only scout, auto-scouting and the Scouting
+  column are gone (a fix redid the scout's work anyway). Job ids no longer
+  clash when several start in the same minute. Tickets open faster (hover
+  prefetch, header shown at once).
+
+- **2026-10-08** — Intake: support and sentry tabs; manage support
+  tickets in the cockpit (filters, search, full ticket, attachments,
+  reply and status with a who-gets-told check) through `ticket.ts`.
+
+- **2026-10-07** — Jobs: Intake (Sentry issues, one click to a briefed
+  job) replaces the Needs you column; Needs you cards look like Claude's
+  own prompt; a job you answered moves back to On the tools; Ship and
+  Finish merge into one Job done button.
 
 - **2026-10-07** — Jobs layout and the Needs you queue: a third layout
   where each job is a fresh worktree with its own Claude terminal and a

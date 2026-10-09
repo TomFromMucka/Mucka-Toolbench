@@ -405,6 +405,45 @@ textarea,
   );
 }
 
+/* A chamfer-sm card with a 1px outline that follows the corners too. An
+   inset box-shadow can't: the clip-path cuts it off along the diagonals,
+   and it flickers beside a terminal that's repainting. The card paints the
+   outline colour (--ring) and a 1px-inset layer paints the fill (--fill).
+   Set both with arbitrary properties, e.g. [--ring:var(--orange)]. */
+@utility chamfer-frame-sm {
+  position: relative;
+  isolation: isolate;
+  background: var(--ring, var(--border));
+  clip-path: polygon(
+    var(--notch-sm) 0%,
+    calc(100% - var(--notch-sm)) 0%,
+    100% var(--notch-sm),
+    100% calc(100% - var(--notch-sm)),
+    calc(100% - var(--notch-sm)) 100%,
+    var(--notch-sm) 100%,
+    0% calc(100% - var(--notch-sm)),
+    0% var(--notch-sm)
+  );
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    background: var(--fill, var(--surface2));
+    /* 0.41px less notch keeps the diagonal edge as thick as the straight ones. */
+    clip-path: polygon(
+      calc(var(--notch-sm) - 0.41px) 0%,
+      calc(100% - var(--notch-sm) + 0.41px) 0%,
+      100% calc(var(--notch-sm) - 0.41px),
+      100% calc(100% - var(--notch-sm) + 0.41px),
+      calc(100% - var(--notch-sm) + 0.41px) 100%,
+      calc(var(--notch-sm) - 0.41px) 100%,
+      0% calc(100% - var(--notch-sm) + 0.41px),
+      0% calc(var(--notch-sm) - 0.41px)
+    );
+  }
+}
+
 /* ──────────────────────────────────────────────────────────────────────
    Mucka Pro design system v2 — StatusPill + Button primitives.
    Verbatim port from Mucka-Pro/src/app/globals.css so behaviour matches.

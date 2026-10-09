@@ -13,6 +13,9 @@ interface JobRow {
   pr_url: string | null
   pr_state: string | null
   pr_auto_merge: number
+  source: string | null
+  brief: string | null
+  held: number
   closed: number
   created_at: number
   updated_at: number
@@ -43,6 +46,8 @@ function rowToJob(row: JobRow): Job {
     detail: row.detail,
     needsInstall: row.needs_install === 1,
     pr: prOf(row),
+    source: row.source,
+    held: row.held === 1,
     createdAt: row.created_at
   }
 }
@@ -59,14 +64,33 @@ export function getJob(id: JobId): Job | null {
   return row ? rowToJob(row) : null
 }
 
-export function insertJob(job: Job): void {
+export function insertJob(job: Job, brief: string | null): void {
   const now = Date.now()
   getDb()
     .prepare(
-      `INSERT INTO jobs (id, title, branch, worktree_path, state, detail, closed, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
+      `INSERT INTO jobs (id, title, branch, worktree_path, state, detail, source, brief, closed, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
     )
-    .run(job.id, job.title, job.branch, job.worktreePath, job.state, job.detail, job.createdAt, now)
+    .run(
+      job.id,
+      job.title,
+      job.branch,
+      job.worktreePath,
+      job.state,
+      job.detail,
+      job.source,
+      brief,
+      job.createdAt,
+      now
+    )
+}
+
+/** The opening message a job from Intake starts its Claude with. */
+export function getJobBrief(id: JobId): string | null {
+  const row = getDb()
+    .prepare<[string], { brief: string | null }>(`SELECT brief FROM jobs WHERE id = ?`)
+    .get(id)
+  return row?.brief ?? null
 }
 
 export function updateJob(
@@ -93,6 +117,12 @@ export function updateJob(
       Date.now(),
       id
     )
+}
+
+export function setJobHeld(id: JobId, held: boolean): void {
+  getDb()
+    .prepare(`UPDATE jobs SET held = ?, updated_at = ? WHERE id = ?`)
+    .run(held ? 1 : 0, Date.now(), id)
 }
 
 /** Take a job off the board. The row stays, for history and metrics. */

@@ -5,15 +5,39 @@ import {
   readFileSync,
   readdirSync,
   copyFileSync,
+  writeFileSync,
   watch,
   type FSWatcher
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import type { AgentConfig, Job, JobId, JobPr } from '@shared/types'
-import { closePullRequest, latestPullRequestForBranch, readGitHubOrigin } from '../github/GitHub'
-import { closeJob, getJob, insertJob, listOpenJobs, terminalIdForJob, updateJob } from '../db/jobs'
+import type {
+  AgentConfig,
+  Job,
+  JobBrief,
+  JobId,
+  JobPr,
+  JobsAutoStatus,
+  SentryIssue,
+  Ticket
+} from '@shared/types'
+import { getValue, setValue } from '../db/kv'
+import { logEvent } from '../events/Events'
+import { sentryBrief } from './sentryBrief'
+import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
+import { withTomsNote } from './tomsNote'
+import { JOB_RULES } from './jobRules'
+import {
+  closeJob,
+  getJob,
+  getJobBrief,
+  insertJob,
+  listOpenJobs,
+  setJobHeld,
+  terminalIdForJob,
+  updateJob
+} from '../db/jobs'
 
 /** Claude Code files a folder's conversations under its path with every other character as `-`. */
 function hasClaudeHistory(folder: string): boolean {
@@ -30,7 +54,9 @@ function hasClaudeHistory(folder: string): boolean {
  * then an ordinary login shell when he quits it. Null until the worktree
  * is ready.
  */
-export function jobShell(id: JobId): { command: string; args: string[]; cwd: string } | null {
+export function jobShell(
+  id: JobId
+): { command: string; args: string[]; cwd: string; env: Record<string, string> } | null {
   const job = getJob(id)
   if (!job || job.state !== 'ready') return null
   const shell = process.env.SHELL?.includes('zsh') ? process.env.SHELL : '/bin/zsh'
@@ -38,11 +64,20 @@ export function jobShell(id: JobId): { command: string; args: string[]; cwd: str
   // After a cockpit restart the job's terminal comes back. Claude keeps
   // one history per folder and a job has its own folder, so `--continue`
   // always picks up this job's conversation rather than starting over.
-  const claude = hasClaudeHistory(job.worktreePath) ? 'claude --continue' : 'claude'
+  // A job from Intake opens with its brief as Claude's first message. It
+  // goes in through the environment, so no quoting can mangle it, and it
+  // is only used before the conversation exists.
+  const resume = hasClaudeHistory(job.worktreePath)
+  const brief = resume ? null : getJobBrief(id)
+  // The job rules ride in the system prompt on every start, resumes too,
+  // so a job opens its own PR when it's done whatever it was asked.
+  const base = 'claude --append-system-prompt "$MUCKA_JOB_RULES"'
+  const claude = resume ? `${base} --continue` : brief ? `${base} "$MUCKA_JOB_BRIEF"` : base
   return {
     command: shell,
     args: ['-l', '-i', '-c', `${install}${claude}; exec ${shell} -l`],
-    cwd: job.worktreePath
+    cwd: job.worktreePath,
+    env: { MUCKA_JOB_RULES: JOB_RULES, ...(brief ? { MUCKA_JOB_BRIEF: brief } : {}) }
   }
 }
 
@@ -68,9 +103,27 @@ const LOCAL_FILES = ['.env', '.env.local', 'CLAUDE.local.md']
  * of stderr: Node's message is just "Command failed: <the command>",
  * which says nothing about why.
  */
+/**
+ * The environment for git and gh: the cockpit's own GITHUB_TOKEN / GH_TOKEN
+ * removed. Both prefer a token over Tom's gh login (git through gh's
+ * credential helper), and the stored one can be stale: a 401 here is how
+ * jobs lost sight of their PRs, and fetches failed with "Authentication
+ * failed" so jobs started from an old main.
+ */
+function githubEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env.GH_TOKEN
+  delete env.GITHUB_TOKEN
+  return env
+}
+
 async function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
   try {
-    const { stdout } = await execFileAsync('git', args, { cwd, timeout: timeoutMs })
+    const { stdout } = await execFileAsync('git', args, {
+      cwd,
+      env: githubEnv(),
+      timeout: timeoutMs
+    })
     return stdout.trim()
   } catch (err) {
     const stderr =
@@ -86,6 +139,72 @@ async function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<str
   }
 }
 
+const GH_PATHS = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']
+
+/** Run the gh CLI, as Tom does in his terminals, and return stdout. */
+async function gh(cwd: string, args: string[]): Promise<string> {
+  const bin = GH_PATHS.find((p) => existsSync(p))
+  if (!bin) throw new Error('the gh CLI is not installed (brew install gh, then gh auth login)')
+  try {
+    const { stdout } = await execFileAsync(bin, args, { cwd, env: githubEnv(), timeout: 30_000 })
+    return stdout.trim()
+  } catch (err) {
+    const stderr =
+      typeof err === 'object' && err !== null && 'stderr' in err && typeof err.stderr === 'string'
+        ? err.stderr.trim().split('\n').pop()
+        : null
+    throw new Error(
+      `gh ${args[0]} ${args[1] ?? ''}: ${stderr || (err instanceof Error ? err.message : String(err))}`
+    )
+  }
+}
+
+function toJobPr(item: unknown): JobPr | null {
+  if (typeof item !== 'object' || item === null) return null
+  const num = 'number' in item && typeof item.number === 'number' ? item.number : null
+  const url = 'url' in item && typeof item.url === 'string' ? item.url : null
+  const raw = 'state' in item && typeof item.state === 'string' ? item.state : ''
+  const draft = 'isDraft' in item && item.isDraft === true
+  const auto = 'autoMergeRequest' in item && item.autoMergeRequest !== null
+  if (num === null || url === null) return null
+  const state = raw === 'MERGED' ? 'merged' : raw === 'CLOSED' ? 'closed' : draft ? 'draft' : 'open'
+  return { number: num, url, state, autoMerge: auto }
+}
+
+/**
+ * The repo's newest PRs, in any state, by branch: one `gh pr list` for every
+ * job at once. A query per job, every minute, was most of a 5,000-an-hour
+ * GraphQL allowance with twenty-odd jobs open, and that allowance is Tom's
+ * whole `gh` login, shared with his own terminals.
+ */
+async function recentPrsByBranch(root: string): Promise<Map<string, JobPr>> {
+  const out = await gh(root, [
+    'pr',
+    'list',
+    '--state',
+    'all',
+    '--limit',
+    '100',
+    '--json',
+    'headRefName,number,url,state,isDraft,autoMergeRequest'
+  ])
+  const parsed: unknown = JSON.parse(out || '[]')
+  const byBranch = new Map<string, JobPr>()
+  for (const item of Array.isArray(parsed) ? parsed : []) {
+    const branch =
+      typeof item === 'object' &&
+      item !== null &&
+      'headRefName' in item &&
+      typeof item.headRefName === 'string'
+        ? item.headRefName
+        : null
+    const pr = toJobPr(item)
+    // Newest first, so the first PR seen for a branch is its latest.
+    if (branch && pr && !byBranch.has(branch)) byBranch.set(branch, pr)
+  }
+  return byBranch
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /** `2026-10-07 13:42` → `1007-1342`, unique among existing folders. */
@@ -93,8 +212,32 @@ function jobSlug(jobsDir: string, now: Date): string {
   const pad = (n: number): string => String(n).padStart(2, '0')
   const base = `${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
   let slug = base
-  for (let n = 2; existsSync(join(jobsDir, `job-${slug}`)); n++) slug = `${base}-${n}`
+  // The table too, not just the folder: the folder only appears once setup
+  // gets going, so two jobs started in the same minute both saw it free.
+  const taken = (s: string): boolean =>
+    existsSync(join(jobsDir, `job-${s}`)) || getJob(`job-${s}`) !== null
+  for (let n = 2; taken(slug); n++) slug = `${base}-${n}`
   return slug
+}
+
+type Rules = { allow?: string[]; ask?: string[]; deny?: string[] }
+
+/** Add `extra`'s rules to `settings.permissions`, keeping whatever else is there. */
+function mergePermissions(
+  settings: Record<string, unknown>,
+  extra: Rules
+): Record<string, unknown> {
+  const raw = settings.permissions
+  const current: Record<string, unknown> =
+    typeof raw === 'object' && raw !== null ? Object.fromEntries(Object.entries(raw)) : {}
+  const list = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  const merged: Record<string, unknown> = { ...current }
+  for (const key of ['allow', 'ask', 'deny'] as const) {
+    const add = extra[key] ?? []
+    if (add.length > 0) merged[key] = [...new Set([...list(current[key]), ...add])]
+  }
+  return { ...settings, permissions: merged }
 }
 
 function readIfExists(path: string): string | null {
@@ -120,9 +263,23 @@ function titleFrom(prompt: string): string | null {
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1).trimEnd()}…` : line
 }
 
+/**
+ * Sentry tickets start jobs by themselves, at most this many open at once.
+ * Tom sees ~5 new issues a day; Mucka's triage passes the real ones on.
+ * The cap is backpressure: a job counts until he's signed it off, so a
+ * noisy day queues up rather than burying him.
+ */
+const AUTO_CAP = 3
+const AUTO_KEY = 'jobs.autoSentry'
+const QUEUE_KEY = 'jobs.autoSentryQueue'
+const sentrySource = (issue: SentryIssue): string => `sentry:${issue.shortId}`
+
 /** How often to look for removed folders, and (every fourth pass) PR changes. */
 const SWEEP_MS = 15_000
 const PR_EVERY = 4
+const PR_REUSE_MS = 30_000
+/** A finished job leaves the board once its Claude stops, or after this at most. */
+const FINISHED_GRACE_MS = 5 * 60_000
 
 export interface JobManagerDeps {
   listAgents: () => AgentConfig[]
@@ -130,6 +287,7 @@ export interface JobManagerDeps {
   killTerminal: (terminalId: string) => void
   /** Ask Tom in a native dialog. Resolves true only on the confirm button. */
   confirm: (message: string, detail: string, confirmLabel: string) => Promise<boolean>
+  getSentryIssue: (issueId: string) => Promise<SentryIssue | null>
 }
 
 export class JobManager {
@@ -137,15 +295,21 @@ export class JobManager {
   private readonly emit: (jobs: Job[]) => void
   private readonly killTerminal: (terminalId: string) => void
   private readonly confirm: JobManagerDeps['confirm']
+  private readonly getSentryIssue: JobManagerDeps['getSentryIssue']
   private promptWatcher: FSWatcher | null = null
   private sweepTimer: NodeJS.Timeout | null = null
   private sweeps = 0
+  private readonly leaving = new Map<JobId, NodeJS.Timeout>()
+  /** Last PR-lookup failure reported, so a persistent one is said once, not every minute. */
+  private prProblem: string | null = null
+  private prLookup: { at: number; result: Promise<Map<string, JobPr>> } | null = null
 
   constructor(deps: JobManagerDeps) {
     this.listAgents = deps.listAgents
     this.emit = deps.emit
     this.killTerminal = deps.killTerminal
     this.confirm = deps.confirm
+    this.getSentryIssue = deps.getSentryIssue
     try {
       mkdirSync(PROMPTS_DIR, { recursive: true })
       this.promptWatcher = watch(PROMPTS_DIR, () => this.titleFromPrompts())
@@ -155,6 +319,45 @@ export class JobManager {
     this.titleFromPrompts()
     this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_MS)
     void this.sweep()
+    void this.resumeInterrupted()
+  }
+
+  /**
+   * Setup runs in the app, so quitting mid-setup (an install, say) left the
+   * job on "Fetching the latest main…" for good, and Start job on its issue
+   * kept returning it. With no folder yet it simply starts again; one that
+   * got as far as a folder is failed, so Tom decides about what's there.
+   */
+  private async resumeInterrupted(): Promise<void> {
+    const stuck = listOpenJobs().filter((j) => j.state === 'setting-up')
+    if (stuck.length === 0) return
+    let root: string
+    try {
+      root = await this.repoRoot()
+    } catch (err) {
+      const why = err instanceof Error ? err.message.split('\n')[0] : String(err)
+      for (const job of stuck) {
+        updateJob(job.id, {
+          state: 'failed',
+          detail: `Setup was cut off and can't restart: ${why}`
+        })
+      }
+      this.push()
+      return
+    }
+    for (const job of stuck) {
+      if (existsSync(job.worktreePath)) {
+        updateJob(job.id, {
+          state: 'failed',
+          detail: `Setup was cut off when the cockpit closed and left ${job.worktreePath} behind. Remove that folder, then try again.`
+        })
+        this.push()
+        continue
+      }
+      updateJob(job.id, { detail: 'Starting again: setup was cut off when the cockpit closed…' })
+      this.push()
+      await this.setUp(job, root)
+    }
   }
 
   private async sweep(): Promise<void> {
@@ -164,48 +367,103 @@ export class JobManager {
 
   /**
    * `/coach job-done` removes the job's folder and branch itself, from
-   * inside the job's own Claude. That's the signal the job is done: the
-   * card says so and keeps the terminal, so Tom can read the report.
+   * inside the job's own Claude. That's the signal the job is done. One
+   * last PR lookup records how it ended (a PR can open and merge between
+   * two polls), then the card leaves the board once Claude has finished
+   * its closing report.
    */
   private noticeRemovedFolders(): void {
     let changed = false
     for (const job of listOpenJobs()) {
+      if (job.state === 'finished' && !this.leaving.has(job.id)) {
+        // Left over from before a restart: nothing left to read.
+        this.leaveSoon(job.id, 0)
+        continue
+      }
       if (job.state !== 'ready' || existsSync(job.worktreePath)) continue
       updateJob(job.id, { state: 'finished', detail: 'Finished. Folder and branch removed.' })
+      this.leaveSoon(job.id, FINISHED_GRACE_MS)
       changed = true
     }
     if (changed) this.push()
   }
 
+  private leaveSoon(id: JobId, afterMs: number): void {
+    const existing = this.leaving.get(id)
+    if (existing) clearTimeout(existing)
+    this.leaving.set(
+      id,
+      setTimeout(() => {
+        void this.refreshPrs(id).finally(() => this.close(id))
+      }, afterMs)
+    )
+  }
+
+  /**
+   * A job's card can't show its PR, and metrics can't tell it merged,
+   * while lookups fail. Say why on the job sheet, once per distinct reason.
+   */
+  private reportPrProblem(err: unknown): void {
+    const why = err instanceof Error ? err.message : String(err)
+    if (why === this.prProblem) return
+    this.prProblem = why
+    console.warn('[jobs] PR lookup failed:', why)
+    logEvent({
+      source: 'system',
+      kind: 'jobs.pr_lookup_failed',
+      message: `Jobs can't see their PRs on GitHub: ${why}`,
+      tone: 'bad'
+    })
+  }
+
+  /** A job's Claude has stopped. A finished job can go now. */
+  onJobIdle(id: JobId): void {
+    if (getJob(id)?.state === 'finished') this.leaveSoon(id, 3_000)
+  }
+
+  /**
+   * One lookup shared by every caller for 30s: jobs going idle together
+   * (each asks for its own PR) shouldn't each cost a GitHub query.
+   */
+  private recentPrs(root: string): Promise<Map<string, JobPr>> {
+    const now = Date.now()
+    if (this.prLookup && now - this.prLookup.at < PR_REUSE_MS) return this.prLookup.result
+    const result = recentPrsByBranch(root)
+    this.prLookup = { at: now, result }
+    result.catch(() => {
+      if (this.prLookup?.result === result) this.prLookup = null
+    })
+    return result
+  }
+
   /** Look up each job's PR. Quietly skips when GitHub isn't set up. */
   async refreshPrs(only?: JobId): Promise<void> {
+    // Finished jobs too: the branch is gone locally but GitHub still
+    // knows its PR, and that's how the job ended.
     const jobs = listOpenJobs().filter(
-      (j) => j.state === 'ready' && (only === undefined || j.id === only)
+      (j) =>
+        (j.state === 'ready' || j.state === 'finished') && (only === undefined || j.id === only)
     )
     if (jobs.length === 0) return
-    let repo: ReturnType<typeof readGitHubOrigin>
+    let root: string
     try {
-      repo = readGitHubOrigin(await this.repoRoot())
-    } catch {
+      root = await this.repoRoot()
+    } catch (err) {
+      this.reportPrProblem(err)
       return
     }
-    if (!repo) return
+    let prs: Map<string, JobPr>
+    try {
+      prs = await this.recentPrs(root)
+    } catch (err) {
+      this.reportPrProblem(err)
+      return
+    }
+    this.prProblem = null
     let changed = false
     for (const job of jobs) {
-      let pr: JobPr | null
-      try {
-        const found = await latestPullRequestForBranch(repo, job.branch)
-        pr = found
-          ? {
-              number: found.pr.number,
-              url: found.pr.url,
-              state: found.pr.state,
-              autoMerge: found.autoMerge
-            }
-          : null
-      } catch {
-        return
-      }
+      // Not among the newest 100: keep what it had rather than lose it.
+      const pr = prs.get(job.branch) ?? job.pr
       if (JSON.stringify(pr) === JSON.stringify(job.pr)) continue
       updateJob(job.id, { pr })
       changed = true
@@ -247,11 +505,110 @@ export class JobManager {
     if (changed) this.push()
   }
 
+  /** Start a job briefed with a Sentry issue, or return the one it already has. */
+  async startFromSentry(issue: SentryIssue, note?: string): Promise<Job> {
+    const existing = listOpenJobs().find((j) => j.source === sentrySource(issue))
+    if (existing) return existing
+    this.setQueue(this.queue().filter((id) => id !== issue.id))
+    return this.create({
+      title: `${issue.shortId}: ${issue.title}`,
+      prompt: withTomsNote(sentryBrief(issue), note),
+      source: sentrySource(issue)
+    })
+  }
+
+  /** Start a job on a support ticket, or return the one it already has. */
+  async startFromTicket(
+    ticket: Pick<Ticket, 'reference' | 'subject'>,
+    note?: string
+  ): Promise<Job> {
+    const source = `ticket:${ticket.reference}`
+    const existing = listOpenJobs().find((j) => j.source === source)
+    if (existing) return existing
+    return this.create({
+      title: `${ticket.reference}: ${ticket.subject}`,
+      prompt: withTomsNote(ticketBrief(ticket.reference), note),
+      source
+    })
+  }
+
+  async startSentryById(issueId: string, note?: string): Promise<Job> {
+    const issue = await this.getSentryIssue(issueId)
+    if (!issue) throw new Error(`Sentry issue ${issueId} isn't in the latest list.`)
+    return this.startFromSentry(issue, note)
+  }
+
+  autoStatus(): JobsAutoStatus {
+    return {
+      enabled: getValue(AUTO_KEY) !== 'off',
+      cap: AUTO_CAP,
+      open: this.openSentryJobs(),
+      queued: this.queue()
+    }
+  }
+
+  setAuto(enabled: boolean): JobsAutoStatus {
+    setValue(AUTO_KEY, enabled ? 'on' : 'off')
+    if (enabled) void this.drainQueue()
+    this.push()
+    return this.autoStatus()
+  }
+
+  /** Mucka ruled a Sentry issue worth fixing. Start on it, or queue it. */
+  async onSentryTicket(issueId: string): Promise<void> {
+    if (!this.autoStatus().enabled) return
+    const issue = await this.getSentryIssue(issueId)
+    if (!issue || listOpenJobs().some((j) => j.source === sentrySource(issue))) return
+    if (this.openSentryJobs() >= AUTO_CAP) {
+      if (!this.queue().includes(issueId)) this.setQueue([...this.queue(), issueId])
+      this.push()
+      return
+    }
+    await this.startFromSentry(issue).catch(() => undefined)
+  }
+
+  private async drainQueue(): Promise<void> {
+    if (!this.autoStatus().enabled) return
+    while (this.openSentryJobs() < AUTO_CAP) {
+      const [next, ...rest] = this.queue()
+      if (next === undefined) return
+      this.setQueue(rest)
+      await this.onSentryTicket(next)
+    }
+  }
+
+  /** Held ones don't count: parked work shouldn't stop new issues starting. */
+  private openSentryJobs(): number {
+    return listOpenJobs().filter((j) => j.source?.startsWith('sentry:') && !j.held).length
+  }
+
+  hold(id: JobId, held: boolean): void {
+    setJobHeld(id, held)
+    this.push()
+    // Holding one frees a place for a queued Sentry issue.
+    if (held) void this.drainQueue()
+  }
+
+  private queue(): string[] {
+    try {
+      const parsed: unknown = JSON.parse(getValue(QUEUE_KEY) ?? '[]')
+      return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+    } catch {
+      return []
+    }
+  }
+
+  private setQueue(ids: string[]): void {
+    setValue(QUEUE_KEY, JSON.stringify(ids))
+  }
+
   dispose(): void {
     this.promptWatcher?.close()
     this.promptWatcher = null
     if (this.sweepTimer) clearInterval(this.sweepTimer)
     this.sweepTimer = null
+    for (const timer of this.leaving.values()) clearTimeout(timer)
+    this.leaving.clear()
   }
 
   list(): Job[] {
@@ -288,7 +645,7 @@ export class JobManager {
    * runs in the background and pushes the job list as it goes, so the
    * card shows progress and the terminal opens the moment it's ready.
    */
-  async create(): Promise<Job> {
+  async create(brief?: JobBrief): Promise<Job> {
     const root = await this.repoRoot()
     const jobsDir = join(dirname(root), `${basename(root)}-jobs`)
     mkdirSync(jobsDir, { recursive: true })
@@ -296,7 +653,7 @@ export class JobManager {
     const id: JobId = `job-${slug}`
     const job: Job = {
       id,
-      title: UNTITLED,
+      title: brief?.title ?? UNTITLED,
       branch: `job/${slug}`,
       worktreePath: join(jobsDir, id),
       terminalId: terminalIdForJob(id),
@@ -304,9 +661,11 @@ export class JobManager {
       detail: 'Fetching the latest main…',
       needsInstall: false,
       pr: null,
+      source: brief?.source ?? null,
+      held: false,
       createdAt: Date.now()
     }
-    insertJob(job)
+    insertJob(job, brief?.prompt ?? null)
     this.push()
     void this.setUp(job, root)
     return job
@@ -352,6 +711,7 @@ export class JobManager {
 
       this.progress(job.id, 'Copying local settings…')
       this.copyLocalFiles(root, job.worktreePath)
+      this.writeJobSettings(root, job)
 
       const source = await this.matchingNodeModules(root, job.worktreePath)
       if (source) {
@@ -401,6 +761,50 @@ export class JobManager {
   }
 
   /**
+   * A checkout of the latest main that nothing edits, for the ticket scout
+   * to read and to run `scripts/ticket.ts` from. `<repo>-jobs/scout`,
+   * moved to origin/main on every call, with dependencies cloned from a
+   * checkout installed from the same lockfile (never installed here).
+   */
+  /**
+   * The scout checkout as it is, for quick reads: no fetch, no move. The
+   * ticket poll keeps it on the latest main; only a missing one is set up.
+   */
+  async scoutDir(): Promise<string> {
+    const root = await this.repoRoot()
+    const dir = join(dirname(root), `${basename(root)}-jobs`, 'scout')
+    if (existsSync(join(dir, 'node_modules', '.scout-lock'))) return dir
+    return this.scoutCheckout()
+  }
+
+  async scoutCheckout(): Promise<string> {
+    const root = await this.repoRoot()
+    const dir = join(dirname(root), `${basename(root)}-jobs`, 'scout')
+    const fetchProblem = await this.fetchMain(root)
+    if (!existsSync(dir)) {
+      mkdirSync(dirname(dir), { recursive: true })
+      await git(root, ['worktree', 'add', '--detach', dir, 'origin/main'])
+      this.copyLocalFiles(root, dir)
+    } else {
+      await git(dir, ['checkout', '--quiet', '--detach', 'origin/main'])
+    }
+    const lock = readIfExists(join(dir, 'package-lock.json'))
+    const stamp = join(dir, 'node_modules', '.scout-lock')
+    if (lock !== null && readIfExists(stamp) !== lock) {
+      const source = await this.matchingNodeModules(root, dir)
+      if (!source) {
+        throw new Error(
+          `no checkout has dependencies for main's lockfile yet${fetchProblem ? `, and ${fetchProblem}` : ''}`
+        )
+      }
+      await execFileAsync('rm', ['-rf', join(dir, 'node_modules')])
+      await execFileAsync('cp', ['-Rc', source, join(dir, 'node_modules')], { timeout: 300_000 })
+      writeFileSync(stamp, lock)
+    }
+    return dir
+  }
+
+  /**
    * Throw a job away. The work may never have reached main, so this always
    * asks first, in a dialog that names what would be lost. On yes: stop
    * its terminal, close its PR (the branch stays on GitHub), then delete
@@ -438,9 +842,9 @@ export class JobManager {
     this.killTerminal(job.terminalId)
     const problems: string[] = []
     if (openPr) {
-      const repo = readGitHubOrigin(root)
-      if (repo)
-        await closePullRequest(repo, openPr.number).catch((e: unknown) => problems.push(String(e)))
+      await gh(root, ['pr', 'close', String(openPr.number)]).catch((e: unknown) =>
+        problems.push(e instanceof Error ? e.message : String(e))
+      )
     }
     if (existsSync(job.worktreePath)) {
       await git(root, ['worktree', 'remove', '--force', job.worktreePath]).catch((e: unknown) =>
@@ -454,6 +858,7 @@ export class JobManager {
       closeJob(id)
     }
     this.push()
+    void this.drainQueue()
     return problems.length === 0
   }
 
@@ -461,14 +866,47 @@ export class JobManager {
   close(id: JobId): void {
     const job = getJob(id)
     if (!job || job.state !== 'finished') return
+    const timer = this.leaving.get(id)
+    if (timer) clearTimeout(timer)
+    this.leaving.delete(id)
     this.killTerminal(job.terminalId)
     closeJob(id)
     this.push()
+    void this.drainQueue()
   }
 
   private progress(id: JobId, detail: string): void {
     updateJob(id, { detail })
     this.push()
+  }
+
+  /**
+   * The job's `.claude/settings.local.json` (gitignored): Tom's own, from
+   * the main checkout, so a job commits, pushes and opens PRs without
+   * asking just as his worktrees do. A ticket job's rules go on top; its
+   * `ask` for replies still wins over any allow, because ask beats allow.
+   */
+  private writeJobSettings(root: string, job: Job): void {
+    const ticket = job.source?.startsWith('ticket:') ?? false
+    const sources = [root, ...this.listAgents().map((a) => a.worktreePath)]
+    const from = sources
+      .map((s) => join(s, '.claude', 'settings.local.json'))
+      .find((p) => existsSync(p))
+    let settings: Record<string, unknown> = {}
+    try {
+      const parsed: unknown = from ? JSON.parse(readFileSync(from, 'utf8')) : {}
+      if (typeof parsed === 'object' && parsed !== null)
+        settings = Object.fromEntries(Object.entries(parsed))
+    } catch {
+      settings = {}
+    }
+    if (!ticket && !from) return
+    if (ticket) settings = mergePermissions(settings, TICKET_JOB_PERMISSIONS)
+    mkdirSync(join(job.worktreePath, '.claude'), { recursive: true })
+    writeFileSync(
+      join(job.worktreePath, '.claude', 'settings.local.json'),
+      `${JSON.stringify(settings, null, 2)}\n`
+    )
   }
 
   /** Copy env files from the main checkout, else from any agent worktree that has them. */

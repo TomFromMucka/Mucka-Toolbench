@@ -86,23 +86,40 @@ export function ExplorerPanel({
 }
 
 function CollapsedRail({ onExpand }: { onExpand: () => void }): React.JSX.Element {
-  // The whole bar is the target: a 40px strip is easy to hit anywhere along
-  // its length, and fiddly if only a small icon at the top responds.
+  return <FoldedRail label="FILES" title="Show files" icon={FolderTree} onOpen={onExpand} />
+}
+
+/**
+ * A column folded to a 40px strip. The whole bar is the target: a strip
+ * is easy to hit anywhere along its length, and fiddly if only a small
+ * icon at the top responds.
+ */
+export function FoldedRail({
+  label,
+  title,
+  icon,
+  onOpen
+}: {
+  label: string
+  title: string
+  icon?: typeof FolderTree
+  onOpen: () => void
+}): React.JSX.Element {
   return (
     <button
       type="button"
-      onClick={onExpand}
-      title="Show files"
-      aria-label="Show files"
+      onClick={onOpen}
+      title={title}
+      aria-label={title}
       className="flex h-full min-h-0 flex-col items-center gap-3 py-3 transition-colors hover:bg-van-white/10"
       style={{ background: 'var(--charcoal)', color: 'var(--van-white)' }}
     >
-      <Icon icon={FolderTree} size={18} strokeWidth={2.25} />
+      {icon ? <Icon icon={icon} size={18} strokeWidth={2.25} /> : null}
       <span
         className="t-label-sm tracking-[0.16em]"
         style={{ writingMode: 'vertical-rl', color: 'rgba(234, 233, 232, 0.7)' }}
       >
-        FILES
+        {label}
       </span>
       <Icon icon={ChevronRight} size={14} strokeWidth={2.25} className="mt-auto opacity-60" />
     </button>

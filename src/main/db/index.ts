@@ -58,6 +58,24 @@ function migrate(d: DatabaseType): void {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS tickets (
+      reference TEXT PRIMARY KEY,
+      subject TEXT NOT NULL,
+      status TEXT NOT NULL,
+      priority TEXT,
+      category TEXT,
+      business TEXT,
+      raiser TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      first_seen INTEGER NOT NULL,
+      brief TEXT,
+      brief_state TEXT NOT NULL DEFAULT 'none',
+      brief_error TEXT,
+      brief_cost REAL,
+      brief_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS kv (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -208,5 +226,23 @@ function migrate(d: DatabaseType): void {
     d.exec(`ALTER TABLE jobs ADD COLUMN pr_url TEXT`)
     d.exec(`ALTER TABLE jobs ADD COLUMN pr_state TEXT`)
     d.exec(`ALTER TABLE jobs ADD COLUMN pr_auto_merge INTEGER NOT NULL DEFAULT 0`)
+  }
+  if (!jobCols.has('source')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN source TEXT`)
+    d.exec(`ALTER TABLE jobs ADD COLUMN brief TEXT`)
+  }
+  if (!jobCols.has('held')) {
+    d.exec(`ALTER TABLE jobs ADD COLUMN held INTEGER NOT NULL DEFAULT 0`)
+  }
+  const ticketCols = new Set(
+    d.prepare<[], { name: string }>(`PRAGMA table_info(tickets)`).all().map((c) => c.name)
+  )
+  if (!ticketCols.has('awaiting_reply')) {
+    d.exec(`ALTER TABLE tickets ADD COLUMN awaiting_reply INTEGER NOT NULL DEFAULT 0`)
+    d.exec(`ALTER TABLE tickets ADD COLUMN last_author TEXT`)
+    d.exec(`ALTER TABLE tickets ADD COLUMN customer_visible INTEGER NOT NULL DEFAULT 1`)
+  }
+  if (!ticketCols.has('scout_dismissed')) {
+    d.exec(`ALTER TABLE tickets ADD COLUMN scout_dismissed INTEGER NOT NULL DEFAULT 0`)
   }
 }

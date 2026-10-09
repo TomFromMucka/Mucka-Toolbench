@@ -28,7 +28,6 @@ interface PullRaw {
   mergeable_state?: string | null
   merged?: boolean
   merged_at?: string | null
-  auto_merge?: object | null
   created_at?: string
   updated_at?: string
 }
@@ -230,51 +229,6 @@ export async function listOpenPullRequests(
   const path = `/repos/${repo.owner}/${repo.name}/pulls?${params.toString()}`
   const raw = await ghFetch<PullRaw[]>(path, t, opts)
   return raw.map(toPullRequest)
-}
-
-/**
- * The newest PR, open or not, whose head is this branch. A job's branch
- * gets one PR, and after it merges the open-PR list no longer shows it,
- * which is exactly when the job's card needs to know.
- */
-export async function latestPullRequestForBranch(
-  repo: RepoLink,
-  branch: string,
-  opts: FetchOpts = {}
-): Promise<{ pr: PullRequest; autoMerge: boolean } | null> {
-  const t = token()
-  if (!t) throw new Error('GITHUB_TOKEN not set')
-  const params = new URLSearchParams({
-    state: 'all',
-    head: `${repo.owner}:${branch}`,
-    sort: 'created',
-    direction: 'desc',
-    per_page: '1'
-  })
-  const raw = await ghFetch<PullRaw[]>(
-    `/repos/${repo.owner}/${repo.name}/pulls?${params.toString()}`,
-    t,
-    opts
-  )
-  const first = raw[0]
-  return first ? { pr: toPullRequest(first), autoMerge: Boolean(first.auto_merge) } : null
-}
-
-/** Close a PR without merging it. The branch stays on GitHub. */
-export async function closePullRequest(repo: RepoLink, number: number): Promise<void> {
-  const t = token()
-  if (!t) throw new Error('GITHUB_TOKEN not set')
-  const res = await fetch(`${API_BASE}/repos/${repo.owner}/${repo.name}/pulls/${number}`, {
-    method: 'PATCH',
-    headers: {
-      authorization: `Bearer ${t}`,
-      accept: 'application/vnd.github+json',
-      'x-github-api-version': '2022-11-28',
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({ state: 'closed' })
-  })
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await safeText(res)}`)
 }
 
 /**
