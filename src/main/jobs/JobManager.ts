@@ -155,31 +155,50 @@ async function gh(cwd: string, args: string[]): Promise<string> {
   }
 }
 
-/** The newest PR from a branch, in any state, via `gh pr list`. */
-async function prForBranch(root: string, branch: string): Promise<JobPr | null> {
-  const out = await gh(root, [
-    'pr',
-    'list',
-    '--head',
-    branch,
-    '--state',
-    'all',
-    '--limit',
-    '1',
-    '--json',
-    'number,url,state,isDraft,autoMergeRequest'
-  ])
-  const parsed: unknown = JSON.parse(out || '[]')
-  const first: unknown = Array.isArray(parsed) ? parsed[0] : undefined
-  if (typeof first !== 'object' || first === null) return null
-  const num = 'number' in first && typeof first.number === 'number' ? first.number : null
-  const url = 'url' in first && typeof first.url === 'string' ? first.url : null
-  const raw = 'state' in first && typeof first.state === 'string' ? first.state : ''
-  const draft = 'isDraft' in first && first.isDraft === true
-  const auto = 'autoMergeRequest' in first && first.autoMergeRequest !== null
+function toJobPr(item: unknown): JobPr | null {
+  if (typeof item !== 'object' || item === null) return null
+  const num = 'number' in item && typeof item.number === 'number' ? item.number : null
+  const url = 'url' in item && typeof item.url === 'string' ? item.url : null
+  const raw = 'state' in item && typeof item.state === 'string' ? item.state : ''
+  const draft = 'isDraft' in item && item.isDraft === true
+  const auto = 'autoMergeRequest' in item && item.autoMergeRequest !== null
   if (num === null || url === null) return null
   const state = raw === 'MERGED' ? 'merged' : raw === 'CLOSED' ? 'closed' : draft ? 'draft' : 'open'
   return { number: num, url, state, autoMerge: auto }
+}
+
+/**
+ * The repo's newest PRs, in any state, by branch: one `gh pr list` for every
+ * job at once. A query per job, every minute, was most of a 5,000-an-hour
+ * GraphQL allowance with twenty-odd jobs open, and that allowance is Tom's
+ * whole `gh` login, shared with his own terminals.
+ */
+async function recentPrsByBranch(root: string): Promise<Map<string, JobPr>> {
+  const out = await gh(root, [
+    'pr',
+    'list',
+    '--state',
+    'all',
+    '--limit',
+    '100',
+    '--json',
+    'headRefName,number,url,state,isDraft,autoMergeRequest'
+  ])
+  const parsed: unknown = JSON.parse(out || '[]')
+  const byBranch = new Map<string, JobPr>()
+  for (const item of Array.isArray(parsed) ? parsed : []) {
+    const branch =
+      typeof item === 'object' &&
+      item !== null &&
+      'headRefName' in item &&
+      typeof item.headRefName === 'string'
+        ? item.headRefName
+        : null
+    const pr = toJobPr(item)
+    // Newest first, so the first PR seen for a branch is its latest.
+    if (branch && pr && !byBranch.has(branch)) byBranch.set(branch, pr)
+  }
+  return byBranch
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -254,6 +273,7 @@ const sentrySource = (issue: SentryIssue): string => `sentry:${issue.shortId}`
 /** How often to look for removed folders, and (every fourth pass) PR changes. */
 const SWEEP_MS = 15_000
 const PR_EVERY = 4
+const PR_REUSE_MS = 30_000
 /** A finished job leaves the board once its Claude stops, or after this at most. */
 const FINISHED_GRACE_MS = 5 * 60_000
 
@@ -278,6 +298,7 @@ export class JobManager {
   private readonly leaving = new Map<JobId, NodeJS.Timeout>()
   /** Last PR-lookup failure reported, so a persistent one is said once, not every minute. */
   private prProblem: string | null = null
+  private prLookup: { at: number; result: Promise<Map<string, JobPr>> } | null = null
 
   constructor(deps: JobManagerDeps) {
     this.listAgents = deps.listAgents
@@ -396,6 +417,21 @@ export class JobManager {
     if (getJob(id)?.state === 'finished') this.leaveSoon(id, 3_000)
   }
 
+  /**
+   * One lookup shared by every caller for 30s: jobs going idle together
+   * (each asks for its own PR) shouldn't each cost a GitHub query.
+   */
+  private recentPrs(root: string): Promise<Map<string, JobPr>> {
+    const now = Date.now()
+    if (this.prLookup && now - this.prLookup.at < PR_REUSE_MS) return this.prLookup.result
+    const result = recentPrsByBranch(root)
+    this.prLookup = { at: now, result }
+    result.catch(() => {
+      if (this.prLookup?.result === result) this.prLookup = null
+    })
+    return result
+  }
+
   /** Look up each job's PR. Quietly skips when GitHub isn't set up. */
   async refreshPrs(only?: JobId): Promise<void> {
     // Finished jobs too: the branch is gone locally but GitHub still
@@ -412,16 +448,18 @@ export class JobManager {
       this.reportPrProblem(err)
       return
     }
+    let prs: Map<string, JobPr>
+    try {
+      prs = await this.recentPrs(root)
+    } catch (err) {
+      this.reportPrProblem(err)
+      return
+    }
+    this.prProblem = null
     let changed = false
     for (const job of jobs) {
-      let pr: JobPr | null
-      try {
-        pr = await prForBranch(root, job.branch)
-      } catch (err) {
-        this.reportPrProblem(err)
-        return
-      }
-      this.prProblem = null
+      // Not among the newest 100: keep what it had rather than lose it.
+      const pr = prs.get(job.branch) ?? job.pr
       if (JSON.stringify(pr) === JSON.stringify(job.pr)) continue
       updateJob(job.id, { pr })
       changed = true

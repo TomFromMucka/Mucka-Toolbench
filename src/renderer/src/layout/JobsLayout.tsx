@@ -457,7 +457,7 @@ const JOB_DONE_PROMPT = [
   'Wrap this job up.',
   'First check for loose ends: uncommitted work, failing tests or typecheck, anything I asked for that is not done, or an open question. If there are any, list them and stop.',
   "Otherwise, if there's no PR yet, commit, push and open one with /coach pr, and turn on auto-merge with `gh pr merge --squash --auto --delete-branch`.",
-  'Wait for it to merge with `gh pr checks --watch`. If a check fails, read the failure and tell me rather than going on.',
+  'Wait for it to merge with `gh pr checks --watch --interval 60`, and never poll GitHub more often than once a minute: every job shares one GitHub allowance. If a check fails, read the failure and tell me rather than going on.',
   'Once it has merged, run /coach job-done.'
 ].join('\n')
 
