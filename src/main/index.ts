@@ -1209,11 +1209,19 @@ app.whenReady().then(() => {
   startGhCacheSweep()
 })
 
-app.on('before-quit', () => {
-  ptyManager?.killAll()
-  // Only persist the primary terminal per agent; split terminals are session-only.
-  scrollback.flushToDisk(getAgentConfigs().map((a) => a.id))
-  closeDb()
+let readyToQuit = false
+
+app.on('before-quit', (event) => {
+  if (readyToQuit) return
+  // Hold the quit until every terminal has gone: see killAllAndWait.
+  event.preventDefault()
+  void (ptyManager?.killAllAndWait(2000) ?? Promise.resolve()).finally(() => {
+    // Only persist the primary terminal per agent; split terminals are session-only.
+    scrollback.flushToDisk(getAgentConfigs().map((a) => a.id))
+    closeDb()
+    readyToQuit = true
+    app.quit()
+  })
 })
 
 // Single-window dev cockpit — closing the window means quitting the app.

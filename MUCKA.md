@@ -288,6 +288,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-09 — Quitting waits (up to 2s) for every terminal to exit before shutting down, so an install no longer leaves a "quit unexpectedly" report behind.
 - 2026-10-09 — Ticket jobs send a reply and change status without a Yes/No prompt once Tom says send in the chat; before, the preview and the send each asked.
 - 2026-10-09 — ⌘-clicking a link Claude wrote opens it like any other link, without xterm's "This link could potentially be dangerous" box.
 - 2026-10-09 — Toolbench clears gh's cached "rate limit exceeded" replies once the limit has reset, so a real run-out lasts the hour rather than a day (cli/cli#12812).

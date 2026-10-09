@@ -236,4 +236,34 @@ export class PtyManager {
       this.release(id)
     }
   }
+
+  /**
+   * Kill every PTY and wait for each to report its exit, for quit. node-pty
+   * delivers the exit on a native callback; one that lands after Electron
+   * has started tearing Node down throws there and aborts the app, which
+   * is the "quit unexpectedly" report every install left behind. A shell
+   * that ignores the hang-up gets SIGKILL before the wait gives up.
+   */
+  async killAllAndWait(timeoutMs: number): Promise<void> {
+    const procs = [...this.ptys.values()].map((e) => e.proc)
+    const exited = procs.map(
+      (proc) =>
+        new Promise<void>((resolve) => {
+          proc.onExit(() => resolve())
+        })
+    )
+    this.killAll()
+    const all = Promise.all(exited).then(() => true)
+    const later = (ms: number): Promise<false> =>
+      new Promise((resolve) => setTimeout(() => resolve(false), ms))
+    if (await Promise.race([all, later(timeoutMs / 2)])) return
+    for (const proc of procs) {
+      try {
+        proc.kill('SIGKILL')
+      } catch {
+        /* already dead */
+      }
+    }
+    await Promise.race([all, later(timeoutMs / 2)])
+  }
 }
