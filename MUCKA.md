@@ -288,6 +288,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-09 — ⌘-clicking a link Claude wrote opens it like any other link, without xterm's "This link could potentially be dangerous" box.
 - 2026-10-09 — Toolbench clears gh's cached "rate limit exceeded" replies once the limit has reset, so a real run-out lasts the hour rather than a day (cli/cli#12812).
 - 2026-10-09 — A job with a second, older status file no longer flips between waiting and idle on every update, which made the waiting strip, the job board and the banner badge flash.
 - **2026-10-09** — Jobs open their own PR (no auto-merge, so Tom can look
