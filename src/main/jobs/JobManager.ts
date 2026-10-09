@@ -27,6 +27,7 @@ import { logEvent } from '../events/Events'
 import { sentryBrief } from './sentryBrief'
 import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
 import { withTomsNote } from './tomsNote'
+import { JOB_RULES } from './jobRules'
 import {
   closeJob,
   getJob,
@@ -68,12 +69,15 @@ export function jobShell(
   // is only used before the conversation exists.
   const resume = hasClaudeHistory(job.worktreePath)
   const brief = resume ? null : getJobBrief(id)
-  const claude = resume ? 'claude --continue' : brief ? 'claude "$MUCKA_JOB_BRIEF"' : 'claude'
+  // The job rules ride in the system prompt on every start, resumes too,
+  // so a job opens its own PR when it's done whatever it was asked.
+  const base = 'claude --append-system-prompt "$MUCKA_JOB_RULES"'
+  const claude = resume ? `${base} --continue` : brief ? `${base} "$MUCKA_JOB_BRIEF"` : base
   return {
     command: shell,
     args: ['-l', '-i', '-c', `${install}${claude}; exec ${shell} -l`],
     cwd: job.worktreePath,
-    env: brief ? { MUCKA_JOB_BRIEF: brief } : {}
+    env: { MUCKA_JOB_RULES: JOB_RULES, ...(brief ? { MUCKA_JOB_BRIEF: brief } : {}) }
   }
 }
 

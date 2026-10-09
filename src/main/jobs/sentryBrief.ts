@@ -22,8 +22,7 @@ export function sentryBrief(issue: SentryIssue): string {
     fenceUntrusted(`Sentry ${issue.shortId}`, said),
     '',
     'Do the groundwork in docs/sentry-groundwork-rules.md: read the issue and its latest events, find the cause, and reproduce it with a failing test before changing anything.',
-    'Once a failing test reproduces it, draft the fix, unless it touches payments, migrations, permissions or voice. For those, stop at the evidence and tell me.',
-    "Commit to this job's branch, but don't push or open a PR. I'll review it and tell you when it's ready to land.",
+    'Once a failing test reproduces it, fix it, unless it touches payments, migrations, permissions or voice. For those, stop at the evidence and tell me.',
     'When you need a decision from me, ask with AskUserQuestion.'
   ].join('\n')
 }

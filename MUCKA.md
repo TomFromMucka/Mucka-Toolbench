@@ -288,6 +288,11 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- **2026-10-09** — Jobs open their own PR with auto-merge when the work is
+  done and checks pass (standing rules in every job's system prompt, plus
+  a carve-out in Tom's global CLAUDE.md); one GitHub query a minute for
+  all job PRs, and merge waits poll once a minute.
+
 - **2026-10-08** — Jobs: Hold / Release on the sign-off bar parks a job in
   the Idle / On hold column; ticket view closes after a status change.
 
