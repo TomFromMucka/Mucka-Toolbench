@@ -120,6 +120,7 @@ import {
   setSecret,
   testSecret
 } from './secrets/Secrets'
+import { startGhCacheSweep } from './github/ghCacheSweep'
 import type { SecretId } from '@shared/secrets'
 import {
   createCredential,
@@ -1205,6 +1206,7 @@ app.whenReady().then(() => {
   configureMediaPermissions()
   registerIpc()
   createWindow()
+  startGhCacheSweep()
 })
 
 app.on('before-quit', () => {
