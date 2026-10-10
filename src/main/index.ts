@@ -8,6 +8,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  protocol,
   screen,
   session,
   shell,
@@ -16,7 +17,7 @@ import {
 import {
   deleteCardAttachments,
   installAttachmentProtocol,
-  registerAttachmentScheme,
+  ATTACHMENT_SCHEME,
   saveImage as attachmentsSaveImage
 } from './attachments/Attachments'
 import { join } from 'path'
@@ -121,6 +122,7 @@ import {
   testSecret
 } from './secrets/Secrets'
 import { startGhCacheSweep } from './github/ghCacheSweep'
+import { FONT_SCHEME, installFontProtocol } from './fonts/BrandFonts'
 import type { SecretId } from '@shared/secrets'
 import {
   createCredential,
@@ -1175,12 +1177,14 @@ function configureMediaPermissions(): void {
   previews.setPermissionCheckHandler(() => false)
 }
 
-// Privileged schemes must be registered BEFORE app is ready.
-registerAttachmentScheme()
+// Privileged schemes must be registered BEFORE app is ready, all in one
+// call: Electron keeps only the last one.
+protocol.registerSchemesAsPrivileged([ATTACHMENT_SCHEME, FONT_SCHEME])
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('ai.mucka.toolbench')
   installAttachmentProtocol()
+  installFontProtocol()
 
   // safeStorage isn't available before app.whenReady(); now it is, so
   // we can apply any encrypted-store overrides to process.env. .env

@@ -1,39 +1,42 @@
 @import 'tailwindcss';
 
 /* ─── Söhne (Mucka brand display + body) ─────────────────────────────── */
+/* Licensed, so not in this public repo: main serves mucka-font:// from
+   ~/.mucka-toolbench/fonts, and without the files these fall back to the
+   system font (see src/main/fonts/BrandFonts.ts). */
 @font-face {
   font-family: 'Sohne';
-  src: url('/fonts/soehne/Sohne-Buch.woff2') format('woff2');
+  src: url('mucka-font://soehne/Sohne-Buch.woff2') format('woff2');
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: 'Sohne';
-  src: url('/fonts/soehne/Sohne-Kraftig.woff2') format('woff2');
+  src: url('mucka-font://soehne/Sohne-Kraftig.woff2') format('woff2');
   font-weight: 500;
   font-display: swap;
 }
 @font-face {
   font-family: 'Sohne';
-  src: url('/fonts/soehne/Sohne-Halbfett.woff2') format('woff2');
+  src: url('mucka-font://soehne/Sohne-Halbfett.woff2') format('woff2');
   font-weight: 600;
   font-display: swap;
 }
 @font-face {
   font-family: 'Sohne Breit';
-  src: url('/fonts/soehne/SohneBreit-Buch.woff2') format('woff2');
+  src: url('mucka-font://soehne/SohneBreit-Buch.woff2') format('woff2');
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: 'Sohne Breit';
-  src: url('/fonts/soehne/SohneBreit-Kraftig.woff2') format('woff2');
+  src: url('mucka-font://soehne/SohneBreit-Kraftig.woff2') format('woff2');
   font-weight: 500;
   font-display: swap;
 }
 @font-face {
   font-family: 'Sohne Breit';
-  src: url('/fonts/soehne/SohneBreit-Halbfett.woff2') format('woff2');
+  src: url('mucka-font://soehne/SohneBreit-Halbfett.woff2') format('woff2');
   font-weight: 600;
   font-display: swap;
 }
