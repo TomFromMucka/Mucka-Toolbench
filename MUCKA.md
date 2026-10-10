@@ -290,6 +290,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-10 — Released 0.6.1: the first release without the builder's `.claude/` files or the Söhne font files; 0.6.0 and older are deleted.
 - 2026-10-10 — Söhne is no longer in the repo or the releases: the app loads it from `~/.mucka-toolbench/fonts/soehne/` through `mucka-font://`, and falls back to the system font without it.
 - 2026-10-10 — Release builds leave out `.claude/`, `docs/` and `scripts/`; every release up to 0.6.0 shipped the builder's local `.claude/settings.local.json`.
 - 2026-10-09 — Quitting waits (up to 2s) for every terminal to exit before shutting down, so an install no longer leaves a "quit unexpectedly" report behind.
