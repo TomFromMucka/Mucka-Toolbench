@@ -290,6 +290,10 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-10 — Waiting on you is active work only: a held or finished job stays in Idle / On hold even when its Claude asks something.
+- 2026-10-10 — A terminal's orange flag line from Mucka has a "clear" button, so Tom can dismiss a flag that's out of date.
+- 2026-10-10 — Support intake's active view always shows the Open section, reading "All clear: nothing open." when it's empty.
+
 - 2026-10-10 — Released 0.6.1: the first release without the builder's `.claude/` files or the Söhne font files; 0.6.0 and older are deleted.
 - 2026-10-10 — Söhne is no longer in the repo or the releases: the app loads it from `~/.mucka-toolbench/fonts/soehne/` through `mucka-font://`, and falls back to the system font without it.
 - 2026-10-10 — Release builds leave out `.claude/`, `docs/` and `scripts/`; every release up to 0.6.0 shipped the builder's local `.claude/settings.local.json`.
