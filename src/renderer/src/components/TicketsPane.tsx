@@ -152,17 +152,23 @@ export function TicketsPane({
       {error ? <Dim error>{error}</Dim> : null}
       {sorted === null ? (
         <Dim>{live ? 'Looking at the ticket list…' : 'Searching…'}</Dim>
-      ) : sorted.length === 0 ? (
-        <Dim>{live ? 'Nothing open or in progress.' : 'No tickets match.'}</Dim>
       ) : grouped ? (
         <>
-          <Group label="open · waiting on you" rows={sorted.filter((t) => t.status === 'open')}>
+          {/* Always shown, so an empty Open reads as "all clear" rather than
+              as a list that hasn't loaded. */}
+          <Group
+            label="open · waiting on you"
+            rows={sorted.filter((t) => t.status === 'open')}
+            empty={live ? 'All clear: nothing open.' : 'Nothing open matches.'}
+          >
             {renderRows}
           </Group>
           <Group label="in progress" rows={sorted.filter((t) => t.status !== 'open')}>
             {renderRows}
           </Group>
         </>
+      ) : sorted.length === 0 ? (
+        <Dim>No tickets match.</Dim>
       ) : (
         <>
           <Dim>
@@ -184,22 +190,25 @@ export function TicketsPane({
   )
 }
 
+/** A titled run of tickets. Without `empty` it disappears when there are none. */
 function Group({
   label,
   rows,
+  empty,
   children
 }: {
   label: string
   rows: Ticket[]
+  empty?: string
   children: (rows: Ticket[]) => React.ReactNode
 }): React.JSX.Element | null {
-  if (rows.length === 0) return null
+  if (rows.length === 0 && !empty) return null
   return (
     <>
       <div className="px-3 pt-2 pb-1" style={{ color: 'var(--dirty-grey)' }}>
         ── {label} · {rows.length} ──
       </div>
-      {children(rows)}
+      {rows.length === 0 ? <Dim>{empty}</Dim> : children(rows)}
     </>
   )
 }

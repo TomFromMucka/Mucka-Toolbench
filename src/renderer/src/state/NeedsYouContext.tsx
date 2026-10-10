@@ -64,7 +64,11 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
 
   const queue = useMemo<QueueEntry[]>(() => {
     const visible = new Set<string>(agents.map((a) => a.id))
-    const openJobs = new Set<string>(jobs.map((j) => j.id))
+    // Waiting on you is the active work. A job Tom has put on hold, or one
+    // on its way off the board, sits in Idle / On hold and stays out of the
+    // queue even when its Claude asks something: he's parked it.
+    const activeJobs = jobs.filter((j) => !j.held && j.state !== 'finished')
+    const openJobs = new Set<string>(activeJobs.map((j) => j.id))
     const blocked: QueueEntry[] = []
     // One entry per agent or job: a second prompt from the same one (a
     // sub-agent's, say) would repeat its key, and React can't keep two
@@ -102,7 +106,7 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
           (a.needsAttention || waitingStatus(statusFor(a.id)))
       )
       .map((a) => ({ key: a.id, agentId: a.id, jobId: null, terminalId: a.id, pending: null }))
-    const waitingJobs: QueueEntry[] = jobs
+    const waitingJobs: QueueEntry[] = activeJobs
       .filter(
         (j) => j.state === 'ready' && !blockedKeys.has(j.id) && waitingStatus(jobStatusFor(j.id))
       )

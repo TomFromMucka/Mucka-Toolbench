@@ -5,6 +5,7 @@ import type { PanelSize } from './panelSize'
 import { AgentTerminalPanel } from './AgentTerminalPanel'
 import { GitStatusBadges } from './GitStatusBadges'
 import { useNeedsYou } from '../state/NeedsYouContext'
+import { useAgentsState } from '../state/AgentsContext'
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
   idle: 'idle',
@@ -57,6 +58,11 @@ export function AgentClipboard({
   onResize
 }: AgentClipboardProps): React.JSX.Element {
   const place = useNeedsYou().placeOf(agent.id)
+  const { reload } = useAgentsState()
+  const clearFlag = async (): Promise<void> => {
+    await window.mucka.updateAgent({ id: agent.id, needsAttention: false, attentionReason: null })
+    await reload()
+  }
   return (
     <Clipboard
       title={agent.displayName}
@@ -132,12 +138,24 @@ export function AgentClipboard({
       <div className="flex h-full min-h-0 flex-col">
         <div
           className={clsx(
-            't-body-sm border-b px-3 py-1.5 leading-snug',
+            't-body-sm flex items-baseline gap-3 border-b px-3 py-1.5 leading-snug',
             agent.needsAttention ? 'text-orange' : 'text-dirty-grey'
           )}
           style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
         >
-          {agent.headline}
+          <span className="min-w-0 flex-1">{agent.headline}</span>
+          {/* Mucka's flag stays until something clears it, and Mucka rarely
+              does, so Tom needs his own way to say he's seen it. */}
+          {agent.needsAttention ? (
+            <button
+              type="button"
+              onClick={() => void clearFlag()}
+              title="Clear Mucka's flag"
+              className="shrink-0 text-dirty-grey hover:underline"
+            >
+              clear
+            </button>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">
