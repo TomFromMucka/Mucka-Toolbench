@@ -1,6 +1,6 @@
 import { promises as fs, statSync } from 'node:fs'
 import { extname, join, basename } from 'node:path'
-import { app, net, protocol } from 'electron'
+import { app, net, protocol, type CustomScheme } from 'electron'
 import { pathToFileURL } from 'node:url'
 
 /**
@@ -116,22 +116,19 @@ export async function deleteCardAttachments(cardId: string): Promise<void> {
 }
 
 /**
- * Register the privileged scheme before app.whenReady — required by
- * Electron so the renderer treats `mucka-asset://` URLs as standard
- * + secure (CSP, fetch, <img> all work).
+ * Electron treats `mucka-asset://` URLs as standard + secure (CSP, fetch,
+ * <img> all work) once this is registered as privileged, before
+ * app.whenReady. Electron keeps only the last registerSchemesAsPrivileged
+ * call, so main registers every scheme in one.
  */
-export function registerAttachmentScheme(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: SCHEME,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        stream: true
-      }
-    }
-  ])
+export const ATTACHMENT_SCHEME: CustomScheme = {
+  scheme: SCHEME,
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    stream: true
+  }
 }
 
 /**

@@ -270,7 +270,9 @@ Mucka Pro mobile. Brand tokens: `--orange #ff4e00` (reserved for Mucka
 voice / attention), `--charcoal` (header bands + chunky CTAs),
 `--van-white` (text), `--dirty-grey` (muted), `--surface` (cards),
 `--surface2` (page bg, deepest). Typography is Söhne (Breit Kräftig for
-display, regular for body/UI) via `t-display-*` / `t-heading-*` /
+display, regular for body/UI), loaded from `~/.mucka-toolbench/fonts/soehne/`
+because it's licensed and can't ship in this public repo (system font
+otherwise), via `t-display-*` / `t-heading-*` /
 `t-body-*` / `t-label-*` utility classes. Universal panel is a
 chamfered (octagonal) card — `chamfer-card` utility with 14 px corner
 notches, charcoal header band, no wooden-clip or paper texture. Three
@@ -288,6 +290,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-10 — Söhne is no longer in the repo or the releases: the app loads it from `~/.mucka-toolbench/fonts/soehne/` through `mucka-font://`, and falls back to the system font without it.
 - 2026-10-10 — Release builds leave out `.claude/`, `docs/` and `scripts/`; every release up to 0.6.0 shipped the builder's local `.claude/settings.local.json`.
 - 2026-10-09 — Quitting waits (up to 2s) for every terminal to exit before shutting down, so an install no longer leaves a "quit unexpectedly" report behind.
 - 2026-10-09 — Ticket jobs send a reply and change status without a Yes/No prompt once Tom says send in the chat; before, the preview and the send each asked.
