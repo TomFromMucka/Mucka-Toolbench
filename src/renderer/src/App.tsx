@@ -18,22 +18,23 @@ function App(): React.JSX.Element {
       <LayoutProvider>
         <AgentStatusProvider>
           <JobsProvider>
-            <NeedsYouProvider>
-              <NotesProvider>
-                <EventsProvider>
-                  <VercelProvider>
-                    <GitHubProvider>
+            {/* Outside NeedsYou: an agent with an open PR has work to check. */}
+            <GitHubProvider>
+              <NeedsYouProvider>
+                <NotesProvider>
+                  <EventsProvider>
+                    <VercelProvider>
                       <MuckaSessionProvider>
                         <MuckaTextProvider>
                           <AttentionNotifier />
                           <Workstation />
                         </MuckaTextProvider>
                       </MuckaSessionProvider>
-                    </GitHubProvider>
-                  </VercelProvider>
-                </EventsProvider>
-              </NotesProvider>
-            </NeedsYouProvider>
+                    </VercelProvider>
+                  </EventsProvider>
+                </NotesProvider>
+              </NeedsYouProvider>
+            </GitHubProvider>
           </JobsProvider>
         </AgentStatusProvider>
       </LayoutProvider>

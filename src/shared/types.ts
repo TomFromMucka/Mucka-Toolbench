@@ -20,6 +20,8 @@ export type AgentStatus =
   | 'thinking'
   | 'editing'
   | 'running'
+  /** Turn over, but a Monitor or background command it started is still going. */
+  | 'background'
   | 'awaiting-input'
   | 'blocked'
   | 'done'
@@ -127,6 +129,11 @@ export interface AgentConfig {
    * stopped next session.
    */
   running: boolean
+  /**
+   * Parked by Tom: it sits in Idle / On hold and stays out of Waiting on
+   * you, whatever its Claude is doing, until he releases it.
+   */
+  held: boolean
 }
 
 /**
@@ -384,6 +391,7 @@ export type AgentUpdate = Partial<
     | 'previewUrl'
     | 'vercelProjectId'
     | 'running'
+    | 'held'
   >
 > & { id: AgentId }
 

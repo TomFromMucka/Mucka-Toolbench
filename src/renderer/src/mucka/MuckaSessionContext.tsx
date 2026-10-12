@@ -293,7 +293,9 @@ function InnerProvider({
   // the output it produced since arming and hand it back to the PM.
   useEffect(() => {
     const BUSY = new Set<string>(['thinking', 'editing', 'running'])
-    const FINISHED = new Set<string>(['idle', 'awaiting-input', 'done'])
+    // A Claude that left a Monitor running has still finished its turn,
+    // and the turn's output is the reply.
+    const FINISHED = new Set<string>(['idle', 'background', 'awaiting-input', 'done'])
     return window.mucka.onAgentStatus((event) => {
       const watch = replyWatchRef.current.get(event.agentId)
       if (!watch) return

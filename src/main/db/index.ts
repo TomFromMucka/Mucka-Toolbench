@@ -171,6 +171,9 @@ function migrate(d: DatabaseType): void {
     // chewing on the worktrees before he's ready.
     d.exec(`ALTER TABLE agents ADD COLUMN running INTEGER NOT NULL DEFAULT 0`)
   }
+  if (!colNames.has('held')) {
+    d.exec(`ALTER TABLE agents ADD COLUMN held INTEGER NOT NULL DEFAULT 0`)
+  }
 
   const sentryCols = new Set(
     d

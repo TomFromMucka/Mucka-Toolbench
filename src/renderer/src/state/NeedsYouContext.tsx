@@ -7,7 +7,9 @@ import type {
   PendingItem,
   TerminalId
 } from '@shared/types'
+import { useGitStatus } from '../hooks/useGitStatus'
 import { useAgentStatuses } from './AgentStatusContext'
+import { useGitHubState } from './GitHubContext'
 import { useJobs } from './JobsContext'
 import { useVisibleAgents } from './LayoutContext'
 
@@ -15,8 +17,11 @@ import { useVisibleAgents } from './LayoutContext'
  * One agent or job waiting on Tom, in the order he should deal with them.
  *
  * Anything blocked on a prompt or a question comes first, oldest first,
- * because a blocked Claude is wasted time. Agents and jobs that are only
- * flagged, or idle waiting for their next instruction, follow.
+ * because a blocked Claude is wasted time. Then anything flagged or asking
+ * outside the hook, then everything that has finished and has work for
+ * him to look at. Waiting on you and Check it used to be two lanes, split
+ * by whether Claude Code's one-minute "waiting for your input" nudge
+ * happened to fire; Tom's call (2026-10-12) was one queue, blocked first.
  */
 export interface QueueEntry {
   /** The agent's or the job's id: whichever this entry is. */
@@ -47,6 +52,18 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
   const agents = useVisibleAgents()
   const { statusFor } = useAgentStatuses()
   const { jobs, jobStatusFor } = useJobs()
+  const gitStatus = useGitStatus()
+  const { summaries } = useGitHubState()
+  // Git status re-arrives on every poll; key on the answer so the queue
+  // only rebuilds when an agent gains or loses work.
+  const withWorkKey = agents
+    .filter((a) => {
+      const git = gitStatus[a.id]
+      const changed = git ? git.modified + git.staged + git.untracked : 0
+      return changed > 0 || (git?.ahead ?? 0) > 0 || Boolean(summaries[a.id]?.openPr)
+    })
+    .map((a) => a.id)
+    .join(',')
 
   useEffect(() => {
     const api = window.mucka
@@ -63,10 +80,12 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
   }, [])
 
   const queue = useMemo<QueueEntry[]>(() => {
-    const visible = new Set<string>(agents.map((a) => a.id))
-    // Waiting on you is the active work. A job Tom has put on hold, or one
-    // on its way off the board, sits in Idle / On hold and stays out of the
-    // queue even when its Claude asks something: he's parked it.
+    // Waiting on you is the active work. Anything Tom has put on hold, or a
+    // job on its way off the board, sits in Idle / On hold and stays out of
+    // the queue even when its Claude asks something: he's parked it.
+    const activeAgents = agents.filter((a) => !a.held)
+    const visible = new Set<string>(activeAgents.map((a) => a.id))
+    const withWork = new Set(withWorkKey.split(','))
     const activeJobs = jobs.filter((j) => !j.held && j.state !== 'finished')
     const openJobs = new Set<string>(activeJobs.map((j) => j.id))
     const blocked: QueueEntry[] = []
@@ -97,28 +116,34 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
       }
     }
     const blockedKeys = new Set(blocked.map((b) => b.key))
-    const waitingStatus = (s: string): boolean => s === 'awaiting-input' || s === 'blocked'
-    const waitingAgents: QueueEntry[] = agents
-      .filter(
-        (a) =>
-          a.running &&
-          !blockedKeys.has(a.id) &&
-          (a.needsAttention || waitingStatus(statusFor(a.id)))
-      )
-      .map((a) => ({ key: a.id, agentId: a.id, jobId: null, terminalId: a.id, pending: null }))
-    const waitingJobs: QueueEntry[] = activeJobs
-      .filter(
-        (j) => j.state === 'ready' && !blockedKeys.has(j.id) && waitingStatus(jobStatusFor(j.id))
-      )
-      .map((j) => ({
+    const asking = (s: string): boolean => s === 'awaiting-input' || s === 'blocked'
+    const askingEntries: QueueEntry[] = []
+    const finishedEntries: QueueEntry[] = []
+    for (const j of activeJobs) {
+      if (blockedKeys.has(j.id)) continue
+      const entry = {
         key: j.id,
         agentId: null,
         jobId: j.id,
         terminalId: j.terminalId,
         pending: null
-      }))
-    return [...blocked, ...waitingJobs, ...waitingAgents]
-  }, [pending, agents, statusFor, jobs, jobStatusFor])
+      }
+      if (j.state === 'failed') finishedEntries.push(entry)
+      if (j.state !== 'ready') continue
+      const status = jobStatusFor(j.id)
+      if (asking(status)) askingEntries.push(entry)
+      // A job nobody has spoken to yet hasn't finished anything.
+      else if (status === 'idle' && j.title !== 'New job') finishedEntries.push(entry)
+    }
+    for (const a of activeAgents) {
+      if (!a.running || blockedKeys.has(a.id)) continue
+      const entry = { key: a.id, agentId: a.id, jobId: null, terminalId: a.id, pending: null }
+      const status = statusFor(a.id)
+      if (a.needsAttention || asking(status)) askingEntries.push(entry)
+      else if (status === 'idle' && withWork.has(a.id)) finishedEntries.push(entry)
+    }
+    return [...blocked, ...askingEntries, ...finishedEntries]
+  }, [pending, agents, statusFor, jobs, jobStatusFor, withWorkKey])
 
   const placeOf = useCallback(
     (id: string): number | null => {

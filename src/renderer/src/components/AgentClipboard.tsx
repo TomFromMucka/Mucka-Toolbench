@@ -12,6 +12,7 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
   thinking: 'thinking',
   editing: 'editing',
   running: 'running',
+  background: 'running in background',
   'awaiting-input': 'awaits input',
   blocked: 'blocked',
   done: 'done'
@@ -22,6 +23,7 @@ const STATUS_DOT: Record<AgentStatus, string> = {
   thinking: 'bg-status-warn',
   editing: 'bg-status-ok',
   running: 'bg-status-ok',
+  background: 'bg-status-ok',
   'awaiting-input': 'bg-orange',
   blocked: 'bg-status-bad',
   done: 'bg-status-ok'
@@ -61,6 +63,10 @@ export function AgentClipboard({
   const { reload } = useAgentsState()
   const clearFlag = async (): Promise<void> => {
     await window.mucka.updateAgent({ id: agent.id, needsAttention: false, attentionReason: null })
+    await reload()
+  }
+  const release = async (): Promise<void> => {
+    await window.mucka.updateAgent({ id: agent.id, held: false })
     await reload()
   }
   return (
@@ -154,6 +160,18 @@ export function AgentClipboard({
               className="shrink-0 text-dirty-grey hover:underline"
             >
               clear
+            </button>
+          ) : null}
+          {/* Hold lives on the Jobs layout's bar; release from any layout,
+              or a held agent would be stuck out of the queue in 4 and 6. */}
+          {config.held ? (
+            <button
+              type="button"
+              onClick={() => void release()}
+              title="Back into Waiting on you when it needs you"
+              className="shrink-0 text-dirty-grey hover:underline"
+            >
+              on hold · release
             </button>
           ) : null}
         </div>

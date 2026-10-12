@@ -45,7 +45,8 @@ export function AgentGrid({
           attentionReason: null,
           previewUrl: null,
           vercelProjectId: null,
-          running: false
+          running: false,
+          held: false
         }))
 
   // Seats are fixed rather than derived, so switching between four and six

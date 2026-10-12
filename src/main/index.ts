@@ -293,7 +293,8 @@ function createWindow(): void {
       }
       if (mainWindow.webContents.isDestroyed()) return
       mainWindow.webContents.send('job:status', event)
-    }
+    },
+    () => ptyManager?.pids() ?? new Map()
   )
   claudeStateWatcher.start()
   // What each Claude is blocked on, from the PermissionRequest hook in
@@ -549,6 +550,14 @@ function registerIpc(): void {
           tone: 'normal'
         })
       }
+    }
+    if (patch.held !== undefined && patch.held !== current.held) {
+      logEvent({
+        source: updated.id,
+        kind: updated.held ? 'agent.hold' : 'agent.release',
+        message: updated.held ? 'On hold.' : 'Released from hold.',
+        tone: 'normal'
+      })
     }
     if (patch.worktreePath !== undefined && patch.worktreePath !== current.worktreePath) {
       logEvent({

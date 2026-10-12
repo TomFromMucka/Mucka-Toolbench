@@ -15,6 +15,7 @@ interface AgentRow {
   preview_url: string | null
   vercel_project_id: string | null
   running: number
+  held: number
 }
 
 function rowToConfig(row: AgentRow): AgentConfig {
@@ -36,7 +37,8 @@ function rowToConfig(row: AgentRow): AgentConfig {
     attentionReason: row.attention_reason ?? null,
     previewUrl: row.preview_url ?? null,
     vercelProjectId: row.vercel_project_id ?? null,
-    running: row.running === 1
+    running: row.running === 1,
+    held: row.held === 1
   }
 }
 
@@ -57,8 +59,8 @@ export function getAgent(id: AgentId): AgentConfig | undefined {
 export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
   getDb()
     .prepare(
-      `INSERT INTO agents (id, display_name, branch, worktree_path, command, args, sort_order, updated_at, needs_attention, attention_reason, preview_url, vercel_project_id, running)
-       VALUES (@id, @displayName, @branch, @worktreePath, @command, @args, @sort_order, @updated_at, @needs_attention, @attention_reason, @preview_url, @vercel_project_id, @running)
+      `INSERT INTO agents (id, display_name, branch, worktree_path, command, args, sort_order, updated_at, needs_attention, attention_reason, preview_url, vercel_project_id, running, held)
+       VALUES (@id, @displayName, @branch, @worktreePath, @command, @args, @sort_order, @updated_at, @needs_attention, @attention_reason, @preview_url, @vercel_project_id, @running, @held)
        ON CONFLICT(id) DO UPDATE SET
          display_name = excluded.display_name,
          branch = excluded.branch,
@@ -71,7 +73,8 @@ export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
          attention_reason = excluded.attention_reason,
          preview_url = excluded.preview_url,
          vercel_project_id = excluded.vercel_project_id,
-         running = excluded.running`
+         running = excluded.running,
+         held = excluded.held`
     )
     .run({
       id: agent.id,
@@ -86,7 +89,8 @@ export function upsertAgent(agent: AgentConfig, sortOrder: number): void {
       attention_reason: agent.attentionReason ?? null,
       preview_url: agent.previewUrl ?? null,
       vercel_project_id: agent.vercelProjectId ?? null,
-      running: agent.running ? 1 : 0
+      running: agent.running ? 1 : 0,
+      held: agent.held ? 1 : 0
     })
 }
 
