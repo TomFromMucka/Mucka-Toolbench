@@ -52,10 +52,15 @@ or "Tom, eyes here".
 **Jobs layout (third choice under Settings → Agents → *Layout*).**
 - Columns: Files (folded until clicked), Intake, the selected job's
   terminal in the centre of the screen, the Job board (On the tools,
-  Check it, Idle / On hold), and Mucka folded to a strip on the right (opens by
+  Idle / On hold), and Mucka folded to a strip on the right (opens by
   itself for a confirm). *Waiting on you* is a strip right under the
-  terminal's input, in queue order; click one to bring it up. The 4 and
-  6 layouts are unchanged.
+  terminal's input, in queue order; click one to bring it up. It holds
+  everything that's Tom's turn: blocked on a question or permission
+  first, then flagged, then finished with work to look at (there's no
+  separate Check it lane). A Claude that has stopped but left a Monitor
+  or background command running stays On the tools, tagged *in
+  background*, for up to 30 minutes of that command. The 4 and 6
+  layouts are unchanged.
 - **+ New job** (`⌘N`) makes a fresh worktree in `<repo>-jobs/` off the
   latest `origin/main` (env files copied, `node_modules` cloned
   copy-on-write) and opens Claude in it. The card takes its title from
@@ -65,6 +70,11 @@ or "Tom, eyes here".
   the folder and branch), *Amend*, *Hold* / *Release* (parks it, tagged,
   in Idle / On hold; held Sentry jobs don't count toward the auto-start
   cap), *Dismiss* (asks first, says what would be lost).
+- The same bar under a fixed worktree agent's terminal: *Finish* (loose
+  ends, lands the PR with auto-merge, then `/coach finish` parks it and
+  points the worktree at a fresh main), *Amend*, *Hold* / *Release*. A
+  held agent says so in its terminal header, with *release*, in every
+  layout.
 - **Intake** has two tabs in the terminal's font, *support* and
   *sentry*, each with its open count.
   - *support* is the `/admin/support` desk without the browser: the same
@@ -192,6 +202,15 @@ pointed at `$HOME` is skipped so it can't claim every unrelated session.
 A `working` claim older than 90s is treated as idle, since a Claude killed
 mid-turn never fires Stop.
 
+Claude Code's "waiting for your input" Notification, sent a minute after
+a turn ends (and not reliably), doesn't count as waiting: the state script
+drops it (`notification_type: idle_prompt`), so `waiting` means a real
+prompt. A stopped Claude with a background shell (a Monitor or a
+`run_in_background` command, spawned from `~/.claude/shell-snapshots/`)
+under its PTY reports `background` instead of `idle`; the watcher scans
+the process table for that every 15s, ignoring shells older than 30
+minutes (`src/main/claude/backgroundShells.ts`).
+
 This replaced heuristic scraping of the PTY stream, which could not work:
 the TUI redraws in place, so the stream holds interleaved fragments
 (`✻di113 tokens`, `✻ethinking`) and `esc to interrupt` appeared **zero**
@@ -290,6 +309,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-12 — Check it merged into Waiting on you (blocked first); a Claude with a Monitor or background command still running stays On the tools; worktree agents get Finish / Amend / Hold.
 - 2026-10-10 — Waiting on you is active work only: a held or finished job stays in Idle / On hold even when its Claude asks something.
 - 2026-10-10 — A terminal's orange flag line from Mucka has a "clear" button, so Tom can dismiss a flag that's out of date.
 - 2026-10-10 — Support intake's active view always shows the Open section, reading "All clear: nothing open." when it's empty.

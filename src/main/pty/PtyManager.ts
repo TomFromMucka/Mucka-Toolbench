@@ -224,6 +224,11 @@ export class PtyManager {
     return this.ptys.has(terminalId)
   }
 
+  /** Each live terminal's shell pid, for walking what runs under it. */
+  pids(): Map<TerminalId, number> {
+    return new Map([...this.ptys.values()].map((e) => [e.terminalId, e.proc.pid]))
+  }
+
   killByAgent(agentId: AgentId): void {
     const targets = [...this.ptys.values()].filter((e) => e.agentId === agentId)
     for (const entry of targets) {

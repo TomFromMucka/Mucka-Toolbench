@@ -9,6 +9,8 @@ import type {
   JobId,
   JobStatusEvent
 } from '@shared/types'
+import { terminalIdForJob } from '../db/jobs'
+import { busyTerminals, readProcessTable } from './backgroundShells'
 
 /**
  * Reads what Claude Code reports about itself.
@@ -33,6 +35,8 @@ const DEFAULT_STATE_DIR = join(homedir(), '.claude', 'mucka-state')
  */
 const STALE_MS = 90_000
 const SWEEP_MS = 15_000
+/** The statusline writes on every render; one process scan per burst is plenty. */
+const PROBE_GAP_MS = 2_000
 
 interface ClaudeState {
   cwd: string
@@ -122,14 +126,22 @@ export class ClaudeStateWatcher {
   private readonly held = new Map<AgentId, ClaudeState>()
   private readonly markers = new Map<AgentId, SessionMarker>()
   private waiters: Waiter[] = []
+  private readonly terminalPids: () => ReadonlyMap<string, number>
+  /** Terminals with a background command still running under their Claude. */
+  private busy: ReadonlySet<string> = new Set()
+  private probing = false
+  private probeAgain = false
+  private disposed = false
 
   constructor(
     emit: (event: AgentStatusEvent) => void,
     listAgents: () => AgentConfig[],
     isLiveTerminal: (terminalId: string) => boolean = () => true,
     stateDir: string = DEFAULT_STATE_DIR,
-    emitJob: (event: JobStatusEvent) => void = () => {}
+    emitJob: (event: JobStatusEvent) => void = () => {},
+    terminalPids: () => ReadonlyMap<string, number> = () => new Map()
   ) {
+    this.terminalPids = terminalPids
     this.emit = emit
     this.emitJob = emitJob
     this.listAgents = listAgents
@@ -145,14 +157,51 @@ export class ClaudeStateWatcher {
     }
     if (!existsSync(this.stateDir)) return
     try {
-      this.watcher = watch(this.stateDir, () => this.refresh())
+      this.watcher = watch(this.stateDir, () => {
+        this.refresh()
+        this.probe()
+      })
     } catch {
       this.watcher = null
     }
     // fs.watch misses some editors/atomic renames on macOS, and staleness
     // has to be re-evaluated on a clock anyway.
-    this.sweep = setInterval(() => this.refresh(), SWEEP_MS)
+    this.sweep = setInterval(() => this.probe(), SWEEP_MS)
     this.refresh()
+    this.probe()
+  }
+
+  /** Rescan the process table for background commands, then re-derive every status. */
+  private probe(): void {
+    if (this.disposed) return
+    if (this.probing) {
+      this.probeAgain = true
+      return
+    }
+    this.probing = true
+    void readProcessTable()
+      .then((ps) => {
+        this.busy = busyTerminals(ps, this.terminalPids())
+      })
+      .finally(() => {
+        this.probing = false
+        if (this.disposed) return
+        this.refresh()
+        if (!this.probeAgain) return
+        this.probeAgain = false
+        setTimeout(() => this.probe(), PROBE_GAP_MS)
+      })
+  }
+
+  /**
+   * A Claude that has stopped but left a Monitor or a background command
+   * running is still on the job. Only a plain stop is lifted: a Claude
+   * asking something is waiting on Tom whatever runs beside it.
+   */
+  private withBackground(status: AgentStatus, terminals: (id: string) => boolean): AgentStatus {
+    if (status !== 'idle') return status
+    for (const id of this.busy) if (terminals(id)) return 'background'
+    return status
   }
 
   refresh(): void {
@@ -219,8 +268,12 @@ export class ClaudeStateWatcher {
       this.settleWaiters(agentId, state)
 
       const stale = now - state.ts > STALE_MS
-      const status: AgentStatus =
-        stale && state.activity === 'working' ? 'idle' : (ACTIVITY_STATUS[state.activity] ?? 'idle')
+      const status = this.withBackground(
+        stale && state.activity === 'working'
+          ? 'idle'
+          : (ACTIVITY_STATUS[state.activity] ?? 'idle'),
+        (id) => id === agentId || id.startsWith(`${agentId}:`)
+      )
 
       this.push({
         agentId,
@@ -301,8 +354,10 @@ export class ClaudeStateWatcher {
 
   private pushJob(jobId: JobId, state: ClaudeState, now: number): void {
     const stale = now - state.ts > STALE_MS
-    const status: AgentStatus =
-      stale && state.activity === 'working' ? 'idle' : (ACTIVITY_STATUS[state.activity] ?? 'idle')
+    const status = this.withBackground(
+      stale && state.activity === 'working' ? 'idle' : (ACTIVITY_STATUS[state.activity] ?? 'idle'),
+      (id) => id === terminalIdForJob(jobId)
+    )
     const event: JobStatusEvent = {
       jobId,
       status,
@@ -323,6 +378,7 @@ export class ClaudeStateWatcher {
   }
 
   dispose(): void {
+    this.disposed = true
     this.watcher?.close()
     this.watcher = null
     if (this.sweep) clearInterval(this.sweep)

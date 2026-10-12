@@ -232,7 +232,11 @@ function buildBootSnapshot(): string {
   if (agents.length > 0) {
     lines.push('Agents:')
     for (const a of agents) {
-      const flags = [a.running ? 'running' : 'idle', a.needsAttention ? 'NEEDS ATTENTION' : null]
+      const flags = [
+        a.running ? 'running' : 'idle',
+        a.needsAttention ? 'NEEDS ATTENTION' : null,
+        a.held ? 'on hold' : null
+      ]
         .filter(Boolean)
         .join(', ')
       lines.push(`- ${a.id} ("${a.displayName}") — branch ${a.branch} — ${flags}`)

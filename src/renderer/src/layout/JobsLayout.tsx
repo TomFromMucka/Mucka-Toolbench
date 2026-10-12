@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
-import type { Agent, AgentConfig, AgentStatus, GitStatus, Job } from '@shared/types'
+import type { Agent, AgentConfig, AgentStatus, GitStatus, Job, PullRequest } from '@shared/types'
 import { AgentClipboard } from '../components/AgentClipboard'
 import { AgentTerminal } from '../components/AgentTerminal'
 import { Button } from '../components/ui/Button'
@@ -10,6 +10,7 @@ import { WaitingStrip } from '../components/WaitingStrip'
 import { useAgentSlots } from '../hooks/useAgentSlots'
 import type { GitStatusMap } from '../hooks/useGitStatus'
 import { useAgentStatuses } from '../state/AgentStatusContext'
+import { useAgentsState } from '../state/AgentsContext'
 import { useGitHubState } from '../state/GitHubContext'
 import { useJobs } from '../state/JobsContext'
 import { useFocusRequests, useNeedsYou } from '../state/NeedsYouContext'
@@ -29,16 +30,24 @@ import { submitPromptAndEnter } from '../mucka/dispatch'
  * its PR or branch and laned by Claude's reported status.
  */
 
-type Lane = 'waiting' | 'working' | 'check' | 'idle'
+type Lane = 'waiting' | 'working' | 'idle'
 
-// Waiting on you isn't a lane here: it's the strip under the terminal.
+// Waiting on you isn't a lane here: it's the strip under the terminal, and
+// it holds finished work too (there's no separate Check it any more).
 const LANES: { lane: Lane; title: string; empty: string }[] = [
   { lane: 'working', title: 'On the tools', empty: 'Nobody is working.' },
-  { lane: 'check', title: 'Check it', empty: 'Nothing finished to look at.' },
   { lane: 'idle', title: 'Idle / On hold', empty: 'Nothing idle or held.' }
 ]
 
-const WORKING: AgentStatus[] = ['thinking', 'editing', 'running']
+/** Mid-turn: typing into the terminal now would interrupt. */
+const ACTIVE: AgentStatus[] = ['thinking', 'editing', 'running']
+/** On the tools, including a Claude whose Monitor or background command is still going. */
+const WORKING: AgentStatus[] = [...ACTIVE, 'background']
+
+function workingTag(status: AgentStatus): string | null {
+  if (status === 'background') return 'in background'
+  return ACTIVE.includes(status) ? 'working' : null
+}
 
 function changedFiles(git: GitStatus | undefined): number {
   return git ? git.modified + git.staged + git.untracked : 0
@@ -121,29 +130,23 @@ export function JobsLayout({
 
   const current = selected
 
+  // Whatever's waiting on Tom (asking, or finished with work to look at)
+  // is in the strip; NeedsYouContext decides that. The board has the rest.
   const laneOf = (cfg: AgentConfig): Lane => {
+    // Parked by Tom: shares the last column, tagged, until he releases it.
+    if (cfg.held) return 'idle'
     if (placeOf(cfg.id) !== null) return 'waiting'
     if (!cfg.running) return 'idle'
-    if (WORKING.includes(statusFor(cfg.id))) return 'working'
-    const git = gitStatus[cfg.id]
-    const hasWork =
-      changedFiles(git) > 0 || (git?.ahead ?? 0) > 0 || Boolean(summaries[cfg.id]?.openPr)
-    return hasWork ? 'check' : 'idle'
+    return WORKING.includes(statusFor(cfg.id)) ? 'working' : 'idle'
   }
 
-  // A job is laned like an agent, from what its Claude reports. It counts
-  // as finished ("Check it") once Tom has given it something to do and
-  // it's gone quiet; a job nobody has spoken to yet is just idle.
   const laneOfJob = (job: Job): Lane => {
     if (job.state === 'setting-up') return 'working'
-    if (job.state === 'failed') return 'check'
     // On its way off the board: nothing left for Tom to look at.
     if (job.state === 'finished') return 'idle'
-    // Parked by Tom: shares the last column, tagged, until he releases it.
     if (job.held) return 'idle'
     if (placeOf(job.id) !== null) return 'waiting'
-    if (WORKING.includes(jobStatusFor(job.id))) return 'working'
-    return job.title === 'New job' ? 'idle' : 'check'
+    return WORKING.includes(jobStatusFor(job.id)) ? 'working' : 'idle'
   }
   const jobsIn = (lane: Lane): Job[] =>
     jobs
@@ -186,7 +189,7 @@ export function JobsLayout({
               <JobTerminal
                 job={job}
                 blocked={askingNow(job.id)}
-                working={WORKING.includes(jobStatusFor(job.id))}
+                working={ACTIVE.includes(jobStatusFor(job.id))}
               />
             </div>
           ))}
@@ -203,13 +206,24 @@ export function JobsLayout({
                 )}
                 aria-hidden={!shown}
               >
-                <AgentClipboard
-                  agent={slot.agent}
-                  config={slot.config}
-                  gitStatus={slot.gitStatus}
-                  contextUsedPercent={slot.contextUsedPercent}
-                  model={slot.model}
-                />
+                <div className="flex min-h-0 min-w-0 flex-col">
+                  <div className="grid min-h-0 flex-1">
+                    <AgentClipboard
+                      agent={slot.agent}
+                      config={slot.config}
+                      gitStatus={slot.gitStatus}
+                      contextUsedPercent={slot.contextUsedPercent}
+                      model={slot.model}
+                    />
+                  </div>
+                  <AgentSignOffBar
+                    cfg={cfg}
+                    git={slot.gitStatus}
+                    pr={summaries[cfg.id]?.openPr ?? null}
+                    blocked={askingNow(cfg.id)}
+                    working={ACTIVE.includes(statusFor(cfg.id))}
+                  />
+                </div>
               </div>
             )
           })}
@@ -234,7 +248,7 @@ export function JobsLayout({
           </Button>
         }
       >
-        <div className="grid h-full min-h-0 grid-cols-3 gap-2 overflow-y-auto p-2">
+        <div className="grid h-full min-h-0 grid-cols-2 gap-2 overflow-y-auto p-2">
           {LANES.map(({ lane, title, empty }) => {
             const list = byLane.get(lane) ?? []
             return (
@@ -251,7 +265,7 @@ export function JobsLayout({
                     key={job.id}
                     job={job}
                     place={placeOf(job.id)}
-                    working={WORKING.includes(jobStatusFor(job.id))}
+                    status={jobStatusFor(job.id)}
                     selected={job.id === current}
                     onSelect={() => onSelect(job.id)}
                   />
@@ -354,8 +368,10 @@ function JobCard({
           >
             {place}
           </span>
-        ) : WORKING.includes(status) ? (
-          <span className="t-body-sm ml-auto text-dirty-grey">working</span>
+        ) : cfg.held ? (
+          <span className="t-body-sm ml-auto text-dirty-grey">on hold</span>
+        ) : workingTag(status) ? (
+          <span className="t-body-sm ml-auto text-dirty-grey">{workingTag(status)}</span>
         ) : null}
       </span>
       <span className="t-body-sm line-clamp-2 text-van-white">{title}</span>
@@ -388,13 +404,13 @@ function jobDetail(job: Job): string {
 function NewJobCard({
   job,
   place,
-  working,
+  status,
   selected,
   onSelect
 }: {
   job: Job
   place: number | null
-  working: boolean
+  status: AgentStatus
   selected: boolean
   onSelect: () => void
 }): React.JSX.Element {
@@ -428,8 +444,8 @@ function NewJobCard({
           </span>
         ) : job.held ? (
           <span className="t-body-sm ml-auto text-dirty-grey">on hold</span>
-        ) : working ? (
-          <span className="t-body-sm ml-auto text-dirty-grey">working</span>
+        ) : workingTag(status) ? (
+          <span className="t-body-sm ml-auto text-dirty-grey">{workingTag(status)}</span>
         ) : null}
       </span>
       <span className="t-body-sm line-clamp-2 text-van-white">{job.title}</span>
@@ -625,6 +641,110 @@ function SignOffBar({
           Dismiss
         </Button>
       )}
+    </Bar>
+  )
+}
+
+/**
+ * Finish is Job done for a fixed worktree: the same instruction typed into
+ * its Claude, ending in `/coach finish` (park, prune, point the worktree at
+ * a fresh main) rather than `/coach job-done`, because the folder is reused
+ * for the next ticket. Pressing it is Tom's go-ahead to land the PR, so the
+ * prompt says so: `/coach finish` would otherwise stop to offer the merge.
+ */
+const FINISH_PROMPT = [
+  'Wrap this ticket up and finish the worktree.',
+  'First check for loose ends: uncommitted work, failing tests or typecheck, anything I asked for that is not done, or an open question. If there are any, list them and stop.',
+  "Otherwise, if there's no PR yet, commit, push and open one with /coach pr. Pressing Finish is my go-ahead to land it, so turn on auto-merge with `gh pr merge --squash --auto --delete-branch` without asking.",
+  'Wait for it to merge with `gh pr checks --watch --interval 60`, and never poll GitHub more often than once a minute: every agent shares one GitHub allowance. If a check fails, read the failure and tell me rather than going on.',
+  'Once it has merged, run /coach finish.'
+].join('\n')
+
+function AgentSignOffBar({
+  cfg,
+  git,
+  pr,
+  blocked,
+  working
+}: {
+  cfg: AgentConfig
+  git: GitStatus | undefined
+  pr: PullRequest | null
+  blocked: boolean
+  working: boolean
+}): React.JSX.Element {
+  const { focusTerminal } = useNeedsYou()
+  const { reload } = useAgentsState()
+  const [busy, setBusy] = useState(false)
+
+  const parked = readableBranch(git?.branch ?? cfg.branch) === null && changedFiles(git) === 0
+  const notNow = blocked
+    ? 'Answer its question first'
+    : working
+      ? 'Claude is working. Wait for it to stop.'
+      : !cfg.running
+        ? 'It isn’t running. Start it first.'
+        : parked && !pr
+          ? 'Nothing to finish: it’s on main or its slot.'
+          : null
+  const hold = (): void => {
+    setBusy(true)
+    void window.mucka
+      .updateAgent({ id: cfg.id, held: !cfg.held })
+      .then(() => reload())
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <Bar
+      note={
+        pr ? (
+          <a href={pr.url} target="_blank" rel="noreferrer" className="underline">
+            PR #{pr.number} open
+          </a>
+        ) : (
+          (notNow ??
+          'When it’s finished: Finish checks for loose ends, lands it and parks the worktree.')
+        )
+      }
+    >
+      <Button
+        variant="primary"
+        size="sm"
+        trailingIcon={null}
+        disabled={notNow !== null}
+        title={
+          notNow ??
+          'Claude checks for loose ends, opens the PR with auto-merge if needed, waits for the merge, then runs /coach finish'
+        }
+        onClick={() => {
+          focusTerminal(cfg.id)
+          void submitPromptAndEnter(cfg.id, FINISH_PROMPT)
+        }}
+      >
+        Finish
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        trailingIcon={null}
+        title="Put the cursor in the terminal to tell Claude what to change"
+        onClick={() => focusTerminal(cfg.id)}
+      >
+        Amend
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        trailingIcon={null}
+        disabled={busy}
+        title={
+          cfg.held ? 'Back to its lane' : 'Park it in Idle / On hold and out of Waiting on you'
+        }
+        onClick={hold}
+      >
+        {cfg.held ? 'Release' : 'Hold'}
+      </Button>
     </Bar>
   )
 }
