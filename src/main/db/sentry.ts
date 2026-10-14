@@ -125,6 +125,18 @@ export function markForRetriage(issueId: string): void {
     .run(issueId)
 }
 
+/** The roadmap card each short id was ticketed onto, for the ones that have one. */
+export function cardsByShortId(shortIds: string[]): Map<string, string> {
+  if (shortIds.length === 0) return new Map()
+  const rows = getDb()
+    .prepare<string[], { short_id: string; card_id: string }>(
+      `SELECT short_id, card_id FROM sentry_issues
+        WHERE card_id IS NOT NULL AND short_id IN (${shortIds.map(() => '?').join(', ')})`
+    )
+    .all(...shortIds)
+  return new Map(rows.map((r) => [r.short_id, r.card_id]))
+}
+
 /** Issues seen but not yet triaged — what the triage queue drains. */
 export function listUntriaged(): SentryTriage[] {
   const rows = getDb()

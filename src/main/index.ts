@@ -165,6 +165,8 @@ import type {
   MemoryListQuery,
   MemoryWriteInput,
   MicAccess,
+  SentryJobChoice,
+  SentryJobOutcome,
   SentryVerdict,
   TicketAction,
   TicketFilter,
@@ -475,6 +477,7 @@ function registerIpc(): void {
   guardedHandle('jobs:dismiss', (_event, id: string) => jobManager?.dismiss(id) ?? false)
   guardedHandle('jobs:close', (_event, id: string) => jobManager?.close(id))
   guardedHandle('jobs:hold', (_event, id: string, held: boolean) => jobManager?.hold(id, held))
+  guardedHandle('jobs:overview', () => jobManager?.overview() ?? [])
   guardedHandle('jobs:start-sentry', (_event, issueId: string, note?: string) => {
     if (!jobManager) throw new Error('The cockpit window is not ready yet.')
     return jobManager.startSentryById(issueId, note)
@@ -816,7 +819,7 @@ function registerIpc(): void {
 
   guardedHandle(
     'sentry:triage',
-    (
+    async (
       _event,
       input: {
         issueId: string
@@ -825,11 +828,10 @@ function registerIpc(): void {
         cardId?: string | null
         count?: number
         userCount?: number
+        job?: SentryJobChoice
       }
-    ) => {
+    ): Promise<SentryJobOutcome | null> => {
       recordSentryTriage(input)
-      // A ticket is the signal to start work, if Tom has auto-start on.
-      if (input.verdict === 'ticket') void jobManager?.onSentryTicket(input.issueId)
       const record = getSentryTriage(input.issueId)
       const label = record ? `${record.shortId} ${record.title.slice(0, 70)}` : input.issueId
       logEvent({
@@ -843,6 +845,9 @@ function registerIpc(): void {
               : `Sentry ${label} — watching: ${input.reason}`,
         tone: input.verdict === 'ticket' ? 'attention' : 'normal'
       })
+      // After the record, so the job step can see the card she just wrote.
+      if (input.verdict !== 'ticket' || !jobManager) return null
+      return jobManager.onSentryTicket(input.issueId, input.job)
     }
   )
 

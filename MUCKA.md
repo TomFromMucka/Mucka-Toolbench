@@ -98,7 +98,11 @@ or "Tom, eyes here".
   - *sentry*: *Start job* opens a job whose Claude begins with the issue
     and the groundwork rules. With auto on (header switch), an issue
     Mucka triages as a ticket starts its own job, 3 open at most, the
-    rest queued.
+    rest queued. One bug gets one job: an issue on a card that already
+    has an open job is handed to that job as a note instead (Mucka can
+    also name the job, or say not to start one), and the job's Claude
+    gets the note at its next tool call or the end of its turn, through
+    `mucka-pending.sh`.
 
 **Needs you (all layouts).** One queue of agents' and jobs' permission
 prompts and questions, blocked first then oldest. Answered with buttons
@@ -151,7 +155,7 @@ Read-only (auto-execute):
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
   `get_pr_status`, `get_cockpit_doc`, `get_product_doc`,
   `list_memories`, `get_memory`, `list_roadmap`, `read_pr_diff`,
-  `list_sentry_issues`, `get_sentry_issue`.
+  `list_sentry_issues`, `get_sentry_issue`, `list_jobs`.
 - Plus the SDK's built-in `WebSearch` / `WebFetch` in text mode, so
   Mucka can research a ticket before writing it. Everything else
   built-in (Bash, Read, Write…) is still denied.
@@ -309,6 +313,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-14 — One Sentry bug, one job: an issue on a card with an open job goes to that job as a note rather than starting another, and Mucka sees the open jobs when she triages.
 - 2026-10-12 — Check it merged into Waiting on you (blocked first); a Claude with a Monitor or background command still running stays On the tools; worktree agents get Finish / Amend / Hold.
 - 2026-10-10 — Waiting on you is active work only: a held or finished job stays in Idle / On hold even when its Claude asks something.
 - 2026-10-10 — A terminal's orange flag line from Mucka has a "clear" button, so Tom can dismiss a flag that's out of date.

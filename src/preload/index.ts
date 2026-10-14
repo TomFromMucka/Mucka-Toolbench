@@ -42,6 +42,9 @@ import type {
   SentryStatusChange,
   SentryTriage,
   SentryVerdict,
+  SentryJobChoice,
+  SentryJobOutcome,
+  JobOverview,
   MicAccess,
   MuckaApi,
   MuckaStatus,
@@ -338,7 +341,9 @@ const muckaApi: MuckaApi = {
     cardId?: string | null
     count?: number
     userCount?: number
-  }) => ipcRenderer.invoke('sentry:triage', input) as Promise<void>,
+    job?: SentryJobChoice
+  }) => ipcRenderer.invoke('sentry:triage', input) as Promise<SentryJobOutcome | null>,
+  listJobOverview: () => ipcRenderer.invoke('jobs:overview') as Promise<JobOverview[]>,
   listUntriagedSentry: () => ipcRenderer.invoke('sentry:untriaged') as Promise<SentryTriage[]>,
   getSentryHealth: () => ipcRenderer.invoke('sentry:health') as Promise<SentryHealth>,
   onSentryNewIssue: (handler: (event: SentryNewIssueEvent) => void): (() => void) => {

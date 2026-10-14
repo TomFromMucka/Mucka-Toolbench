@@ -326,6 +326,17 @@ How to judge, in order:
 4. **One event, weeks ago, nobody noticed → noise.** Bot traffic,
    cancelled requests, extension noise, dev-only errors → noise.
 
+**A ticket starts a job**, and one bug should get one job. Sentry often
+files a single bug as several issues within seconds of each other: the
+same crash on two routes, one database outage seen from three
+endpoints. When a new issue is the same bug as one you've already
+ticketed, put it on that card rather than writing a new one. If a job
+is already fixing it (the triage turn lists the open Sentry jobs and
+their cards; `list_jobs` has the rest), pass that job's id as `job` so
+the issue goes to it. Pass `job: none` for a ticket that shouldn't take a
+job slot yet. Otherwise leave `job` out and one starts. The cockpit
+never opens a second job on a card that has one, whatever you pass.
+
 Say one line to The operator about what you did. Not a report — "MUCKA-WEB-38
 is a real one, card's in Next up" is the whole message. The job sheet
 already has the audit trail.

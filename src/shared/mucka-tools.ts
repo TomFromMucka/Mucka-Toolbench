@@ -745,11 +745,22 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         card_id: {
           type: 'string',
           description:
-            "Roadmap card id when the verdict is 'ticket'. Create the card first with create_roadmap_card, then pass its id here."
+            "Roadmap card id when the verdict is 'ticket'. Create the card first with create_roadmap_card, then pass its id here. When the issue is the same bug as one already ticketed, pass that issue's card rather than writing a new one."
+        },
+        job: {
+          type: 'string',
+          description:
+            "For a ticket only: what to do about a job. 'start' (the default) starts one, or queues it when three Sentry jobs are already open. An open job's id (from list_jobs) hands the issue to that job instead, for when a job is already fixing the same bug. 'none' leaves it for Tom to start. Whatever you say, an issue whose card already has an open job goes to that job, never to a second one."
         }
       },
       required: ['issue', 'verdict', 'reason']
     }
+  },
+  {
+    name: 'list_jobs',
+    description:
+      "Open jobs (each one a Claude in its own worktree, ending in one PR): id, title, state, whether Tom has put it on hold, its PR, where it came from (e.g. sentry:MUCKA-WEB-38) and, for a Sentry job, the roadmap card it's working. Call this before ruling a Sentry issue a ticket, to spot a job already fixing the same bug, and when Tom asks what's being worked on. Auto-executes.",
+    parameters: { type: 'object', properties: {}, required: [] }
   },
   {
     name: 'list_roadmap',

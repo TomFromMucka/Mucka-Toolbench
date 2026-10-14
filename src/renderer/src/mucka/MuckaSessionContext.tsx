@@ -24,7 +24,7 @@ import type {
 import type { ClientTools } from '@elevenlabs/react'
 import { fenceUntrusted } from '@shared/untrusted'
 import { useAgentsState } from '../state/AgentsContext'
-import { buildClientTools } from './tools/index'
+import { buildClientTools, describeJobLine } from './tools/index'
 import { playConnectionChime } from './chime'
 
 const REPLY_ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
@@ -69,6 +69,17 @@ async function deliverSentryIssue(
       `Then: ${escalation.previousCount} events, ${escalation.previousUserCount} users. ` +
       `Now: ${issue.count} events, ${issue.userCount} users.\n\n`
     : `⟢ New Sentry issue — triage it.\n\n`
+  // In the turn itself rather than left to list_jobs: Sentry files one bug
+  // as several issues within seconds, and a job per issue is the failure
+  // this is here to stop.
+  const sentryJobs = await window.mucka
+    .listJobOverview()
+    .then((jobs) => jobs.filter((j) => j.source?.startsWith('sentry:')))
+    .catch(() => [])
+  const jobsNow =
+    sentryJobs.length > 0
+      ? `Sentry jobs open now:\n${fenceUntrusted('Open Sentry jobs (titles are Sentry text)', sentryJobs.map(describeJobLine).join('\n'))}\n\n`
+      : 'No Sentry jobs open now.\n\n'
   const msg =
     header +
     `${issue.shortId} [${issue.project}] ` +
@@ -79,9 +90,11 @@ async function deliverSentryIssue(
       'Sentry issue title + message',
       `${issue.title}${issue.detail ? `\n${issue.detail}` : ''}`
     )}\n${issue.permalink}\n\n` +
+    jobsNow +
     '(Pull the detail with get_sentry_issue, then rule on it with triage_sentry_issue — ' +
     'every issue ends in ticket, noise or watch. Write the card first when it\'s a ticket ' +
-    'and pass its id. Keep what you say to Tom to a line.)'
+    'and pass its id. If it\'s the same bug as an issue already on a card, ticket it onto that card, ' +
+    'and if a job above is already fixing it, pass that job\'s id as `job`. Keep what you say to Tom to a line.)'
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       await window.mucka.sendChatMessage(msg)

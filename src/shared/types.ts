@@ -335,6 +335,34 @@ export interface JobsAutoStatus {
   queued: string[]
 }
 
+/**
+ * What Mucka wants done about a job when she rules a Sentry issue a ticket:
+ * start one, hand the issue to a job already open on the same bug, or
+ * leave it for Tom to start.
+ */
+export type SentryJobChoice = { kind: 'start' } | { kind: 'join'; jobId: JobId } | { kind: 'none' }
+
+/** What actually happened, which can differ from the choice: see `JobManager.onSentryTicket`. */
+export type SentryJobOutcome =
+  | { kind: 'started'; jobId: JobId }
+  /** The issue already had its own job open. */
+  | { kind: 'existing'; jobId: JobId }
+  /** `sameCard`: the card matched, not a job she named. */
+  | { kind: 'joined'; jobId: JobId; sameCard: boolean }
+  | { kind: 'queued'; position: number }
+  | { kind: 'not-started'; why: string }
+
+/** An open job as Mucka sees it, with the card of the Sentry issue it started from. */
+export interface JobOverview {
+  id: JobId
+  title: string
+  state: Job['state']
+  held: boolean
+  pr: JobPr | null
+  source: string | null
+  cardId: string | null
+}
+
 /** What a job started from Intake opens with. */
 export interface JobBrief {
   title: string
@@ -1010,7 +1038,11 @@ export interface MuckaApi {
     /** Counts at verdict time — the baseline a later escalation is measured against. */
     count?: number
     userCount?: number
-  }): Promise<void>
+    /** For a ticket: start a job (the default), hand it to an open one, or neither. */
+    job?: SentryJobChoice
+  }): Promise<SentryJobOutcome | null>
+  /** Open jobs, each with the card of the Sentry issue it started from. */
+  listJobOverview(): Promise<JobOverview[]>
   /** Issues seen but not yet ruled on — drives the triage queue. */
   listUntriagedSentry(): Promise<SentryTriage[]>
   /** Whether the poller has actually succeeded, so an empty list can be read honestly. */

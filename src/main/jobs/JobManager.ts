@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -17,14 +18,18 @@ import type {
   Job,
   JobBrief,
   JobId,
+  JobOverview,
   JobPr,
   JobsAutoStatus,
   SentryIssue,
+  SentryJobChoice,
+  SentryJobOutcome,
   Ticket
 } from '@shared/types'
 import { getValue, setValue } from '../db/kv'
+import { cardsByShortId, getTriage } from '../db/sentry'
 import { logEvent } from '../events/Events'
-import { sentryBrief } from './sentryBrief'
+import { sentryBrief, sentryJoinNote } from './sentryBrief'
 import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
 import { withTomsNote } from './tomsNote'
 import { JOB_RULES } from './jobRules'
@@ -248,8 +253,10 @@ function readIfExists(path: string): string | null {
   }
 }
 
-/** Where the hook records Tom's messages to each job's Claude. */
+/** Where the hook records Tom's messages to each job's Claude, and picks up notes for it. */
 const PROMPTS_DIR = join(homedir(), '.claude', 'mucka-jobs')
+const notesFile = (id: JobId): string =>
+  join(PROMPTS_DIR, `${id.replace(/[^A-Za-z0-9_-]/g, '_')}.notes`)
 const UNTITLED = 'New job'
 const TITLE_MAX = 70
 
@@ -273,6 +280,8 @@ const AUTO_CAP = 3
 const AUTO_KEY = 'jobs.autoSentry'
 const QUEUE_KEY = 'jobs.autoSentryQueue'
 const sentrySource = (issue: SentryIssue): string => `sentry:${issue.shortId}`
+const sentryShortId = (job: Job): string | null =>
+  job.source?.startsWith('sentry:') ? job.source.slice('sentry:'.length) : null
 
 /** How often to look for removed folders, and (every fourth pass) PR changes. */
 const SWEEP_MS = 15_000
@@ -554,17 +563,109 @@ export class JobManager {
     return this.autoStatus()
   }
 
-  /** Mucka ruled a Sentry issue worth fixing. Start on it, or queue it. */
-  async onSentryTicket(issueId: string): Promise<void> {
-    if (!this.autoStatus().enabled) return
+  /**
+   * Mucka ruled a Sentry issue a ticket. Start a job on it, queue it, or
+   * hand it to a job already open on the same bug.
+   *
+   * Sentry often files one bug as several issues (one crash on two routes,
+   * one outage seen from three endpoints), and Mucka puts those on one card.
+   * A job per issue had two or three Claudes fixing the same bug, so the
+   * card is the backstop: whatever she asked for, an issue whose card
+   * already has an open job goes to that job.
+   */
+  async onSentryTicket(
+    issueId: string,
+    choice: SentryJobChoice = { kind: 'start' }
+  ): Promise<SentryJobOutcome> {
     const issue = await this.getSentryIssue(issueId)
-    if (!issue || listOpenJobs().some((j) => j.source === sentrySource(issue))) return
+    if (!issue) return { kind: 'not-started', why: `${issueId} isn't in the latest Sentry list` }
+    const open = listOpenJobs()
+    const own = open.find((j) => j.source === sentrySource(issue))
+    if (own) return { kind: 'existing', jobId: own.id }
+
+    const asked = choice.kind === 'join' ? open.find((j) => j.id === choice.jobId) : undefined
+    if (asked && this.canTakeNotes(asked)) return this.join(issue, asked, false)
+
+    const onCard = this.openJobOnCard(getTriage(issueId)?.cardId ?? null, open)
+    if (onCard) return this.join(issue, onCard, true)
+
+    if (choice.kind === 'none')
+      return { kind: 'not-started', why: 'Mucka left it for Tom to start' }
+    if (!this.autoStatus().enabled) return { kind: 'not-started', why: 'auto-start is off' }
     if (this.openSentryJobs() >= AUTO_CAP) {
       if (!this.queue().includes(issueId)) this.setQueue([...this.queue(), issueId])
       this.push()
-      return
+      return { kind: 'queued', position: this.queue().indexOf(issueId) + 1 }
     }
-    await this.startFromSentry(issue).catch(() => undefined)
+    try {
+      const job = await this.startFromSentry(issue)
+      return { kind: 'started', jobId: job.id }
+    } catch (err) {
+      return { kind: 'not-started', why: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /** Open jobs as Mucka sees them, with the card each Sentry one is working. */
+  overview(): JobOverview[] {
+    const jobs = listOpenJobs()
+    const cards = cardsByShortId(jobs.flatMap((j) => sentryShortId(j) ?? []))
+    return jobs.map((j) => {
+      const shortId = sentryShortId(j)
+      return {
+        id: j.id,
+        title: j.title,
+        state: j.state,
+        held: j.held,
+        pr: j.pr,
+        source: j.source,
+        cardId: shortId ? (cards.get(shortId) ?? null) : null
+      }
+    })
+  }
+
+  /** A failed or finished job has no Claude left to read a note. */
+  private canTakeNotes(job: Job): boolean {
+    return job.state === 'setting-up' || job.state === 'ready'
+  }
+
+  private openJobOnCard(cardId: string | null, open: Job[]): Job | null {
+    if (!cardId) return null
+    const cards = cardsByShortId(open.flatMap((j) => sentryShortId(j) ?? []))
+    return (
+      open.find((j) => {
+        const shortId = sentryShortId(j)
+        return shortId !== null && cards.get(shortId) === cardId && this.canTakeNotes(j)
+      }) ?? null
+    )
+  }
+
+  private join(issue: SentryIssue, job: Job, sameCard: boolean): SentryJobOutcome {
+    this.setQueue(this.queue().filter((id) => id !== issue.id))
+    this.tellJob(job.id, sentryJoinNote(issue))
+    logEvent({
+      source: 'system',
+      kind: 'jobs.sentry_joined',
+      message: `Sentry ${issue.shortId} handed to "${job.title.slice(0, 70)}"${
+        sameCard ? ', which is already on its card' : ''
+      }. No new job.`,
+      tone: 'normal'
+    })
+    return { kind: 'joined', jobId: job.id, sameCard }
+  }
+
+  /**
+   * Leave a note for a job's Claude. mucka-pending.sh hands it over at its
+   * next tool call, the end of its turn or Tom's next message. Never typed
+   * into the terminal: a key that lands while a permission dialog is up
+   * answers the dialog.
+   */
+  private tellJob(id: JobId, note: string): void {
+    try {
+      mkdirSync(PROMPTS_DIR, { recursive: true })
+      appendFileSync(notesFile(id), `${note}\n\n`)
+    } catch (err) {
+      console.warn('[jobs] could not leave a note for', id, err)
+    }
   }
 
   private async drainQueue(): Promise<void> {
