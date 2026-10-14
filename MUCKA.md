@@ -52,12 +52,16 @@ or "Tom, eyes here".
 **Jobs layout (third choice under Settings → Agents → *Layout*).**
 - Columns: Files (folded until clicked), Intake, the selected job's
   terminal in the centre of the screen, the Job board (On the tools,
-  Idle / On hold), and Mucka folded to a strip on the right (opens by
+  Idle, On hold), and Mucka folded to a strip on the right (opens by
   itself for a confirm). *Waiting on you* is a strip right under the
   terminal's input, in queue order; click one to bring it up. It holds
   everything that's Tom's turn: blocked on a question or permission
-  first, then flagged, then finished with work to look at (there's no
-  separate Check it lane). A Claude that has stopped but left a Monitor
+  first, then flagged, then any Claude that has finished its turn in a
+  worktree that has started: on a branch of its own or with work on it,
+  even once its PR has merged, since Finish still has to park it (there's
+  no separate Check it lane). *Idle* is only what hasn't started: no
+  Claude, or a worktree parked on its slot or main with nothing on it, or
+  a job nobody has spoken to. *On hold* is only what Tom has held. A Claude that has stopped but left a Monitor
   or background command running stays On the tools, tagged *in
   background*, for up to 30 minutes of that command. The 4 and 6
   layouts are unchanged.
@@ -68,7 +72,7 @@ or "Tom, eyes here".
 - Sign-off bar under each job's terminal: *Job done* (Claude checks for
   loose ends, lands the PR with auto-merge, then `/coach job-done` removes
   the folder and branch), *Amend*, *Hold* / *Release* (parks it, tagged,
-  in Idle / On hold; held Sentry jobs don't count toward the auto-start
+  in On hold; held Sentry jobs don't count toward the auto-start
   cap), *Dismiss* (asks first, says what would be lost).
 - The same bar under a fixed worktree agent's terminal: *Finish* (loose
   ends, lands the PR with auto-merge, then `/coach finish` parks it and
@@ -309,6 +313,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-14 — Idle and On hold are separate columns, and a worktree whose Claude has gone quiet on a branch of its own (a merged PR included) is in Waiting on you, not Idle.
 - 2026-10-12 — Check it merged into Waiting on you (blocked first); a Claude with a Monitor or background command still running stays On the tools; worktree agents get Finish / Amend / Hold.
 - 2026-10-10 — Waiting on you is active work only: a held or finished job stays in Idle / On hold even when its Claude asks something.
 - 2026-10-10 — A terminal's orange flag line from Mucka has a "clear" button, so Tom can dismiss a flag that's out of date.

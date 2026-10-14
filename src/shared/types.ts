@@ -130,7 +130,7 @@ export interface AgentConfig {
    */
   running: boolean
   /**
-   * Parked by Tom: it sits in Idle / On hold and stays out of Waiting on
+   * Parked by Tom: it sits in On hold and stays out of Waiting on
    * you, whatever its Claude is doing, until he releases it.
    */
   held: boolean
@@ -180,7 +180,7 @@ export interface Job {
   pr: JobPr | null
   /** Where it came from, e.g. `sentry:MUCKA-WEB-38`. Null for one Tom started. */
   source: string | null
-  /** Parked by Tom until something else lands; sits in Idle / On hold. */
+  /** Parked by Tom until something else lands; sits in On hold. */
   held: boolean
   createdAt: number
 }
@@ -836,7 +836,7 @@ export interface MuckaApi {
   dismissJob(id: JobId): Promise<boolean>
   /** Take a finished job's card off the board. */
   closeJob(id: JobId): Promise<void>
-  /** Park a job in Idle / On hold, or release it. */
+  /** Park a job in On hold, or release it. */
   holdJob(id: JobId, held: boolean): Promise<void>
   /** Start a job on a Sentry issue, briefed with it. Returns its existing job if it has one. */
   /** `note` is Tom's own direction, put first in the job's opening message. */

@@ -30,13 +30,14 @@ import { submitPromptAndEnter } from '../mucka/dispatch'
  * its PR or branch and laned by Claude's reported status.
  */
 
-type Lane = 'waiting' | 'working' | 'idle'
+type Lane = 'waiting' | 'working' | 'idle' | 'held'
 
 // Waiting on you isn't a lane here: it's the strip under the terminal, and
 // it holds finished work too (there's no separate Check it any more).
 const LANES: { lane: Lane; title: string; empty: string }[] = [
   { lane: 'working', title: 'On the tools', empty: 'Nobody is working.' },
-  { lane: 'idle', title: 'Idle / On hold', empty: 'Nothing idle or held.' }
+  { lane: 'idle', title: 'Idle', empty: 'Nothing idle.' },
+  { lane: 'held', title: 'On hold', empty: 'Nothing on hold.' }
 ]
 
 /** Mid-turn: typing into the terminal now would interrupt. */
@@ -133,8 +134,8 @@ export function JobsLayout({
   // Whatever's waiting on Tom (asking, or finished with work to look at)
   // is in the strip; NeedsYouContext decides that. The board has the rest.
   const laneOf = (cfg: AgentConfig): Lane => {
-    // Parked by Tom: shares the last column, tagged, until he releases it.
-    if (cfg.held) return 'idle'
+    // Parked by Tom until he releases it.
+    if (cfg.held) return 'held'
     if (placeOf(cfg.id) !== null) return 'waiting'
     if (!cfg.running) return 'idle'
     return WORKING.includes(statusFor(cfg.id)) ? 'working' : 'idle'
@@ -144,7 +145,7 @@ export function JobsLayout({
     if (job.state === 'setting-up') return 'working'
     // On its way off the board: nothing left for Tom to look at.
     if (job.state === 'finished') return 'idle'
-    if (job.held) return 'idle'
+    if (job.held) return 'held'
     if (placeOf(job.id) !== null) return 'waiting'
     return WORKING.includes(jobStatusFor(job.id)) ? 'working' : 'idle'
   }
@@ -248,7 +249,7 @@ export function JobsLayout({
           </Button>
         }
       >
-        <div className="grid h-full min-h-0 grid-cols-2 gap-2 overflow-y-auto p-2">
+        <div className="grid h-full min-h-0 grid-cols-3 gap-2 overflow-y-auto p-2">
           {LANES.map(({ lane, title, empty }) => {
             const list = byLane.get(lane) ?? []
             return (
@@ -258,7 +259,7 @@ export function JobsLayout({
                   style={{ borderBottom: '1px solid var(--border)' }}
                 >
                   <span>{title}</span>
-                  <span>{list.length}</span>
+                  <span>{list.length + jobsIn(lane).length}</span>
                 </div>
                 {jobsIn(lane).map((job) => (
                   <NewJobCard
@@ -622,9 +623,7 @@ function SignOffBar({
         variant="secondary"
         size="sm"
         trailingIcon={null}
-        title={
-          job.held ? 'Back to its lane' : 'Park it in Idle / On hold until something else lands'
-        }
+        title={job.held ? 'Back to its lane' : 'Park it in On hold until something else lands'}
         onClick={() => void window.mucka.holdJob(job.id, !job.held)}
       >
         {job.held ? 'Release' : 'Hold'}
@@ -738,9 +737,7 @@ function AgentSignOffBar({
         size="sm"
         trailingIcon={null}
         disabled={busy}
-        title={
-          cfg.held ? 'Back to its lane' : 'Park it in Idle / On hold and out of Waiting on you'
-        }
+        title={cfg.held ? 'Back to its lane' : 'Park it in On hold and out of Waiting on you'}
         onClick={hold}
       >
         {cfg.held ? 'Release' : 'Hold'}
