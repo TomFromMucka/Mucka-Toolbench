@@ -30,12 +30,15 @@ import type {
   RoadmapAttachment,
   RoadmapCard,
   RoadmapCreateInput,
+  RoadmapDemand,
   RoadmapMoveInput,
+  RoadmapState,
   RoadmapUpdateInput,
   GitStatus,
   GitStatusEvent,
   JobEvent,
   SentryHealth,
+  SentryBugNotes,
   SentryIssue,
   SentryNewIssueEvent,
   SentryStatus,
@@ -236,6 +239,12 @@ const muckaApi: MuckaApi = {
   forgetMemory: (topic: string) => ipcRenderer.invoke('memory:forget', topic) as Promise<boolean>,
 
   listRoadmap: () => ipcRenderer.invoke('roadmap:list') as Promise<RoadmapCard[]>,
+  getRoadmapState: () => ipcRenderer.invoke('roadmap:state') as Promise<RoadmapState>,
+  refreshRoadmap: () => ipcRenderer.invoke('roadmap:refresh') as Promise<void>,
+  getRoadmapDemand: (id: string) =>
+    ipcRenderer.invoke('roadmap:demand', id) as Promise<RoadmapDemand[]>,
+  getSentryBugNotes: (issueId: string) =>
+    ipcRenderer.invoke('sentry:bugNotes', issueId) as Promise<SentryBugNotes | null>,
   createRoadmapCard: (input: RoadmapCreateInput) =>
     ipcRenderer.invoke('roadmap:create', input) as Promise<RoadmapCard>,
   updateRoadmapCard: (input: RoadmapUpdateInput) =>

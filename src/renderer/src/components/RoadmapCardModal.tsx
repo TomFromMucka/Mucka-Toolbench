@@ -7,6 +7,7 @@ import type {
   RoadmapCard,
   RoadmapColumn,
   RoadmapCreateInput,
+  RoadmapDemand,
   RoadmapUpdateInput
 } from '@shared/types'
 import { useAgentsState } from '../state/AgentsContext'
@@ -15,10 +16,11 @@ import { useMuckaSession } from '../mucka/MuckaSessionContext'
 import { launchClaudeWithPrompt } from '../mucka/dispatch'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
+import { BUILD_STATUS_LABEL, isNewTheme } from './roadmapFormat'
 
 const COLUMNS: { id: RoadmapColumn; label: string }[] = [
+  { id: 'oversight', label: 'Oversight' },
   { id: 'backlog', label: 'Backlog' },
-  { id: 'issues', label: 'Issues' },
   { id: 'next', label: 'Next up' },
   { id: 'doing', label: 'Doing' },
   { id: 'shipped', label: 'Shipped' },
@@ -130,7 +132,7 @@ export function RoadmapCardModal({
     try {
       if (mode === 'create') {
         const input: RoadmapCreateInput = {
-          id: createId,
+          draftId: createId,
           title: t,
           body,
           column,
@@ -261,12 +263,7 @@ export function RoadmapCardModal({
         })
         // Sending a ticket to a worktree is the moment it starts, so the
         // lane follows. Shipped/doing cards stay where Tom put them.
-        if (
-          card.column === 'backlog' ||
-          card.column === 'issues' ||
-          card.column === 'next' ||
-          card.column === 'parked'
-        ) {
+        if (card.column !== 'doing' && card.column !== 'shipped') {
           await window.mucka.moveRoadmapCard({ id: card.id, column: 'doing' })
         }
         onClose()
@@ -397,7 +394,7 @@ export function RoadmapCardModal({
                 leadingIcon={Trash2}
                 trailingIcon={null}
                 onClick={() => void handleDelete()}
-                disabled={busy}
+                disabled={busy || card.origin !== 'human'}
               >
                 Delete
               </Button>
@@ -438,7 +435,7 @@ export function RoadmapCardModal({
                   leadingIcon={Trash2}
                   trailingIcon={null}
                   onClick={() => void handleDelete()}
-                  disabled={busy}
+                  disabled={busy || card.origin !== 'human'}
                 >
                   Delete
                 </Button>
@@ -475,6 +472,26 @@ export function RoadmapCardModal({
 }
 
 function ViewBody({ card }: { card: RoadmapCard }): React.JSX.Element {
+  const [demand, setDemand] = useState<RoadmapDemand[]>([])
+  useEffect(() => {
+    let live = true
+    window.mucka
+      .getRoadmapDemand(card.id)
+      .then((d) => live && setDemand(d))
+      .catch(() => live && setDemand([]))
+    return () => {
+      live = false
+    }
+  }, [card.id])
+  const facts = [
+    isNewTheme(card) ? 'New: nobody has scored it yet' : null,
+    BUILD_STATUS_LABEL[card.buildStatus],
+    card.marketability !== null ? `Marketability ${card.marketability}/10` : null,
+    card.accounts > 0
+      ? `${card.accounts} business${card.accounts === 1 ? '' : 'es'} asked, ${card.mentions} mention${card.mentions === 1 ? '' : 's'}`
+      : null,
+    card.pr ? `PR ${card.pr}` : null
+  ].filter((f): f is string => f !== null)
   return (
     <div className="space-y-3 px-5 py-4">
       <h3
@@ -493,8 +510,8 @@ function ViewBody({ card }: { card: RoadmapCard }): React.JSX.Element {
         <span
           className="chamfer-sm px-2 py-0.5"
           style={{
-            background: 'rgba(255, 78, 0, 0.18)',
-            color: 'var(--orange)',
+            background: 'rgba(234, 233, 232, 0.18)',
+            color: 'var(--van-white)',
             fontFamily: 'var(--font-soehne)',
             textTransform: 'uppercase',
             letterSpacing: '0.04em'
@@ -517,13 +534,43 @@ function ViewBody({ card }: { card: RoadmapCard }): React.JSX.Element {
         ))}
       </div>
 
+      <p className="t-label-sm text-dirty-grey">{facts.join(' · ')}</p>
+
+      {card.summary ? <p className="t-body-md text-van-white">{card.summary}</p> : null}
+
       {card.body.trim().length > 0 ? (
         <div className="markdown-body">
           <ReactMarkdown>{card.body}</ReactMarkdown>
         </div>
-      ) : (
+      ) : card.summary ? null : (
         <p className="t-body-md text-dirty-grey italic">No description yet.</p>
       )}
+
+      {card.note ? (
+        <p className="t-body-md text-dirty-grey">
+          <span className="text-van-white">Note:</span> {card.note}
+        </p>
+      ) : null}
+
+      {demand.length > 0 ? (
+        <div className="space-y-1">
+          <p className="t-label-sm uppercase text-dirty-grey">Who asked</p>
+          <ul className="space-y-1">
+            {demand.slice(0, 30).map((d, i) => (
+              <li key={i} className="t-body-md text-dirty-grey">
+                <span className="text-van-white">{d.business ?? 'Unknown business'}</span>
+                {` · ${new Date(d.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
+                {d.reference ? ` · ${d.reference}` : d.kind === 'finding' ? ' · in a chat with Mucka' : ''}
+                <br />
+                {d.summary}
+              </li>
+            ))}
+          </ul>
+          {demand.length > 30 ? (
+            <p className="t-label-sm text-dirty-grey">and {demand.length - 30} more in the app</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -582,7 +629,10 @@ function EditBody({
         <Field label="Column">
           <select
             value={column}
-            onChange={(e) => onColumn(e.target.value as RoadmapColumn)}
+            onChange={(e) => {
+              const next = COLUMNS.find((c) => c.id === e.target.value)
+              if (next) onColumn(next.id)
+            }}
             className="chamfer-sm w-full px-3 py-2 focus:outline-none"
             style={{
               fontFamily: 'var(--font-soehne)',
@@ -728,7 +778,7 @@ function columnLabel(col: RoadmapColumn): string {
  */
 function buildLaunchPrompt(card: RoadmapCard): string {
   const tags = card.tags.length > 0 ? `\nTags: ${card.tags.join(', ')}` : ''
-  const body = card.body.trim()
+  const body = card.body.trim() || card.summary || ''
   return `# ${card.title}${tags}\n\n${
     body || '(No detail on the ticket — ask before you start if the intent is unclear.)'
   }`

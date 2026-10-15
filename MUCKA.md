@@ -125,10 +125,18 @@ the orange glow.
   and a `voice` tag in the footer.
 - Notes scratchpad — free-form textarea, 600 ms debounced autosave
   to sqlite, flushed on blur and ⌘S.
-- Roadmap kanban — six lanes, drag-and-drop, cards open in a modal.
-  **Issues** sits between Backlog and Next up and holds production
-  errors off Sentry triage, nothing else, so it reads as a straight
-  list of what's broken in production.
+- Roadmap kanban — the Mucka app's board (/admin/roadmap), read and
+  written through Mucka Pro's `scripts/roadmap.ts` the way tickets go
+  through `ticket.ts`, polled every five minutes and kept in sqlite so
+  it shows at boot and offline. Six lanes: **Oversight** (themes the
+  nightly oversight agent proposes from what customers asked Mucka
+  for), Backlog, Next up, Doing, Shipped, Parked. Each lane is ordered
+  as the app orders it, most businesses asking first, so cards drag
+  between lanes but not within one. A card shows its demand,
+  marketability and New badge; the modal lists who asked. Only cards a
+  person added can be deleted. Sentry issues aren't on it: the old
+  Issues lane's notes show in Intake beside their issues and go into
+  the brief of a job started on one.
   **Send to worktree** on an open ticket picks an agent from a
   dropdown (idle ones first, running ones flagged as a restart),
   launches Claude Code in that worktree and pastes the ticket in as
@@ -315,6 +323,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-15 — The roadmap is the Mucka app's board: Oversight lane added, Issues gone (its notes show in Intake), every cockpit card imported to the app.
 - 2026-10-15 — Sentry tickets open no roadmap card: Mucka names the bug instead, and every ticketed issue is watched for resolves and regressions whether or not it had a card.
 - 2026-10-14 — One Sentry bug, one job: an issue whose bug has an open job goes to that job as a note rather than starting another, and Mucka sees the open jobs when she triages.
 - 2026-10-12 — Check it merged into Waiting on you (blocked first); a Claude with a Monitor or background command still running stays On the tools; worktree agents get Finish / Amend / Hold.

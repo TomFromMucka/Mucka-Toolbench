@@ -54,15 +54,8 @@ import {
 } from './events/Events'
 import { extractDocSection, listDocSections, readCockpitDoc } from './doc/CockpitDoc'
 import { extractProductSection, listProductSections, readProductDoc } from './doc/ProductDoc'
-import { mirrorToMarkdown, readRoadmapSection } from './doc/RoadmapMirror'
-import {
-  createCard as roadmapCreate,
-  deleteCard as roadmapDelete,
-  listCards as roadmapList,
-  moveCard as roadmapMove,
-  seedFromRoadmapMarkdown as roadmapSeed,
-  updateCard as roadmapUpdate
-} from './db/roadmap'
+import { mirrorToMarkdown } from './doc/RoadmapMirror'
+import { AppRoadmap } from './roadmap/AppRoadmap'
 import { GitService } from './git/GitService'
 import { mintSignedUrl, getStatus as muckaStatus } from './mucka/Mucka'
 import {
@@ -174,6 +167,7 @@ import type {
   PrReviewContext,
   PrReviewSubmission,
   PrReviewSubmitted,
+  RoadmapCard,
   RoadmapCreateInput,
   RoadmapMoveInput,
   RoadmapUpdateInput,
@@ -199,6 +193,7 @@ let claudeStateWatcher: ClaudeStateWatcher | null = null
 let pendingWatcher: PendingWatcher | null = null
 let jobManager: JobManager | null = null
 let ticketWatcher: TicketWatcher | null = null
+let appRoadmap: AppRoadmap | null = null
 let ticketDesk: TicketDesk | null = null
 let gitService: GitService | null = null
 let vercelPoller: VercelPoller | null = null
@@ -207,15 +202,20 @@ let sentryPoller: SentryPoller | null = null
 let mainWindowRef: BrowserWindow | null = null
 let lastAttentionCount = 0
 
-function afterRoadmapMutation(): void {
+function afterRoadmapChange(cards: RoadmapCard[]): void {
   try {
-    mirrorToMarkdown(roadmapList())
+    mirrorToMarkdown(cards)
   } catch {
     /* non-fatal */
   }
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
     mainWindowRef.webContents.send('roadmap:update')
   }
+}
+
+function roadmap(): AppRoadmap {
+  if (!appRoadmap) throw new Error('The cockpit window is not ready yet.')
+  return appRoadmap
 }
 
 function applyAttentionToShell(count: number): void {
@@ -348,6 +348,15 @@ function createWindow(): void {
     }
   })
   ticketWatcher.start()
+  appRoadmap = new AppRoadmap({
+    scoutDir: () => {
+      if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+      return jobManager.scoutDir()
+    },
+    env: agentShellEnv,
+    changed: afterRoadmapChange
+  })
+  appRoadmap.start()
   ticketDesk = new TicketDesk({
     checkout: () => {
       if (!jobManager) throw new Error('The cockpit window is not ready yet.')
@@ -412,6 +421,8 @@ function createWindow(): void {
     jobManager = null
     ticketWatcher?.stop()
     ticketWatcher = null
+    appRoadmap?.stop()
+    appRoadmap = null
     ticketDesk = null
     mainWindowRef = null
     if (process.platform === 'darwin' && app.dock) {
@@ -989,34 +1000,31 @@ function registerIpc(): void {
 
   guardedHandle('memory:forget', (_event, topic: string) => forgetMemory(topic))
 
-  guardedHandle('roadmap:list', () => roadmapList())
+  guardedHandle('roadmap:list', () => roadmap().cards())
 
-  guardedHandle('roadmap:create', (_event, input: RoadmapCreateInput) => {
-    const card = roadmapCreate(input)
-    afterRoadmapMutation()
-    return card
-  })
+  guardedHandle('roadmap:state', () => roadmap().state())
 
-  guardedHandle('roadmap:update', (_event, input: RoadmapUpdateInput) => {
-    const card = roadmapUpdate(input)
-    afterRoadmapMutation()
-    return card
-  })
+  guardedHandle('roadmap:refresh', () => roadmap().refresh())
 
-  guardedHandle('roadmap:move', (_event, input: RoadmapMoveInput) => {
-    const card = roadmapMove(input)
-    afterRoadmapMutation()
-    return card
-  })
+  guardedHandle('roadmap:demand', (_event, id: string) => roadmap().demand(id))
 
-  guardedHandle('roadmap:delete', (_event, id: string) => {
-    const ok = roadmapDelete(id)
-    if (ok) {
-      void deleteCardAttachments(id)
-      afterRoadmapMutation()
-    }
+  guardedHandle('roadmap:create', (_event, input: RoadmapCreateInput) =>
+    roadmap().create(input)
+  )
+
+  guardedHandle('roadmap:update', (_event, input: RoadmapUpdateInput) =>
+    roadmap().update(input)
+  )
+
+  guardedHandle('roadmap:move', (_event, input: RoadmapMoveInput) => roadmap().move(input))
+
+  guardedHandle('roadmap:delete', async (_event, id: string) => {
+    const ok = await roadmap().delete(id)
+    if (ok) void deleteCardAttachments(id)
     return ok
   })
+
+  guardedHandle('sentry:bugNotes', (_event, issueId: string) => jobManager?.bugNotes(issueId) ?? null)
 
   guardedHandle(
     'roadmap:attachImage',
@@ -1211,14 +1219,6 @@ app.whenReady().then(() => {
   })
 
   ensureSeeded()
-  // First-launch import: lift the existing ## Roadmap markdown into the
-  // sqlite kanban so Tom's current notes survive the migration.
-  try {
-    const md = readRoadmapSection()
-    if (md.length > 0) roadmapSeed(md)
-  } catch {
-    /* non-fatal — kanban just starts empty */
-  }
   // Primary terminalId === agentId, so we restore the same buffers we wrote.
   scrollback.loadFromDisk(getAgentConfigs().map((a) => a.id))
   configureMediaPermissions()
