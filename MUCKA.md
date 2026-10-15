@@ -79,8 +79,15 @@ or "Tom, eyes here".
   points the worktree at a fresh main), *Amend*, *Hold* / *Release*. A
   held agent says so in its terminal header, with *release*, in every
   layout.
-- **Intake** has two tabs in the terminal's font, *support* and
-  *sentry*, each with its open count.
+- **Intake** has three tabs in the terminal's font, *support*,
+  *sentry* and *spin-offs*, each with its open count.
+  - *spin-offs* are jobs a job's Claude proposed with
+    `~/.claude/mucka-job.sh propose "title"` (brief on stdin), for work
+    that belongs in a PR of its own. Each opens to its brief, with the
+    note box and *Start job*, or *dismiss*. Nothing starts by itself, so
+    one Claude can't set off a chain; the job sheet logs each proposal.
+    Every job's Claude is told about it in its standing rules, and
+    `hooks:install` copies the script and allows it without a prompt.
   - *support* is the `/admin/support` desk without the browser: the same
     status and kind filters, search, grouping and badges (awaiting reply,
     chase / follow up). Clicking a ticket opens it in full: thread,
@@ -327,6 +334,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-15 — Jobs can propose spin-off jobs: a job's Claude runs `mucka-job.sh propose`, and the proposal waits in Intake → spin-offs for Tom to start or dismiss.
 - 2026-10-15 — The roadmap is the Mucka app's board: Oversight lane added, Issues gone (its notes show in Intake), every cockpit card imported to the app.
 - 2026-10-15 — Sentry tickets open no roadmap card: Mucka names the bug instead, and every ticketed issue is watched for resolves and regressions whether or not it had a card.
 - 2026-10-14 — One Sentry bug, one job: an issue whose bug has an open job goes to that job as a note rather than starting another, and Mucka sees the open jobs when she triages.

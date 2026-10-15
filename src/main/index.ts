@@ -74,6 +74,8 @@ import { PtyManager, agentShellEnv } from './pty/PtyManager'
 import { ClaudeStateWatcher } from './claude/ClaudeStateWatcher'
 import { PendingWatcher } from './claude/PendingWatcher'
 import { JobManager } from './jobs/JobManager'
+import { SpinoffWatcher } from './jobs/SpinoffWatcher'
+import { decideProposal, listPendingProposals } from './db/jobProposals'
 import { TicketWatcher } from './tickets/TicketWatcher'
 import { TicketDesk } from './tickets/TicketDesk'
 import { scrollback } from './scrollback/Scrollback'
@@ -193,6 +195,7 @@ let claudeStateWatcher: ClaudeStateWatcher | null = null
 let pendingWatcher: PendingWatcher | null = null
 let jobManager: JobManager | null = null
 let ticketWatcher: TicketWatcher | null = null
+let spinoffWatcher: SpinoffWatcher | null = null
 let appRoadmap: AppRoadmap | null = null
 let ticketDesk: TicketDesk | null = null
 let gitService: GitService | null = null
@@ -348,6 +351,11 @@ function createWindow(): void {
     }
   })
   ticketWatcher.start()
+  spinoffWatcher = new SpinoffWatcher((proposals) => {
+    if (mainWindow.webContents.isDestroyed()) return
+    mainWindow.webContents.send('proposals:update', proposals)
+  })
+  spinoffWatcher.start()
   appRoadmap = new AppRoadmap({
     scoutDir: () => {
       if (!jobManager) throw new Error('The cockpit window is not ready yet.')
@@ -420,6 +428,8 @@ function createWindow(): void {
     jobManager?.dispose()
     jobManager = null
     ticketWatcher?.stop()
+    spinoffWatcher?.stop()
+    spinoffWatcher = null
     ticketWatcher = null
     appRoadmap?.stop()
     appRoadmap = null
@@ -485,6 +495,20 @@ function registerIpc(): void {
   })
   guardedHandle('jobs:retry', (_event, id: string) => jobManager?.retry(id))
   guardedHandle('jobs:discard', (_event, id: string) => jobManager?.discard(id))
+
+  guardedHandle('proposals:list', () => listPendingProposals())
+
+  guardedHandle('proposals:start', async (_event, id: string, note?: string) => {
+    if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+    const job = await jobManager.startProposal(id, note)
+    spinoffWatcher?.publish()
+    return job
+  })
+
+  guardedHandle('proposals:dismiss', (_event, id: string) => {
+    decideProposal(id, 'dismissed')
+    spinoffWatcher?.publish()
+  })
   guardedHandle('jobs:dismiss', (_event, id: string) => jobManager?.dismiss(id) ?? false)
   guardedHandle('jobs:close', (_event, id: string) => jobManager?.close(id))
   guardedHandle('jobs:hold', (_event, id: string, held: boolean) => jobManager?.hold(id, held))

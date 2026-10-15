@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
   Job,
+  JobProposal,
   JobsAutoStatus,
   SentryHealth,
   SentryIssue,
@@ -14,6 +15,7 @@ import { ago } from './intakeFormat'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
 import { SentryModal } from './SentryModal'
 import { TicketsPane } from './TicketsPane'
+import { SpinoffsPane } from './SpinoffsPane'
 
 /**
  * Work coming in, before it's a job. Sentry first (the poller already
@@ -30,12 +32,14 @@ const POLL_MS = 5 * 60_000
 
 const sourceOf = (issue: SentryIssue): string => `sentry:${issue.shortId}`
 
-type Tab = 'support' | 'sentry'
+const TABS = ['support', 'sentry', 'spin-offs'] as const
+type Tab = (typeof TABS)[number]
 const TAB_KEY = 'mucka.intake.tab'
 
 function savedTab(): Tab {
   try {
-    return localStorage.getItem(TAB_KEY) === 'sentry' ? 'sentry' : 'support'
+    const saved = localStorage.getItem(TAB_KEY)
+    return TABS.find((t) => t === saved) ?? 'support'
   } catch {
     return 'support'
   }
@@ -56,6 +60,7 @@ export function IntakePanel({
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [tickets, setTickets] = useState<TicketsState | null>(null)
+  const [proposals, setProposals] = useState<JobProposal[]>([])
   const [tab, setTab] = useState<Tab>(savedTab)
   const [openIssue, setOpenIssue] = useState<SentryIssue | null>(null)
   const pick = (next: Tab): void => {
@@ -90,7 +95,10 @@ export function IntakePanel({
     void window.mucka?.listTickets().then(setTickets)
     const tick = setInterval(() => setNow(Date.now()), 60_000)
     const offTickets = window.mucka?.onTicketsUpdate(setTickets)
+    void window.mucka?.listJobProposals().then(setProposals)
+    const offProposals = window.mucka?.onJobProposalsUpdate(setProposals)
     return () => {
+      offProposals?.()
       clearInterval(timer)
       off?.()
       offJobs?.()
@@ -129,7 +137,7 @@ export function IntakePanel({
   return (
     <Clipboard
       title="Intake"
-      subtitle={error ?? 'support · sentry'}
+      subtitle={error ?? 'support · sentry · spin-offs'}
       bodyClassName="min-h-0"
       rightSlot={
         auto ? (
@@ -170,9 +178,14 @@ export function IntakePanel({
           <TabButton active={tab === 'sentry'} onClick={() => pick('sentry')}>
             sentry {status?.kind === 'ok' ? issues.length : '…'}
           </TabButton>
+          <TabButton active={tab === 'spin-offs'} onClick={() => pick('spin-offs')}>
+            spin-offs {proposals.length}
+          </TabButton>
         </div>
         {tab === 'support' ? (
           <TicketsPane state={tickets} now={now} onSelect={onSelect} />
+        ) : tab === 'spin-offs' ? (
+          <SpinoffsPane proposals={proposals} now={now} onSelect={onSelect} />
         ) : issues.length === 0 ? (
           <Dim>{empty}</Dim>
         ) : (

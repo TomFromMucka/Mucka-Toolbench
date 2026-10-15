@@ -58,6 +58,16 @@ function migrate(d: DatabaseType): void {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS job_proposals (
+      id TEXT PRIMARY KEY,
+      parent_job TEXT NOT NULL,
+      title TEXT NOT NULL,
+      brief TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      state TEXT NOT NULL DEFAULT 'pending',
+      job_id TEXT,
+      decided_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS tickets (
       reference TEXT PRIMARY KEY,
       subject TEXT NOT NULL,
