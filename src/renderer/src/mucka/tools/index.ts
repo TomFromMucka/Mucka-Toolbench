@@ -5,11 +5,14 @@ import type {
   GitHubAgentSummary,
   GitStatus,
   JobEvent,
+  JobOverview,
   MemoryListItem,
   MemoryType,
   RoadmapCard,
   RoadmapColumn,
   SentryIssue,
+  SentryJobChoice,
+  SentryJobOutcome,
   SentryTriage,
   SentryVerdict,
   VercelAgentSummary,
@@ -809,16 +812,58 @@ function parseVerdict(raw: unknown): SentryVerdict {
   throw new Error(`verdict must be one of ticket, noise, watch — got ${JSON.stringify(raw)}`)
 }
 
+function parseJobChoice(raw: unknown): SentryJobChoice {
+  if (raw === undefined || raw === null || raw === '' || raw === 'start') return { kind: 'start' }
+  if (raw === 'none') return { kind: 'none' }
+  if (typeof raw === 'string') return { kind: 'join', jobId: raw.trim() }
+  throw new Error(`job must be start, none or an open job's id — got ${JSON.stringify(raw)}`)
+}
+
+function describeJobOutcome(outcome: SentryJobOutcome): string {
+  switch (outcome.kind) {
+    case 'started':
+      return `job ${outcome.jobId} started`
+    case 'existing':
+      return `it already has job ${outcome.jobId}`
+    case 'joined':
+      return outcome.sameBug
+        ? `no new job: handed to ${outcome.jobId}, which is already fixing that bug`
+        : `handed to job ${outcome.jobId}`
+    case 'queued':
+      return `queued for a job, number ${outcome.position} in line`
+    case 'not-started':
+      return `no job started: ${outcome.why}`
+  }
+}
+
+/** One open job, with the bug it's fixing when it came from Sentry. */
+export function describeJobLine(job: JobOverview): string {
+  const parts = [
+    job.state === 'ready' ? null : job.state,
+    job.held ? 'on hold' : null,
+    job.pr ? `PR #${job.pr.number} ${job.pr.state}` : null,
+    job.source,
+    job.bug ? `bug ${job.bug}` : null
+  ].filter((p): p is string => p !== null)
+  return `· ${job.id} — ${job.title}${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`
+}
+
+async function listJobsHandler(): Promise<string> {
+  const jobs = await window.mucka.listJobOverview()
+  if (jobs.length === 0) return 'No open jobs.'
+  // A Sentry job is titled with the issue's own text, which is production data.
+  return `${jobs.length} open:\n${fenceUntrusted('Open jobs', jobs.map(describeJobLine).join('\n'))}`
+}
+
 function makeTriageSentryIssue() {
   return async (params: Record<string, unknown>): Promise<string> => {
     const issue = await resolveSentryIssue(params)
     const verdict = parseVerdict(params['verdict'])
     const reason = parseString(params, 'reason').trim()
     if (!reason) throw new Error('reason must not be empty')
-    const cardId =
-      typeof params['card_id'] === 'string' && params['card_id'].trim().length > 0
-        ? (params['card_id'] as string).trim()
-        : null
+    const rawBug = params['bug']
+    const bug = typeof rawBug === 'string' && rawBug.trim() ? rawBug.trim().slice(0, 80) : null
+    const job = parseJobChoice(params['job'])
 
     // The one hard rail on an auto-executing outward write: anything with
     // real users behind it or flagged high priority never gets archived on
@@ -827,7 +872,7 @@ function makeTriageSentryIssue() {
       return (
         `Refused: ${issue.shortId} has ${issue.userCount} users affected` +
         `${issue.priority === 'high' ? ' and is high priority' : ''}, so it can't be archived as noise. ` +
-        'Open a card and triage it as a ticket instead.'
+        'Triage it as a ticket instead.'
       )
     }
 
@@ -836,18 +881,22 @@ function makeTriageSentryIssue() {
     }
     // Main logs the job-sheet line — the record and the audit trail land
     // together rather than depending on two renderer calls both landing.
-    await window.mucka.recordSentryTriage({
+    const outcome = await window.mucka.recordSentryTriage({
       issueId: issue.id,
       verdict,
       reason,
-      cardId,
+      bug,
       count: issue.count,
-      userCount: issue.userCount
+      userCount: issue.userCount,
+      ...(verdict === 'ticket' ? { job } : {})
     })
 
     if (verdict === 'noise') return `${issue.shortId} archived in Sentry — ${reason}`
     if (verdict === 'ticket') {
-      return `${issue.shortId} logged as a ticket${cardId ? ` (card ${cardId})` : ''} — ${reason}`
+      return (
+        `${issue.shortId} logged as a ticket${bug ? ` (bug ${bug})` : ''} — ${reason}` +
+        (outcome ? `. ${describeJobOutcome(outcome)}` : '')
+      )
     }
     return `${issue.shortId} left open and marked watch — ${reason}`
   }
@@ -1165,6 +1214,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     list_sentry_issues: () => listSentryIssuesHandler(),
     get_sentry_issue: (params) => getSentryIssueHandler(params),
     triage_sentry_issue: makeTriageSentryIssue(),
+    list_jobs: () => listJobsHandler(),
 
     list_roadmap: () => listRoadmapHandler(),
     create_roadmap_card: (params) => createRoadmapCardHandler(params),

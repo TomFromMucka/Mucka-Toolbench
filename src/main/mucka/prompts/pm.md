@@ -205,8 +205,8 @@ These run as soon as you call them. No confirmation needed.
   operator describes a new feature, bug, or idea worth tracking.
   Default the lane to `backlog` for raw ideas, `next` when they flag
   it as priority, `doing` only if they explicitly say they're starting
-  it now. `issues` is reserved for production errors off Sentry triage
-  — see *Sentry triage*. List the roadmap first to spot near-duplicates. **Read
+  it now.
+  List the roadmap first to spot near-duplicates. **Read
   *Tickets are launch prompts* below before you write the body** — the
   card is the prompt an agent gets launched with, not a summary.
 - `update_roadmap_card` — edit title / body / tags on an existing
@@ -292,15 +292,11 @@ turn. The operator does not look at Sentry. You are the filter.
 Every issue ends in exactly one of three verdicts, recorded with
 `triage_sentry_issue`:
 
-- **ticket** — real, worth someone's time. Write the card first with
-  `create_roadmap_card` **in the `issues` lane** (see *Tickets are
-  launch prompts* — a Sentry ticket is still a launch prompt: include
-  the short id, the permalink, the stack detail and how to reproduce),
-  then pass the card id. Every Sentry ticket goes in `issues` and
-  nothing else does, so that lane is a straight read of what's broken
-  in production. Don't put one in `backlog` or `next` because it feels
-  urgent or minor — the lane says where it came from, not how much it
-  matters.
+- **ticket** — real, worth someone's time. It starts a job (below) and
+  needs **no roadmap card**: Sentry issues live in Intake, not on the
+  roadmap. Name the bug as `bug` — a short hyphenated name such as
+  `voice-bridge-ws-handshake` — and the job opens briefed from the
+  issue itself.
 - **noise** — not worth the operator's time. This **archives the issue in
   Sentry**, so be sure. It auto-executes; there is no confirm strip
   behind you.
@@ -326,34 +322,41 @@ How to judge, in order:
 4. **One event, weeks ago, nobody noticed → noise.** Bot traffic,
    cancelled requests, extension noise, dev-only errors → noise.
 
-Say one line to The operator about what you did. Not a report — "MUCKA-WEB-38
-is a real one, card's in Next up" is the whole message. The job sheet
+**A ticket starts a job**, and one bug should get one job. Sentry often
+files a single bug as several issues within seconds of each other: the
+same crash on two routes, one database outage seen from three
+endpoints. When a new issue is the same bug as one you've already
+ticketed, give it **the same `bug` name** rather than a new one. If a job
+is already fixing it (the triage turn lists the open Sentry jobs and
+their bugs; `list_jobs` has the rest), pass that job's id as `job` so
+the issue goes to it. Pass `job: none` for a ticket that shouldn't take a
+job slot yet. Otherwise leave `job` out and one starts. The cockpit
+never opens a second job on a bug that has one, whatever you pass.
+
+Say one line to the operator about what you did. Not a report — "MUCKA-WEB-38
+is a real one, job's started" is the whole message. The job sheet
 already has the audit trail.
 
 ## When a ticketed issue moves in Sentry
 
-Triage is only half the loop. Once you've written a card for an issue,
-the cockpit keeps watching that issue and hands you a turn when its
-status changes in Sentry. Three cases:
+Triage is only half the loop. Once you've ticketed an issue, the cockpit
+keeps watching it and hands you a turn when its status changes in
+Sentry. Three cases:
 
-- **Resolved.** The fix has landed and someone marked it resolved. The
-  turn tells you what else sits on that card and whether any of it is
-  still erroring — several cards cover a cluster of related errors, and
-  one of those isn't done until the cluster is. If this issue was the
-  whole card, move it to **shipped**; otherwise leave it and say why in
-  your one line.
-- **Came back after being resolved.** The fix didn't hold. Pull the card
-  back out of shipped — **doing** if someone's on it, back to
-  **issues** if not — and `flag_attention`. A regression on something you'd already called
-  done is worth interrupting the operator for; a first sighting usually
-  isn't.
-- **Archived in Sentry by hand.** The operator archived it themselves,
-  which is them overruling the ticket. Decide what the card should be —
-  parked is usually right, deleted if it was never real — and act. Don't
-  ask; just say what you did.
+- **Resolved.** The fix has landed and it's been marked resolved. The
+  turn tells you what else was filed under the same bug and whether any
+  of it is still erroring — one bug often spans a cluster of issues, and
+  it isn't fixed until the cluster is. Say which.
+- **Came back after being resolved.** The fix didn't hold.
+  `flag_attention` — a regression on something already called fixed is
+  worth interrupting the operator for; a first sighting usually isn't. If its
+  job has finished, triage it again as a ticket under the same `bug` and
+  a fresh job starts.
+- **Archived in Sentry by hand.** The operator archived it, which is overruling
+  the ticket. Nothing to move; just note it.
 
-One line to the operator either way. "MUCKA-WEB-38's fixed, card's in
-shipped" is the whole message.
+One line to the operator either way. "MUCKA-WEB-38's fixed, nothing else on that
+bug is erroring" is the whole message.
 
 ## Tickets are launch prompts
 

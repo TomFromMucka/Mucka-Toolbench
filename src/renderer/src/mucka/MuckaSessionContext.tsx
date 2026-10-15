@@ -24,7 +24,7 @@ import type {
 import type { ClientTools } from '@elevenlabs/react'
 import { fenceUntrusted } from '@shared/untrusted'
 import { useAgentsState } from '../state/AgentsContext'
-import { buildClientTools } from './tools/index'
+import { buildClientTools, describeJobLine } from './tools/index'
 import { playConnectionChime } from './chime'
 
 const REPLY_ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
@@ -69,6 +69,17 @@ async function deliverSentryIssue(
       `Then: ${escalation.previousCount} events, ${escalation.previousUserCount} users. ` +
       `Now: ${issue.count} events, ${issue.userCount} users.\n\n`
     : `⟢ New Sentry issue — triage it.\n\n`
+  // In the turn itself rather than left to list_jobs: Sentry files one bug
+  // as several issues within seconds, and a job per issue is the failure
+  // this is here to stop.
+  const sentryJobs = await window.mucka
+    .listJobOverview()
+    .then((jobs) => jobs.filter((j) => j.source?.startsWith('sentry:')))
+    .catch(() => [])
+  const jobsNow =
+    sentryJobs.length > 0
+      ? `Sentry jobs open now:\n${fenceUntrusted('Open Sentry jobs (titles are Sentry text)', sentryJobs.map(describeJobLine).join('\n'))}\n\n`
+      : 'No Sentry jobs open now.\n\n'
   const msg =
     header +
     `${issue.shortId} [${issue.project}] ` +
@@ -79,9 +90,11 @@ async function deliverSentryIssue(
       'Sentry issue title + message',
       `${issue.title}${issue.detail ? `\n${issue.detail}` : ''}`
     )}\n${issue.permalink}\n\n` +
+    jobsNow +
     '(Pull the detail with get_sentry_issue, then rule on it with triage_sentry_issue — ' +
-    'every issue ends in ticket, noise or watch. Write the card first when it\'s a ticket ' +
-    'and pass its id. Keep what you say to Tom to a line.)'
+    'every issue ends in ticket, noise or watch. A ticket needs no roadmap card: name the bug ' +
+    'as `bug`. If it\'s the same bug as a job above, give it that job\'s bug name and pass the ' +
+    'job\'s id as `job`. Keep what you say to Tom to a line.)'
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       await window.mucka.sendChatMessage(msg)
@@ -95,9 +108,8 @@ async function deliverSentryIssue(
 
 /**
  * The other half of the Sentry loop: an issue she ticketed has moved in
- * Sentry, so the card should probably follow. She rules on it rather than
- * the card being moved underneath her — a card can cover more than the one
- * issue, and only she knows that.
+ * Sentry. She says what it means rather than the cockpit guessing — a bug
+ * can cover more than the one issue, and only she knows that.
  */
 function statusHeader(change: SentryStatusChange): string {
   const regressed =
@@ -106,26 +118,24 @@ function statusHeader(change: SentryStatusChange): string {
   if (regressed) {
     return (
       `⟢ Sentry issue you ticketed has come back — it was resolved, it's erroring again.\n\n` +
-      `The fix didn't hold. Pull the card back out of shipped if that's where it got to, ` +
-      `and flag Tom — a regression is worth interrupting him for.\n\n`
+      `The fix didn't hold. Flag Tom — a regression is worth interrupting him for. ` +
+      `If its job has finished, triage it again as a ticket to start a fresh one.\n\n`
     )
   }
   if (change.to === 'resolved') {
-    const open = change.cardSiblings.filter((sib) => sib.status === 'unresolved')
+    const open = change.bugSiblings.filter((sib) => sib.status === 'unresolved')
     return (
       `⟢ Sentry issue you ticketed is now resolved.\n\n` +
       (open.length > 0
-        ? `The card also covers ${open.map((sib) => sib.shortId).join(', ')}, ` +
-          `still unresolved — so it is very likely not finished. Leave it where ` +
-          `it is unless you can see otherwise.\n\n`
-        : `Nothing else on the card is still erroring. If it's genuinely done, ` +
-          `move it to shipped.\n\n`)
+        ? `The same bug also covers ${open.map((sib) => sib.shortId).join(', ')}, ` +
+          `still unresolved — so it is very likely not fixed yet.\n\n`
+        : `Nothing else under that bug is still erroring, so it looks fixed.\n\n`)
     )
   }
   if (change.to === 'ignored') {
     return (
       `⟢ Sentry issue you ticketed was archived in Sentry by hand — Tom's doing, not yours.\n\n` +
-      `Decide what that means for the card and act on it.\n\n`
+      `Nothing to do unless it tells you something about the bug.\n\n`
     )
   }
   return `⟢ Sentry issue you ticketed moved ${change.from} → ${change.to}.\n\n`
@@ -139,16 +149,15 @@ async function deliverSentryStatusChange(change: SentryStatusChange): Promise<vo
   const msg =
     statusHeader(change) +
     `${change.shortId} [${change.project}]\n${fenceUntrusted('Sentry issue title', change.title)}\n` +
-    `${change.cardId ? `Roadmap card: ${change.cardId}\n` : ''}` +
+    `${change.bug ? `Bug: ${change.bug}\n` : ''}` +
     `${
-      change.cardSiblings.length > 0
-        ? `Also on that card: ${change.cardSiblings
+      change.bugSiblings.length > 0
+        ? `Also under that bug: ${change.bugSiblings
             .map((sib) => `${sib.shortId} (${sib.status})`)
             .join(', ')}\n`
         : ''
     }${change.permalink}\n\n` +
-    '(list_roadmap to find the card, move_roadmap_card to move it. Keep what you say ' +
-    'to Tom to a line.)'
+    '(Keep what you say to Tom to a line.)'
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       await window.mucka.sendChatMessage(msg)

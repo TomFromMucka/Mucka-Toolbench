@@ -335,6 +335,34 @@ export interface JobsAutoStatus {
   queued: string[]
 }
 
+/**
+ * What Mucka wants done about a job when she rules a Sentry issue a ticket:
+ * start one, hand the issue to a job already open on the same bug, or
+ * leave it for Tom to start.
+ */
+export type SentryJobChoice = { kind: 'start' } | { kind: 'join'; jobId: JobId } | { kind: 'none' }
+
+/** What actually happened, which can differ from the choice: see `JobManager.onSentryTicket`. */
+export type SentryJobOutcome =
+  | { kind: 'started'; jobId: JobId }
+  /** The issue already had its own job open. */
+  | { kind: 'existing'; jobId: JobId }
+  /** `sameBug`: the bug matched, not a job she named. */
+  | { kind: 'joined'; jobId: JobId; sameBug: boolean }
+  | { kind: 'queued'; position: number }
+  | { kind: 'not-started'; why: string }
+
+/** An open job as Mucka sees it, with the bug its Sentry issue was filed under. */
+export interface JobOverview {
+  id: JobId
+  title: string
+  state: Job['state']
+  held: boolean
+  pr: JobPr | null
+  source: string | null
+  bug: string | null
+}
+
 /** What a job started from Intake opens with. */
 export interface JobBrief {
   title: string
@@ -1006,11 +1034,15 @@ export interface MuckaApi {
     issueId: string
     verdict: SentryVerdict
     reason: string
-    cardId?: string | null
+    bug?: string | null
     /** Counts at verdict time — the baseline a later escalation is measured against. */
     count?: number
     userCount?: number
-  }): Promise<void>
+    /** For a ticket: start a job (the default), hand it to an open one, or neither. */
+    job?: SentryJobChoice
+  }): Promise<SentryJobOutcome | null>
+  /** Open jobs, each with the card of the Sentry issue it started from. */
+  listJobOverview(): Promise<JobOverview[]>
   /** Issues seen but not yet ruled on — drives the triage queue. */
   listUntriagedSentry(): Promise<SentryTriage[]>
   /** Whether the poller has actually succeeded, so an empty list can be read honestly. */
@@ -1256,8 +1288,11 @@ export interface SentryTriage {
   triagedAt: number | null
   verdict: SentryVerdict | null
   reason: string | null
-  /** Roadmap card she opened, when the verdict was `ticket`. */
-  cardId: string | null
+  /**
+   * The bug she filed a `ticket` under: a short name sibling issues share.
+   * Rows from before 15 Oct hold the id of the roadmap card she used to open.
+   */
+  bug: string | null
   /** Event count when the verdict was recorded — the escalation baseline. */
   triageCount: number
   /** Users affected when the verdict was recorded. */
@@ -1301,8 +1336,8 @@ export interface SentryNewIssueEvent {
  * "resolved", "ignored"), so a regression reads as resolved → unresolved
  * with substatus "regressed".
  */
-/** Another issue on the same roadmap card, and where it stands. */
-export interface SentryCardSibling {
+/** Another issue filed under the same bug, and where it stands. */
+export interface SentryBugSibling {
   shortId: string
   /** Last status the cockpit observed — "unresolved" until told otherwise. */
   status: string
@@ -1314,13 +1349,13 @@ export interface SentryStatusChange {
   title: string
   project: string
   permalink: string
-  /** The roadmap card the ticket verdict opened. */
-  cardId: string | null
+  /** The bug the ticket verdict filed it under. */
+  bug: string | null
   /**
-   * Other issues on that same card. A card with a sibling still unresolved
-   * isn't finished, however resolved this one issue is.
+   * Other issues under that same bug. A bug with a sibling still unresolved
+   * isn't fixed, however resolved this one issue is.
    */
-  cardSiblings: SentryCardSibling[]
+  bugSiblings: SentryBugSibling[]
   /** Status when the PM was last brought up to date. */
   from: string
   to: string
