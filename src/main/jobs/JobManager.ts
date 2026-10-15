@@ -28,6 +28,7 @@ import { sentryBrief } from './sentryBrief'
 import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
 import { withTomsNote } from './tomsNote'
 import { JOB_RULES } from './jobRules'
+import { decideProposal, getPendingProposal } from '../db/jobProposals'
 import {
   closeJob,
   getJob,
@@ -530,6 +531,29 @@ export class JobManager {
       prompt: withTomsNote(ticketBrief(ticket.reference), note),
       source
     })
+  }
+
+  /**
+   * Start the job another job's Claude proposed. Its brief is that Claude's
+   * own words, which Tom has just read in Intake, so it goes in as written,
+   * after a line saying where it came from.
+   */
+  async startProposal(id: string, note?: string): Promise<Job> {
+    const proposal = getPendingProposal(id)
+    if (!proposal) throw new Error('That proposal has already been started or dismissed.')
+    const from = proposal.parentTitle
+      ? `"${proposal.parentTitle}" (${proposal.parentJob})`
+      : proposal.parentJob
+    const job = await this.create({
+      title: proposal.title,
+      prompt: withTomsNote(
+        `This job was spun off from another job, ${from}, by the Claude working it. Its brief:\n\n${proposal.brief}`,
+        note
+      ),
+      source: `job:${proposal.parentJob}`
+    })
+    decideProposal(id, 'started', job.id)
+    return job
   }
 
   async startSentryById(issueId: string, note?: string): Promise<Job> {

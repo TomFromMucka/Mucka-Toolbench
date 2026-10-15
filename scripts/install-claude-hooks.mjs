@@ -8,7 +8,8 @@
  * Copies scripts/claude-hooks/mucka-pending.sh to ~/.claude/ and wires it
  * into ~/.claude/settings.json as the PermissionRequest hook plus the
  * PostToolUse / Stop / UserPromptSubmit hooks that clear it, plus Pre/PostToolUse
- * hooks that tell mucka-agent-state.sh a Claude is working again. Hooks are
+ * hooks that tell mucka-agent-state.sh a Claude is working again. Also copies
+ * mucka-job.sh, which a job's Claude runs to propose a spin-off job. Hooks are
  * user-wide, but the script exits at once unless $MUCKA_TERMINAL is set,
  * so only Claudes the cockpit launched are affected.
  *
@@ -22,9 +23,13 @@ import { fileURLToPath } from 'node:url'
 
 const apply = process.argv.includes('--apply')
 const here = dirname(fileURLToPath(import.meta.url))
-const source = join(here, 'claude-hooks', 'mucka-pending.sh')
 const claudeDir = join(homedir(), '.claude')
 const target = join(claudeDir, 'mucka-pending.sh')
+// mucka-job.sh is no hook: a job's Claude runs it to propose a spin-off job.
+const SCRIPTS = ['mucka-pending.sh', 'mucka-job.sh'].map((name) => ({
+  source: join(here, 'claude-hooks', name),
+  target: join(claudeDir, name)
+}))
 const settingsPath = join(claudeDir, 'settings.json')
 
 const stateScript = join(claudeDir, 'mucka-agent-state.sh')
@@ -51,6 +56,18 @@ const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath
 settings.hooks ??= {}
 
 const changes = []
+
+// Proposing a spin-off only writes a file for Tom to look at, so it needs no
+// permission prompt of its own: Start in Intake is his yes. Both spellings,
+// because the rule matches the command as Claude types it.
+const jobScript = join(claudeDir, 'mucka-job.sh')
+settings.permissions ??= {}
+settings.permissions.allow ??= []
+for (const rule of [`Bash(${jobScript} propose:*)`, 'Bash(~/.claude/mucka-job.sh propose:*)']) {
+  if (settings.permissions.allow.includes(rule)) continue
+  settings.permissions.allow.push(rule)
+  changes.push(`permission: ${rule}`)
+}
 for (const want of WANTED) {
   const { command } = want
   const groups = (settings.hooks[want.event] ??= [])
@@ -61,23 +78,27 @@ for (const want of WANTED) {
   changes.push(`${want.event}: ${command}`)
 }
 
-const scriptChanged =
-  !existsSync(target) || readFileSync(target, 'utf8') !== readFileSync(source, 'utf8')
+const changedScripts = SCRIPTS.filter(
+  ({ source, target }) =>
+    !existsSync(target) || readFileSync(target, 'utf8') !== readFileSync(source, 'utf8')
+)
 
-if (!scriptChanged && changes.length === 0) {
+if (changedScripts.length === 0 && changes.length === 0) {
   console.log('Needs-you hook already installed and up to date.')
   process.exit(0)
 }
 
-if (scriptChanged) console.log(`${apply ? 'Copying' : 'Would copy'} ${source} → ${target}`)
-for (const c of changes) console.log(`${apply ? 'Adding' : 'Would add'} hook  ${c}`)
+for (const { source, target } of changedScripts) {
+  console.log(`${apply ? 'Copying' : 'Would copy'} ${source} → ${target}`)
+}
+for (const c of changes) console.log(`${apply ? 'Adding' : 'Would add'} ${c}`)
 
 if (!apply) {
   console.log('\nNothing written. Re-run with `npm run hooks:install -- --apply` to install.')
   process.exit(0)
 }
 
-if (scriptChanged) {
+for (const { source, target } of changedScripts) {
   copyFileSync(source, target)
   chmodSync(target, 0o755)
 }

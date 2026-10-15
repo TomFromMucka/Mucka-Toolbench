@@ -4,6 +4,7 @@ import type {
   AgentId,
   AgentStatusEvent,
   Job,
+  JobProposal,
   JobBrief,
   JobsAutoStatus,
   Ticket,
@@ -178,6 +179,17 @@ const muckaApi: MuckaApi = {
     const listener = (_e: Electron.IpcRendererEvent, jobs: Job[]) => handler(jobs)
     ipcRenderer.on('jobs:update', listener)
     return () => ipcRenderer.off('jobs:update', listener)
+  },
+  listJobProposals: () => ipcRenderer.invoke('proposals:list') as Promise<JobProposal[]>,
+  startJobProposal: (id: string, note?: string) =>
+    ipcRenderer.invoke('proposals:start', id, note) as Promise<Job>,
+  dismissJobProposal: (id: string) =>
+    ipcRenderer.invoke('proposals:dismiss', id) as Promise<void>,
+  onJobProposalsUpdate: (handler: (proposals: JobProposal[]) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, proposals: JobProposal[]) =>
+      handler(proposals)
+    ipcRenderer.on('proposals:update', listener)
+    return () => ipcRenderer.off('proposals:update', listener)
   },
   onJobStatus: (handler: (event: JobStatusEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, event: JobStatusEvent) => handler(event)

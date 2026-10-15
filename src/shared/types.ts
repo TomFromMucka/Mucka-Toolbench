@@ -343,6 +343,22 @@ export interface JobBrief {
   source: string
 }
 
+/**
+ * A job the Claude in another job proposed, for work it found that belongs
+ * in a PR of its own. It waits in Intake until Tom starts or dismisses it.
+ */
+export interface JobProposal {
+  id: string
+  /** The job it came from. */
+  parentJob: JobId
+  /** That job's title when the proposal was read, or null if it's gone. */
+  parentTitle: string | null
+  title: string
+  /** The new job's opening message, as the proposing Claude wrote it. */
+  brief: string
+  createdAt: number
+}
+
 export interface JobPr {
   number: number
   url: string
@@ -860,6 +876,11 @@ export interface MuckaApi {
   openTicketFile(reference: string, attachmentId: string): Promise<void>
   setJobsAuto(enabled: boolean): Promise<JobsAutoStatus>
   onJobsUpdate(handler: (jobs: Job[]) => void): () => void
+  /** Jobs other jobs' Claudes proposed, waiting for Tom. */
+  listJobProposals(): Promise<JobProposal[]>
+  startJobProposal(id: string, note?: string): Promise<Job>
+  dismissJobProposal(id: string): Promise<void>
+  onJobProposalsUpdate(handler: (proposals: JobProposal[]) => void): () => void
   onJobStatus(handler: (event: JobStatusEvent) => void): () => void
   getScrollback(terminalId: TerminalId): Promise<string>
 

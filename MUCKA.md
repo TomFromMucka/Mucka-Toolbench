@@ -75,8 +75,15 @@ or "Tom, eyes here".
   points the worktree at a fresh main), *Amend*, *Hold* / *Release*. A
   held agent says so in its terminal header, with *release*, in every
   layout.
-- **Intake** has two tabs in the terminal's font, *support* and
-  *sentry*, each with its open count.
+- **Intake** has three tabs in the terminal's font, *support*,
+  *sentry* and *spin-offs*, each with its open count.
+  - *spin-offs* are jobs a job's Claude proposed with
+    `~/.claude/mucka-job.sh propose "title"` (brief on stdin), for work
+    that belongs in a PR of its own. Each opens to its brief, with the
+    note box and *Start job*, or *dismiss*. Nothing starts by itself, so
+    one Claude can't set off a chain; the job sheet logs each proposal.
+    Every job's Claude is told about it in its standing rules, and
+    `hooks:install` copies the script and allows it without a prompt.
   - *support* is the `/admin/support` desk without the browser: the same
     status and kind filters, search, grouping and badges (awaiting reply,
     chase / follow up). Clicking a ticket opens it in full: thread,
@@ -309,6 +316,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-15 — Jobs can propose spin-off jobs: a job's Claude runs `mucka-job.sh propose`, and the proposal waits in Intake → spin-offs for Tom to start or dismiss.
 - 2026-10-12 — Check it merged into Waiting on you (blocked first); a Claude with a Monitor or background command still running stays On the tools; worktree agents get Finish / Amend / Hold.
 - 2026-10-10 — Waiting on you is active work only: a held or finished job stays in Idle / On hold even when its Claude asks something.
 - 2026-10-10 — A terminal's orange flag line from Mucka has a "clear" button, so Tom can dismiss a flag that's out of date.
