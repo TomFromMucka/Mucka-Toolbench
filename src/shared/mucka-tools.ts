@@ -724,7 +724,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'triage_sentry_issue',
     description:
-      "Record your verdict on a Sentry issue and act on it. verdict 'ticket' = real, you've opened a roadmap card (pass its id) — pass it, because it's what lets the cockpit tell you later that the issue was resolved (or came back) so you can move the card; 'noise' = not worth Tom's time, which ALSO archives the issue in Sentry so it stops coming back; 'watch' = might matter but there isn't enough signal yet, left alone in Sentry — a watched issue is handed back to you automatically if it escalates, so watch is a safe holding answer rather than a dead end. Every issue you're handed must end with one of these — an untriaged issue is re-queued. Auto-executes, so be sure before you call it with 'noise'. Refuses to archive anything with users affected or high priority — those are always a ticket.",
+      "Record your verdict on a Sentry issue and act on it. verdict 'ticket' = real and worth a fix: it starts a job (see `job`), and the cockpit tells you later when the issue is resolved or comes back; 'noise' = not worth Tom's time, which ALSO archives the issue in Sentry so it stops coming back; 'watch' = might matter but there isn't enough signal yet, left alone in Sentry — a watched issue is handed back to you automatically if it escalates, so watch is a safe holding answer rather than a dead end. Every issue you're handed must end with one of these — an untriaged issue is re-queued. Auto-executes, so be sure before you call it with 'noise'. Refuses to archive anything with users affected or high priority — those are always a ticket.",
     parameters: {
       type: 'object',
       properties: {
@@ -742,25 +742,36 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
           description:
             'One line on why — this is the audit trail on the job sheet, so make it the reason a human would give, not a restatement of the title.'
         },
-        card_id: {
+        bug: {
           type: 'string',
           description:
-            "Roadmap card id when the verdict is 'ticket'. Create the card first with create_roadmap_card, then pass its id here."
+            "For a ticket: a short name for the bug, in lowercase words joined by hyphens (e.g. 'voice-bridge-ws-handshake'). Sentry often files one bug as several issues; give every one of them the same name, copied from list_jobs or the open Sentry jobs you were shown, so they land on one job. A new bug gets a new name. Don't open a roadmap card for a Sentry issue: Intake is where they live."
+        },
+        job: {
+          type: 'string',
+          description:
+            "For a ticket only: what to do about a job. 'start' (the default) starts one, or queues it when three Sentry jobs are already open. An open job's id (from list_jobs) hands the issue to that job instead, for when a job is already fixing the same bug. 'none' leaves it for Tom to start. Whatever you say, an issue whose bug already has an open job goes to that job, never to a second one."
         }
       },
       required: ['issue', 'verdict', 'reason']
     }
   },
   {
+    name: 'list_jobs',
+    description:
+      "Open jobs (each one a Claude in its own worktree, ending in one PR): id, title, state, whether Tom has put it on hold, its PR, where it came from (e.g. sentry:MUCKA-WEB-38) and, for a Sentry job, the bug it's fixing. Call this before ruling a Sentry issue a ticket, to spot a job already fixing the same bug, and when Tom asks what's being worked on. Auto-executes.",
+    parameters: { type: 'object', properties: {}, required: [] }
+  },
+  {
     name: 'list_roadmap',
     description:
-      "Returns every roadmap kanban card grouped by column (backlog, issues, next, doing, shipped, parked). Use this BEFORE answering 'what's next?', 'what are we working on?', or before suggesting where a new ticket should land — you need to see the current state to make sensible calls. Output includes id, title, body excerpt, and tags per card. Auto-executes.",
+      "Returns the roadmap, which lives in the Mucka app (/admin/roadmap), grouped by column: oversight (themes the nightly oversight agent proposed from what customers asked Mucka for, waiting for someone to judge them), backlog, next, doing, shipped (the latest 25), parked. Each column is ordered by how many businesses asked. Use this BEFORE answering 'what's next?', 'what are we working on?', 'what are customers asking for?', or before suggesting where a new ticket should land. Output includes id, title, tags, how many firms asked, marketability, and a body or summary excerpt. Auto-executes.",
     parameters: { type: 'object', properties: {}, required: [] }
   },
   {
     name: 'create_roadmap_card',
     description:
-      "Create a new ticket on the roadmap kanban. Use when Tom describes a new feature, bug, or idea worth tracking. Default the column to 'backlog' for rough ideas, 'next' for things Tom flagged as priority, 'doing' only if Tom explicitly says he's starting it now. 'issues' is for production errors off Sentry triage — every card you open for a Sentry ticket goes there, and nothing else does. Body supports markdown. Auto-executes.",
+      "Create a new ticket on the roadmap kanban. Use when Tom describes a new feature, bug, or idea worth tracking. Default the column to 'backlog' for rough ideas, 'next' for things Tom flagged as priority, 'doing' only if Tom explicitly says he's starting it now. Never 'oversight': that column is the nightly agent's. Sentry issues never get a card: they live in Intake. Body supports markdown. Auto-executes.",
     parameters: {
       type: 'object',
       properties: {
@@ -772,7 +783,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         column: {
           type: 'string',
           description: 'Which lane to land in.',
-          enum: ['backlog', 'issues', 'next', 'doing', 'shipped', 'parked']
+          enum: ['backlog', 'next', 'doing', 'shipped', 'parked']
         },
         body: {
           type: 'string',
@@ -813,7 +824,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'move_roadmap_card',
     description:
-      "Move a roadmap card to a different lane (e.g. backlog → next when Tom prioritises it, issues → doing when someone picks a production bug up, doing → shipped when work lands). Use when Tom says 'pull X into next', 'mark Y as done', 'park that one', etc. Auto-executes.",
+      "Move a roadmap card to a different lane (e.g. oversight → backlog when Tom agrees a theme is worth having, backlog → next when he prioritises it, doing → shipped when work lands, oversight → parked for a theme he doesn't want). Use when Tom says 'pull X into next', 'mark Y as done', 'park that one', etc. Auto-executes.",
     parameters: {
       type: 'object',
       properties: {
@@ -824,7 +835,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
         column: {
           type: 'string',
           description: 'Destination lane.',
-          enum: ['backlog', 'issues', 'next', 'doing', 'shipped', 'parked']
+          enum: ['oversight', 'backlog', 'next', 'doing', 'shipped', 'parked']
         }
       },
       required: ['id', 'column']
@@ -833,7 +844,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'delete_roadmap_card',
     description:
-      "Permanently remove a roadmap card. REQUIRES Tom's confirmation — destructive. Prefer move_roadmap_card to 'parked' for cold ideas; only delete when the card is plainly wrong, duplicate, or Tom explicitly says drop it.",
+      "Permanently remove a roadmap card. REQUIRES Tom's confirmation — destructive. Only cards a person added can be deleted; an oversight theme is parked instead, or the nightly agent proposes it again. Prefer move_roadmap_card to 'parked' for cold ideas; only delete when the card is plainly wrong, duplicate, or Tom explicitly says drop it.",
     parameters: {
       type: 'object',
       properties: {

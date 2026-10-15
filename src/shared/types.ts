@@ -335,6 +335,34 @@ export interface JobsAutoStatus {
   queued: string[]
 }
 
+/**
+ * What Mucka wants done about a job when she rules a Sentry issue a ticket:
+ * start one, hand the issue to a job already open on the same bug, or
+ * leave it for Tom to start.
+ */
+export type SentryJobChoice = { kind: 'start' } | { kind: 'join'; jobId: JobId } | { kind: 'none' }
+
+/** What actually happened, which can differ from the choice: see `JobManager.onSentryTicket`. */
+export type SentryJobOutcome =
+  | { kind: 'started'; jobId: JobId }
+  /** The issue already had its own job open. */
+  | { kind: 'existing'; jobId: JobId }
+  /** `sameBug`: the bug matched, not a job she named. */
+  | { kind: 'joined'; jobId: JobId; sameBug: boolean }
+  | { kind: 'queued'; position: number }
+  | { kind: 'not-started'; why: string }
+
+/** An open job as Mucka sees it, with the bug its Sentry issue was filed under. */
+export interface JobOverview {
+  id: JobId
+  title: string
+  state: Job['state']
+  held: boolean
+  pr: JobPr | null
+  source: string | null
+  bug: string | null
+}
+
 /** What a job started from Intake opens with. */
 export interface JobBrief {
   title: string
@@ -605,16 +633,21 @@ export interface BroadcastResult {
 /* ─── Roadmap kanban ─────────────────────────────────────────────────── */
 
 /**
- * Kanban columns, in left-to-right display order.
- * - backlog: raw ideas that aren't queued yet
- * - issues:  production errors, straight off Sentry triage — a lane of
- *            their own so a real bug can't sink into the idea pile
- * - next:    queued — pull next when there's capacity
- * - doing:   in flight right now
- * - shipped: landed (replaces the manual Recent-changes log over time)
- * - parked:  not now, but worth keeping (low-priority or paused)
+ * Kanban columns, in left-to-right display order. The board lives in the
+ * Mucka app (/admin/roadmap); these are its plan states as the cockpit
+ * names them.
+ * - oversight: themes the nightly oversight agent proposed from what
+ *              customers asked Mucka for, until somebody moves them on
+ * - backlog:   ideas that aren't queued yet
+ * - next:      queued — pull next when there's capacity
+ * - doing:     in flight right now
+ * - shipped:   landed
+ * - parked:    not now, but worth keeping
+ * Sentry issues are not on the roadmap: they live in Intake.
  */
-export type RoadmapColumn = 'backlog' | 'issues' | 'next' | 'doing' | 'shipped' | 'parked'
+export type RoadmapColumn = 'oversight' | 'backlog' | 'next' | 'doing' | 'shipped' | 'parked'
+
+export type RoadmapBuildStatus = 'not_built' | 'partial' | 'in_progress' | 'built'
 
 export interface RoadmapCard {
   id: string
@@ -622,22 +655,51 @@ export interface RoadmapCard {
   /** Optional longer body — markdown-ish plain text. */
   body: string
   column: RoadmapColumn
-  /** Position within the column, lower first. */
-  sortOrder: number
   tags: string[]
   createdAt: number
   updatedAt: number
+  /** The app's one-sentence description of the need. */
+  summary: string | null
+  note: string | null
+  pr: string | null
+  buildStatus: RoadmapBuildStatus
+  /** 1-10, or null when nobody has scored it. */
+  marketability: number | null
+  /** `oversight`: the nightly agent proposed it. `human`: somebody added it. */
+  origin: 'oversight' | 'human'
+  /** Distinct businesses that asked for it, across findings and tickets. */
+  accounts: number
+  mentions: number
+  lastAskedAt: number | null
+}
+
+/** One customer asking for a card's need: an oversight finding or a feature-request ticket. */
+export interface RoadmapDemand {
+  kind: 'finding' | 'ticket'
+  /** Customer-sourced text. Fence it before it reaches a model. */
+  summary: string
+  business: string | null
+  at: number
+  /** TKT-… for a ticket. */
+  reference: string | null
+}
+
+export interface RoadmapState {
+  cards: RoadmapCard[]
+  /** Why the last look at the app failed; the cards are the last good copy. */
+  error: string | null
+  polledAt: number | null
+  /** Demand the nightly assignment hasn't put on a theme yet. */
+  unassigned: { findings: number; tickets: number }
 }
 
 export interface RoadmapCreateInput {
-  /** Optional client-generated id so attachments saved before create resolve. */
-  id?: string
+  /** The id the modal filed pasted images under before the app gave the card one. */
+  draftId?: string
   title: string
   body?: string
   column: RoadmapColumn
   tags?: string[]
-  /** When set, insert at this sortOrder; otherwise append to the end of the column. */
-  sortOrder?: number
 }
 
 export interface RoadmapAttachment {
@@ -656,8 +718,6 @@ export interface RoadmapUpdateInput {
 export interface RoadmapMoveInput {
   id: string
   column: RoadmapColumn
-  /** New position in target column (0-based). Omit to append to end. */
-  sortOrder?: number
 }
 
 /* ─── Filesystem (Explorer panel) ────────────────────────────────────── */
@@ -925,8 +985,16 @@ export interface MuckaApi {
   rememberMemory(input: MemoryWriteInput): Promise<Memory>
   forgetMemory(topic: string): Promise<boolean>
 
-  /* Roadmap kanban — sqlite-backed cards, mirrored to the git-ignored ROADMAP.local.md (private) */
+  /* Roadmap kanban — the Mucka app's board, mirrored to the git-ignored ROADMAP.local.md (private) */
   listRoadmap(): Promise<RoadmapCard[]>
+  /** The cards plus whether the last look at the app worked. */
+  getRoadmapState(): Promise<RoadmapState>
+  /** Look at the app now rather than at the next five-minute poll. */
+  refreshRoadmap(): Promise<void>
+  /** Who asked for a card's need. */
+  getRoadmapDemand(id: string): Promise<RoadmapDemand[]>
+  /** Notes on a Sentry issue's bug from the roadmap's old Issues lane, if it had a card there. */
+  getSentryBugNotes(issueId: string): Promise<SentryBugNotes | null>
   createRoadmapCard(input: RoadmapCreateInput): Promise<RoadmapCard>
   updateRoadmapCard(input: RoadmapUpdateInput): Promise<RoadmapCard>
   moveRoadmapCard(input: RoadmapMoveInput): Promise<RoadmapCard>
@@ -1006,11 +1074,15 @@ export interface MuckaApi {
     issueId: string
     verdict: SentryVerdict
     reason: string
-    cardId?: string | null
+    bug?: string | null
     /** Counts at verdict time — the baseline a later escalation is measured against. */
     count?: number
     userCount?: number
-  }): Promise<void>
+    /** For a ticket: start a job (the default), hand it to an open one, or neither. */
+    job?: SentryJobChoice
+  }): Promise<SentryJobOutcome | null>
+  /** Open jobs, each with the card of the Sentry issue it started from. */
+  listJobOverview(): Promise<JobOverview[]>
   /** Issues seen but not yet ruled on — drives the triage queue. */
   listUntriagedSentry(): Promise<SentryTriage[]>
   /** Whether the poller has actually succeeded, so an empty list can be read honestly. */
@@ -1256,8 +1328,11 @@ export interface SentryTriage {
   triagedAt: number | null
   verdict: SentryVerdict | null
   reason: string | null
-  /** Roadmap card she opened, when the verdict was `ticket`. */
-  cardId: string | null
+  /**
+   * The bug she filed a `ticket` under: a short name sibling issues share.
+   * Rows from before 15 Oct hold the id of the roadmap card she used to open.
+   */
+  bug: string | null
   /** Event count when the verdict was recorded — the escalation baseline. */
   triageCount: number
   /** Users affected when the verdict was recorded. */
@@ -1301,8 +1376,15 @@ export interface SentryNewIssueEvent {
  * "resolved", "ignored"), so a regression reads as resolved → unresolved
  * with substatus "regressed".
  */
-/** Another issue on the same roadmap card, and where it stands. */
-export interface SentryCardSibling {
+/** The notes on a bug's card from the roadmap's old Issues lane. */
+export interface SentryBugNotes {
+  title: string
+  body: string
+  updatedAt: number
+}
+
+/** Another issue filed under the same bug, and where it stands. */
+export interface SentryBugSibling {
   shortId: string
   /** Last status the cockpit observed — "unresolved" until told otherwise. */
   status: string
@@ -1314,13 +1396,13 @@ export interface SentryStatusChange {
   title: string
   project: string
   permalink: string
-  /** The roadmap card the ticket verdict opened. */
-  cardId: string | null
+  /** The bug the ticket verdict filed it under. */
+  bug: string | null
   /**
-   * Other issues on that same card. A card with a sibling still unresolved
-   * isn't finished, however resolved this one issue is.
+   * Other issues under that same bug. A bug with a sibling still unresolved
+   * isn't fixed, however resolved this one issue is.
    */
-  cardSiblings: SentryCardSibling[]
+  bugSiblings: SentryBugSibling[]
   /** Status when the PM was last brought up to date. */
   from: string
   to: string

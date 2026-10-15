@@ -15,7 +15,10 @@
 #   clear       PostToolUse / Stop / UserPromptSubmit. The wait is over.
 #               On UserPromptSubmit in a job's terminal it also records
 #               Tom's message in ~/.claude/mucka-jobs/<job>.json, so the
-#               job's card can be titled from his first one.
+#               job's card can be titled from his first one. In a job's
+#               terminal it also hands over any note the cockpit left in
+#               ~/.claude/mucka-jobs/<job>.notes, as context on PostToolUse /
+#               UserPromptSubmit and as a reason to keep going on Stop.
 #
 # Measured on Claude Code 2.1.292: while this hook waits, the terminal keeps
 # showing the dialog or the question and still takes a keypress, so
@@ -110,6 +113,25 @@ case "$mode" in
           lastPrompt: $e.prompt,
           ts: $ts
         }' > "${job_file}.tmp" && mv -f "${job_file}.tmp" "$job_file"
+    fi
+    # A note the cockpit left for this job (another Sentry issue on its
+    # card): hand it over once. The mv claims it, so two tools finishing
+    # together can't both deliver it. Stop keeps the turn going on it.
+    if [ -n "${MUCKA_JOB:-}" ]; then
+      case "$event" in PostToolUse|UserPromptSubmit|Stop)
+        notes="$HOME/.claude/mucka-jobs/$(printf '%s' "$MUCKA_JOB" | sed 's|[^A-Za-z0-9_-]|_|g').notes"
+        if [ -f "$notes" ] && mv -f "$notes" "${notes}.$$" 2>/dev/null; then
+          text="Note from the Mucka cockpit: $(cat "${notes}.$$")"
+          rm -f "${notes}.$$"
+          if [ "$event" = "Stop" ]; then
+            jq -cn --arg t "$text" '{decision: "block", reason: $t}'
+          else
+            jq -cn --arg e "$event" --arg t "$text" \
+              '{hookSpecificOutput: {hookEventName: $e, additionalContext: $t}}'
+          fi
+        fi
+        ;;
+      esac
     fi
     [ -f "$pending" ] || exit 0
     if [ "$event" = "PostToolUse" ]; then

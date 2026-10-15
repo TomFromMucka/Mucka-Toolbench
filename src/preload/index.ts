@@ -30,18 +30,24 @@ import type {
   RoadmapAttachment,
   RoadmapCard,
   RoadmapCreateInput,
+  RoadmapDemand,
   RoadmapMoveInput,
+  RoadmapState,
   RoadmapUpdateInput,
   GitStatus,
   GitStatusEvent,
   JobEvent,
   SentryHealth,
+  SentryBugNotes,
   SentryIssue,
   SentryNewIssueEvent,
   SentryStatus,
   SentryStatusChange,
   SentryTriage,
   SentryVerdict,
+  SentryJobChoice,
+  SentryJobOutcome,
+  JobOverview,
   MicAccess,
   MuckaApi,
   MuckaStatus,
@@ -233,6 +239,12 @@ const muckaApi: MuckaApi = {
   forgetMemory: (topic: string) => ipcRenderer.invoke('memory:forget', topic) as Promise<boolean>,
 
   listRoadmap: () => ipcRenderer.invoke('roadmap:list') as Promise<RoadmapCard[]>,
+  getRoadmapState: () => ipcRenderer.invoke('roadmap:state') as Promise<RoadmapState>,
+  refreshRoadmap: () => ipcRenderer.invoke('roadmap:refresh') as Promise<void>,
+  getRoadmapDemand: (id: string) =>
+    ipcRenderer.invoke('roadmap:demand', id) as Promise<RoadmapDemand[]>,
+  getSentryBugNotes: (issueId: string) =>
+    ipcRenderer.invoke('sentry:bugNotes', issueId) as Promise<SentryBugNotes | null>,
   createRoadmapCard: (input: RoadmapCreateInput) =>
     ipcRenderer.invoke('roadmap:create', input) as Promise<RoadmapCard>,
   updateRoadmapCard: (input: RoadmapUpdateInput) =>
@@ -335,10 +347,12 @@ const muckaApi: MuckaApi = {
     issueId: string
     verdict: SentryVerdict
     reason: string
-    cardId?: string | null
+    bug?: string | null
     count?: number
     userCount?: number
-  }) => ipcRenderer.invoke('sentry:triage', input) as Promise<void>,
+    job?: SentryJobChoice
+  }) => ipcRenderer.invoke('sentry:triage', input) as Promise<SentryJobOutcome | null>,
+  listJobOverview: () => ipcRenderer.invoke('jobs:overview') as Promise<JobOverview[]>,
   listUntriagedSentry: () => ipcRenderer.invoke('sentry:untriaged') as Promise<SentryTriage[]>,
   getSentryHealth: () => ipcRenderer.invoke('sentry:health') as Promise<SentryHealth>,
   onSentryNewIssue: (handler: (event: SentryNewIssueEvent) => void): (() => void) => {
