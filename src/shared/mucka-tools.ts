@@ -724,7 +724,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'triage_sentry_issue',
     description:
-      "Record your verdict on a Sentry issue and act on it. verdict 'ticket' = real, you've opened a roadmap card (pass its id) — pass it, because it's what lets the cockpit tell you later that the issue was resolved (or came back) so you can move the card; 'noise' = not worth Tom's time, which ALSO archives the issue in Sentry so it stops coming back; 'watch' = might matter but there isn't enough signal yet, left alone in Sentry — a watched issue is handed back to you automatically if it escalates, so watch is a safe holding answer rather than a dead end. Every issue you're handed must end with one of these — an untriaged issue is re-queued. Auto-executes, so be sure before you call it with 'noise'. Refuses to archive anything with users affected or high priority — those are always a ticket.",
+      "Record your verdict on a Sentry issue and act on it. verdict 'ticket' = real and worth a fix: it starts a job (see `job`), and the cockpit tells you later when the issue is resolved or comes back; 'noise' = not worth Tom's time, which ALSO archives the issue in Sentry so it stops coming back; 'watch' = might matter but there isn't enough signal yet, left alone in Sentry — a watched issue is handed back to you automatically if it escalates, so watch is a safe holding answer rather than a dead end. Every issue you're handed must end with one of these — an untriaged issue is re-queued. Auto-executes, so be sure before you call it with 'noise'. Refuses to archive anything with users affected or high priority — those are always a ticket.",
     parameters: {
       type: 'object',
       properties: {
@@ -742,15 +742,15 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
           description:
             'One line on why — this is the audit trail on the job sheet, so make it the reason a human would give, not a restatement of the title.'
         },
-        card_id: {
+        bug: {
           type: 'string',
           description:
-            "Roadmap card id when the verdict is 'ticket'. Create the card first with create_roadmap_card, then pass its id here. When the issue is the same bug as one already ticketed, pass that issue's card rather than writing a new one."
+            "For a ticket: a short name for the bug, in lowercase words joined by hyphens (e.g. 'voice-bridge-ws-handshake'). Sentry often files one bug as several issues; give every one of them the same name, copied from list_jobs or the open Sentry jobs you were shown, so they land on one job. A new bug gets a new name. Don't open a roadmap card for a Sentry issue: Intake is where they live."
         },
         job: {
           type: 'string',
           description:
-            "For a ticket only: what to do about a job. 'start' (the default) starts one, or queues it when three Sentry jobs are already open. An open job's id (from list_jobs) hands the issue to that job instead, for when a job is already fixing the same bug. 'none' leaves it for Tom to start. Whatever you say, an issue whose card already has an open job goes to that job, never to a second one."
+            "For a ticket only: what to do about a job. 'start' (the default) starts one, or queues it when three Sentry jobs are already open. An open job's id (from list_jobs) hands the issue to that job instead, for when a job is already fixing the same bug. 'none' leaves it for Tom to start. Whatever you say, an issue whose bug already has an open job goes to that job, never to a second one."
         }
       },
       required: ['issue', 'verdict', 'reason']
@@ -759,7 +759,7 @@ export const TOOL_DEFINITIONS: readonly MuckaToolDefinition[] = [
   {
     name: 'list_jobs',
     description:
-      "Open jobs (each one a Claude in its own worktree, ending in one PR): id, title, state, whether Tom has put it on hold, its PR, where it came from (e.g. sentry:MUCKA-WEB-38) and, for a Sentry job, the roadmap card it's working. Call this before ruling a Sentry issue a ticket, to spot a job already fixing the same bug, and when Tom asks what's being worked on. Auto-executes.",
+      "Open jobs (each one a Claude in its own worktree, ending in one PR): id, title, state, whether Tom has put it on hold, its PR, where it came from (e.g. sentry:MUCKA-WEB-38) and, for a Sentry job, the bug it's fixing. Call this before ruling a Sentry issue a ticket, to spot a job already fixing the same bug, and when Tom asks what's being worked on. Auto-executes.",
     parameters: { type: 'object', properties: {}, required: [] }
   },
   {

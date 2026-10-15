@@ -825,7 +825,7 @@ function registerIpc(): void {
         issueId: string
         verdict: SentryVerdict
         reason: string
-        cardId?: string | null
+        bug?: string | null
         count?: number
         userCount?: number
         job?: SentryJobChoice
@@ -845,7 +845,7 @@ function registerIpc(): void {
               : `Sentry ${label} — watching: ${input.reason}`,
         tone: input.verdict === 'ticket' ? 'attention' : 'normal'
       })
-      // After the record, so the job step can see the card she just wrote.
+      // After the record, so the job step can see the bug she just named.
       if (input.verdict !== 'ticket' || !jobManager) return null
       return jobManager.onSentryTicket(input.issueId, input.job)
     }

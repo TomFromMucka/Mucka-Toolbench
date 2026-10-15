@@ -27,7 +27,7 @@ import type {
   Ticket
 } from '@shared/types'
 import { getValue, setValue } from '../db/kv'
-import { cardsByShortId, getTriage } from '../db/sentry'
+import { bugsByShortId, getTriage } from '../db/sentry'
 import { logEvent } from '../events/Events'
 import { sentryBrief, sentryJoinNote } from './sentryBrief'
 import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
@@ -568,9 +568,9 @@ export class JobManager {
    * hand it to a job already open on the same bug.
    *
    * Sentry often files one bug as several issues (one crash on two routes,
-   * one outage seen from three endpoints), and Mucka puts those on one card.
+   * one outage seen from three endpoints), and Mucka files those under one bug.
    * A job per issue had two or three Claudes fixing the same bug, so the
-   * card is the backstop: whatever she asked for, an issue whose card
+   * bug is the backstop: whatever she asked for, an issue whose bug
    * already has an open job goes to that job.
    */
   async onSentryTicket(
@@ -586,8 +586,8 @@ export class JobManager {
     const asked = choice.kind === 'join' ? open.find((j) => j.id === choice.jobId) : undefined
     if (asked && this.canTakeNotes(asked)) return this.join(issue, asked, false)
 
-    const onCard = this.openJobOnCard(getTriage(issueId)?.cardId ?? null, open)
-    if (onCard) return this.join(issue, onCard, true)
+    const onBug = this.openJobOnBug(getTriage(issueId)?.bug ?? null, open)
+    if (onBug) return this.join(issue, onBug, true)
 
     if (choice.kind === 'none')
       return { kind: 'not-started', why: 'Mucka left it for Tom to start' }
@@ -605,10 +605,10 @@ export class JobManager {
     }
   }
 
-  /** Open jobs as Mucka sees them, with the card each Sentry one is working. */
+  /** Open jobs as Mucka sees them, with the bug each Sentry one is fixing. */
   overview(): JobOverview[] {
     const jobs = listOpenJobs()
-    const cards = cardsByShortId(jobs.flatMap((j) => sentryShortId(j) ?? []))
+    const bugs = bugsByShortId(jobs.flatMap((j) => sentryShortId(j) ?? []))
     return jobs.map((j) => {
       const shortId = sentryShortId(j)
       return {
@@ -618,7 +618,7 @@ export class JobManager {
         held: j.held,
         pr: j.pr,
         source: j.source,
-        cardId: shortId ? (cards.get(shortId) ?? null) : null
+        bug: shortId ? (bugs.get(shortId) ?? null) : null
       }
     })
   }
@@ -628,29 +628,29 @@ export class JobManager {
     return job.state === 'setting-up' || job.state === 'ready'
   }
 
-  private openJobOnCard(cardId: string | null, open: Job[]): Job | null {
-    if (!cardId) return null
-    const cards = cardsByShortId(open.flatMap((j) => sentryShortId(j) ?? []))
+  private openJobOnBug(bug: string | null, open: Job[]): Job | null {
+    if (!bug) return null
+    const bugs = bugsByShortId(open.flatMap((j) => sentryShortId(j) ?? []))
     return (
       open.find((j) => {
         const shortId = sentryShortId(j)
-        return shortId !== null && cards.get(shortId) === cardId && this.canTakeNotes(j)
+        return shortId !== null && bugs.get(shortId) === bug && this.canTakeNotes(j)
       }) ?? null
     )
   }
 
-  private join(issue: SentryIssue, job: Job, sameCard: boolean): SentryJobOutcome {
+  private join(issue: SentryIssue, job: Job, sameBug: boolean): SentryJobOutcome {
     this.setQueue(this.queue().filter((id) => id !== issue.id))
     this.tellJob(job.id, sentryJoinNote(issue))
     logEvent({
       source: 'system',
       kind: 'jobs.sentry_joined',
       message: `Sentry ${issue.shortId} handed to "${job.title.slice(0, 70)}"${
-        sameCard ? ', which is already on its card' : ''
+        sameBug ? ', which is already fixing that bug' : ''
       }. No new job.`,
       tone: 'normal'
     })
-    return { kind: 'joined', jobId: job.id, sameCard }
+    return { kind: 'joined', jobId: job.id, sameBug }
   }
 
   /**

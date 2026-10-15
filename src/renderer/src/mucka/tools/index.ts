@@ -826,8 +826,8 @@ function describeJobOutcome(outcome: SentryJobOutcome): string {
     case 'existing':
       return `it already has job ${outcome.jobId}`
     case 'joined':
-      return outcome.sameCard
-        ? `no new job: handed to ${outcome.jobId}, which is already open on that card`
+      return outcome.sameBug
+        ? `no new job: handed to ${outcome.jobId}, which is already fixing that bug`
         : `handed to job ${outcome.jobId}`
     case 'queued':
       return `queued for a job, number ${outcome.position} in line`
@@ -836,14 +836,14 @@ function describeJobOutcome(outcome: SentryJobOutcome): string {
   }
 }
 
-/** One open job, with the card it's working when it came from Sentry. */
+/** One open job, with the bug it's fixing when it came from Sentry. */
 export function describeJobLine(job: JobOverview): string {
   const parts = [
     job.state === 'ready' ? null : job.state,
     job.held ? 'on hold' : null,
     job.pr ? `PR #${job.pr.number} ${job.pr.state}` : null,
     job.source,
-    job.cardId ? `card ${job.cardId}` : null
+    job.bug ? `bug ${job.bug}` : null
   ].filter((p): p is string => p !== null)
   return `· ${job.id} — ${job.title}${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`
 }
@@ -861,10 +861,8 @@ function makeTriageSentryIssue() {
     const verdict = parseVerdict(params['verdict'])
     const reason = parseString(params, 'reason').trim()
     if (!reason) throw new Error('reason must not be empty')
-    const cardId =
-      typeof params['card_id'] === 'string' && params['card_id'].trim().length > 0
-        ? (params['card_id'] as string).trim()
-        : null
+    const rawBug = params['bug']
+    const bug = typeof rawBug === 'string' && rawBug.trim() ? rawBug.trim().slice(0, 80) : null
     const job = parseJobChoice(params['job'])
 
     // The one hard rail on an auto-executing outward write: anything with
@@ -874,7 +872,7 @@ function makeTriageSentryIssue() {
       return (
         `Refused: ${issue.shortId} has ${issue.userCount} users affected` +
         `${issue.priority === 'high' ? ' and is high priority' : ''}, so it can't be archived as noise. ` +
-        'Open a card and triage it as a ticket instead.'
+        'Triage it as a ticket instead.'
       )
     }
 
@@ -887,7 +885,7 @@ function makeTriageSentryIssue() {
       issueId: issue.id,
       verdict,
       reason,
-      cardId,
+      bug,
       count: issue.count,
       userCount: issue.userCount,
       ...(verdict === 'ticket' ? { job } : {})
@@ -896,7 +894,7 @@ function makeTriageSentryIssue() {
     if (verdict === 'noise') return `${issue.shortId} archived in Sentry — ${reason}`
     if (verdict === 'ticket') {
       return (
-        `${issue.shortId} logged as a ticket${cardId ? ` (card ${cardId})` : ''} — ${reason}` +
+        `${issue.shortId} logged as a ticket${bug ? ` (bug ${bug})` : ''} — ${reason}` +
         (outcome ? `. ${describeJobOutcome(outcome)}` : '')
       )
     }

@@ -338,7 +338,7 @@ const muckaApi: MuckaApi = {
     issueId: string
     verdict: SentryVerdict
     reason: string
-    cardId?: string | null
+    bug?: string | null
     count?: number
     userCount?: number
     job?: SentryJobChoice

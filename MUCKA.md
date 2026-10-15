@@ -98,8 +98,10 @@ or "Tom, eyes here".
   - *sentry*: *Start job* opens a job whose Claude begins with the issue
     and the groundwork rules. With auto on (header switch), an issue
     Mucka triages as a ticket starts its own job, 3 open at most, the
-    rest queued. One bug gets one job: an issue on a card that already
-    has an open job is handed to that job as a note instead (Mucka can
+    rest queued. A ticket opens no roadmap card: Mucka names the bug,
+    and sibling issues share the name. One bug gets one job: an issue
+    whose bug already has an open job is handed to that job as a note
+    instead (Mucka can
     also name the job, or say not to start one), and the job's Claude
     gets the note at its next tool call or the end of its turn, through
     `mucka-pending.sh`.
@@ -313,7 +315,8 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
-- 2026-10-14 — One Sentry bug, one job: an issue on a card with an open job goes to that job as a note rather than starting another, and Mucka sees the open jobs when she triages.
+- 2026-10-15 — Sentry tickets open no roadmap card: Mucka names the bug instead, and every ticketed issue is watched for resolves and regressions whether or not it had a card.
+- 2026-10-14 — One Sentry bug, one job: an issue whose bug has an open job goes to that job as a note rather than starting another, and Mucka sees the open jobs when she triages.
 - 2026-10-12 — Check it merged into Waiting on you (blocked first); a Claude with a Monitor or background command still running stays On the tools; worktree agents get Finish / Amend / Hold.
 - 2026-10-10 — Waiting on you is active work only: a held or finished job stays in Idle / On hold even when its Claude asks something.
 - 2026-10-10 — A terminal's orange flag line from Mucka has a "clear" button, so Tom can dismiss a flag that's out of date.
