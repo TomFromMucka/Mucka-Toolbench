@@ -21,6 +21,7 @@ import type {
   JobOverview,
   JobPr,
   JobsAutoStatus,
+  SentryBugNotes,
   SentryIssue,
   SentryJobChoice,
   SentryJobOutcome,
@@ -28,6 +29,7 @@ import type {
 } from '@shared/types'
 import { getValue, setValue } from '../db/kv'
 import { bugsByShortId, getTriage } from '../db/sentry'
+import { legacyIssueCard } from '../db/roadmap'
 import { logEvent } from '../events/Events'
 import { sentryBrief, sentryJoinNote } from './sentryBrief'
 import { TICKET_JOB_PERMISSIONS, ticketBrief } from './ticketBrief'
@@ -521,7 +523,7 @@ export class JobManager {
     this.setQueue(this.queue().filter((id) => id !== issue.id))
     return this.create({
       title: `${issue.shortId}: ${issue.title}`,
-      prompt: withTomsNote(sentryBrief(issue), note),
+      prompt: withTomsNote(sentryBrief(issue, this.bugNotes(issue.id)), note),
       source: sentrySource(issue)
     })
   }
@@ -621,6 +623,12 @@ export class JobManager {
         bug: shortId ? (bugs.get(shortId) ?? null) : null
       }
     })
+  }
+
+  /** Notes from the bug's old Issues card, for issues triaged before the roadmap moved. */
+  bugNotes(issueId: string): SentryBugNotes | null {
+    const bug = getTriage(issueId)?.bug
+    return bug ? legacyIssueCard(bug) : null
   }
 
   /** A failed or finished job has no Claude left to read a note. */

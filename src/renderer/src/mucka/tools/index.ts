@@ -692,8 +692,8 @@ function makeDeployToVercel(deps: ToolDeps) {
 /* ─── Roadmap kanban tools ───────────────────────────────────────────── */
 
 const ROADMAP_COLUMNS: readonly RoadmapColumn[] = [
+  'oversight',
   'backlog',
-  'issues',
   'next',
   'doing',
   'shipped',
@@ -701,8 +701,8 @@ const ROADMAP_COLUMNS: readonly RoadmapColumn[] = [
 ] as const
 
 const ROADMAP_LABEL: Record<RoadmapColumn, string> = {
+  oversight: 'Oversight',
   backlog: 'Backlog',
-  issues: 'Issues',
   next: 'Next up',
   doing: 'Doing',
   shipped: 'Shipped',
@@ -710,12 +710,13 @@ const ROADMAP_LABEL: Record<RoadmapColumn, string> = {
 }
 
 function parseColumn(raw: unknown, label = 'column'): RoadmapColumn {
-  if (typeof raw !== 'string' || !(ROADMAP_COLUMNS as readonly string[]).includes(raw)) {
+  const column = ROADMAP_COLUMNS.find((c) => c === raw)
+  if (!column) {
     throw new Error(
       `${label} must be one of: ${ROADMAP_COLUMNS.join(', ')} — got ${JSON.stringify(raw)}`
     )
   }
-  return raw as RoadmapColumn
+  return column
 }
 
 function parseTags(raw: unknown): string[] {
@@ -727,15 +728,23 @@ function parseTags(raw: unknown): string[] {
 }
 
 function describeCardLine(card: RoadmapCard): string {
-  const bodyExcerpt =
-    card.body.trim().length === 0
-      ? ''
-      : ` — ${card.body.replace(/\s+/g, ' ').trim().slice(0, 100)}${card.body.length > 100 ? '…' : ''}`
+  const text = (card.body.trim() || card.summary || '').replace(/\s+/g, ' ').trim()
+  const bodyExcerpt = text ? ` — ${text.slice(0, 100)}${text.length > 100 ? '…' : ''}` : ''
   const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
+  const facts = [
+    card.origin === 'oversight' && card.marketability === null ? 'new, unscored' : null,
+    card.accounts > 0 ? `${card.accounts} firms asked` : null,
+    card.marketability !== null ? `marketability ${card.marketability}/10` : null,
+    card.pr ? `PR ${card.pr}` : null
+  ].filter((f): f is string => f !== null)
+  const factPart = facts.length > 0 ? ` (${facts.join(', ')})` : ''
   // Emit the full uuid so move/update/delete round-trip without
   // ambiguity. The backend also accepts unique prefixes as a fallback.
-  return `  • ${card.title}${tagPart}\n    id: ${card.id}${bodyExcerpt}`
+  return `  • ${card.title}${tagPart}${factPart}\n    id: ${card.id}${bodyExcerpt}`
 }
+
+/** Shipped holds the whole history; the most recent are what a PM answer needs. */
+const SHIPPED_SHOWN = 25
 
 /* ─── Sentry triage ──────────────────────────────────────────────────── */
 
@@ -907,10 +916,15 @@ async function listRoadmapHandler(): Promise<string> {
   if (cards.length === 0) return 'Roadmap is empty.'
   const lines: string[] = []
   for (const col of ROADMAP_COLUMNS) {
-    const inCol = cards
-      .filter((c) => c.column === col)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-    lines.push(`${ROADMAP_LABEL[col]} (${inCol.length})`)
+    // Main hands them over most asked-for first, as the app orders them.
+    const all = cards.filter((c) => c.column === col)
+    const inCol =
+      col === 'shipped'
+        ? [...all].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, SHIPPED_SHOWN)
+        : all
+    lines.push(
+      `${ROADMAP_LABEL[col]} (${all.length}${inCol.length < all.length ? `, latest ${inCol.length} shown` : ''})`
+    )
     if (inCol.length === 0) {
       lines.push('  · empty')
     } else {
@@ -918,7 +932,9 @@ async function listRoadmapHandler(): Promise<string> {
     }
     lines.push('')
   }
-  return lines.join('\n').trim()
+  // Oversight themes are named and summarised by a model from what
+  // customers said, so they're fenced like any other customer text.
+  return fenceUntrusted('Roadmap (from the Mucka app)', lines.join('\n').trim())
 }
 
 async function createRoadmapCardHandler(
@@ -927,7 +943,10 @@ async function createRoadmapCardHandler(
   const title = parseString(params, 'title').trim()
   if (!title) throw new Error('title must not be empty')
   const column = parseColumn(params['column'])
-  const body = typeof params['body'] === 'string' ? (params['body'] as string) : ''
+  if (column === 'oversight') {
+    throw new Error("Oversight is the nightly agent's intake. Put a new card in backlog, or next if Tom says it's a priority.")
+  }
+  const body = typeof params['body'] === 'string' ? params['body'] : ''
   const tags = parseTags(params['tags'])
   const card = await window.mucka.createRoadmapCard({ title, column, body, tags })
   const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''

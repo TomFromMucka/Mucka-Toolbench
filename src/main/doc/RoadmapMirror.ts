@@ -2,32 +2,28 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
 import type { RoadmapCard, RoadmapColumn } from '@shared/types'
-import { COLUMNS } from '../db/roadmap'
 
 /**
  * Mirrors the kanban state into a readable markdown view.
  *
  * The repo is public but all roadmap content is private, so the mirror
  * writes to a git-ignored local file (`ROADMAP.local.md`) — never into
- * the tracked, public MUCKA.md. The sqlite kanban is the source of
- * truth; this is a convenience view for reading the board outside the
- * app. Nothing here reaches git.
+ * the tracked, public MUCKA.md. The board itself lives in the Mucka app;
+ * this is a convenience view for reading it outside the cockpit. Nothing
+ * here reaches git.
  */
 
-const DOC_FILENAME = 'MUCKA.md'
 const LOCAL_FILENAME = 'ROADMAP.local.md'
 
+const COLUMNS: readonly RoadmapColumn[] = ['oversight', 'backlog', 'next', 'doing', 'shipped', 'parked']
+
 const COLUMN_HEADING: Record<RoadmapColumn, string> = {
+  oversight: 'Oversight',
   backlog: 'Backlog',
-  issues: 'Issues',
   next: 'Next up',
   doing: 'Doing',
   shipped: 'Shipped',
   parked: 'Parked'
-}
-
-function docPath(): string {
-  return join(app.getAppPath(), DOC_FILENAME)
 }
 
 function localPath(): string {
@@ -39,9 +35,6 @@ function renderSection(cards: RoadmapCard[]): string {
   for (const col of COLUMNS) byCol.set(col, [])
   for (const c of cards) {
     byCol.get(c.column)?.push(c)
-  }
-  for (const col of COLUMNS) {
-    byCol.get(col)?.sort((a, b) => a.sortOrder - b.sortOrder)
   }
 
   const out: string[] = ['## Roadmap', '']
@@ -89,7 +82,7 @@ function wrap(text: string, width: number): string[] {
 export function mirrorToMarkdown(cards: RoadmapCard[]): void {
   const path = localPath()
   const header =
-    '<!-- Private, generated mirror of the cockpit kanban (sqlite).\n' +
+    '<!-- Private, generated mirror of the roadmap in the Mucka app.\n' +
     '     git-ignored — do NOT commit. Edit cards in the app, not here. -->\n\n'
   const next = header + renderSection(cards) + '\n'
   let prev = ''
@@ -108,36 +101,4 @@ function writeBackIfChanged(path: string, prev: string, next: string): void {
   } catch {
     /* non-fatal — kanban still works without the mirror */
   }
-}
-
-/**
- * One-shot helper: pulls the current `## Roadmap` section from
- * MUCKA.md so the sqlite seeder can import it on first boot.
- */
-export function readRoadmapSection(): string {
-  const path = docPath()
-  if (!existsSync(path)) return ''
-  let text: string
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch {
-    return ''
-  }
-  const lines = text.split(/\r?\n/)
-  let startIdx = -1
-  for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Roadmap\s*$/i.test(lines[i])) {
-      startIdx = i
-      break
-    }
-  }
-  if (startIdx < 0) return ''
-  let endIdx = lines.length
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    if (/^##\s+/.test(lines[i])) {
-      endIdx = i
-      break
-    }
-  }
-  return lines.slice(startIdx, endIdx).join('\n')
 }

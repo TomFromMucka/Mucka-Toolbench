@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { SentryIssue } from '@shared/types'
+import type { SentryBugNotes, SentryIssue } from '@shared/types'
 import { useJobs } from '../state/JobsContext'
 import { TermButton } from './IntakeBits'
 import { when } from './intakeFormat'
@@ -24,6 +24,18 @@ export function SentryModal({
 }): React.JSX.Element {
   const { jobs } = useJobs()
   const job = jobs.find((j) => j.source === `sentry:${issue.shortId}`)
+  const [notes, setNotes] = useState<SentryBugNotes | null>(null)
+
+  useEffect(() => {
+    let live = true
+    window.mucka
+      .getSentryBugNotes(issue.id)
+      .then((n) => live && setNotes(n))
+      .catch(() => live && setNotes(null))
+    return () => {
+      live = false
+    }
+  }, [issue.id])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -110,6 +122,18 @@ export function SentryModal({
           <div style={{ color: DIM }}>
             first seen {when(issue.firstSeen)} · last seen {when(issue.lastSeen)}
           </div>
+          {notes ? (
+            <div
+              className="mt-2 flex flex-col gap-1 pt-2"
+              style={{ borderTop: `1px solid ${THEME.black}` }}
+            >
+              <div style={{ color: DIM }}>
+                Mucka&apos;s notes on this bug, from its old roadmap card · {when(notes.updatedAt)}
+              </div>
+              <div style={{ fontWeight: 700 }}>{notes.title}</div>
+              <div className="whitespace-pre-wrap break-words">{notes.body}</div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,
