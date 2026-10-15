@@ -467,13 +467,14 @@ function NewJobCard({
  * terminal the way Tom would, so the wrap-up happens where he can watch it
  * and the skill's own checks apply. Shipping itself tends to happen in the
  * conversation, so this one button covers whatever's left: it stops on
- * loose ends, otherwise lands the PR and runs `/coach job-done` (Mucka
+ * loose ends, otherwise lands the PR (auto-merge, whether or not the PR
+ * was already open) and runs `/coach job-done` (Mucka
  * Pro's worktree-coach skill), which removes the folder once merged.
  */
 const JOB_DONE_PROMPT = [
   'Wrap this job up.',
   'First check for loose ends: uncommitted work, failing tests or typecheck, anything I asked for that is not done, or an open question. If there are any, list them and stop.',
-  "Otherwise, if there's no PR yet, commit, push and open one with /coach pr, and turn on auto-merge with `gh pr merge --squash --auto --delete-branch`.",
+  "Otherwise, if there's no PR yet, commit, push and open one with /coach pr. Pressing Job done is my go-ahead to land it: if the PR isn't merged and auto-merge isn't on, turn it on with `env -u GH_TOKEN -u GITHUB_TOKEN gh pr merge <number> --squash --auto` without asking. Leave out --delete-branch: gh then tries to check out main, which another worktree holds.",
   'Wait for it to merge with `gh pr checks --watch --interval 60`, and never poll GitHub more often than once a minute: every job shares one GitHub allowance. If a check fails, read the failure and tell me rather than going on.',
   'Once it has merged, run /coach job-done.'
 ].join('\n')
@@ -654,7 +655,7 @@ function SignOffBar({
 const FINISH_PROMPT = [
   'Wrap this ticket up and finish the worktree.',
   'First check for loose ends: uncommitted work, failing tests or typecheck, anything I asked for that is not done, or an open question. If there are any, list them and stop.',
-  "Otherwise, if there's no PR yet, commit, push and open one with /coach pr. Pressing Finish is my go-ahead to land it, so turn on auto-merge with `gh pr merge --squash --auto --delete-branch` without asking.",
+  "Otherwise, if there's no PR yet, commit, push and open one with /coach pr. Pressing Finish is my go-ahead to land it: if the PR isn't merged and auto-merge isn't on, turn it on with `env -u GH_TOKEN -u GITHUB_TOKEN gh pr merge <number> --squash --auto` without asking. Leave out --delete-branch: gh then tries to check out main, which another worktree holds.",
   'Wait for it to merge with `gh pr checks --watch --interval 60`, and never poll GitHub more often than once a minute: every agent shares one GitHub allowance. If a check fails, read the failure and tell me rather than going on.',
   'Once it has merged, run /coach finish.'
 ].join('\n')

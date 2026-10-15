@@ -351,11 +351,18 @@ function createWindow(): void {
     }
   })
   ticketWatcher.start()
-  spinoffWatcher = new SpinoffWatcher((proposals) => {
-    if (mainWindow.webContents.isDestroyed()) return
-    mainWindow.webContents.send('proposals:update', proposals)
+  spinoffWatcher = new SpinoffWatcher({
+    emit: (proposals) => {
+      if (mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send('proposals:update', proposals)
+    },
+    start: async (id) => {
+      if (!jobManager) throw new Error('The cockpit window is not ready yet.')
+      await jobManager.startProposal(id)
+      spinoffWatcher?.publish()
+    }
   })
-  spinoffWatcher.start()
+  spinoffWatcher.watch()
   appRoadmap = new AppRoadmap({
     scoutDir: () => {
       if (!jobManager) throw new Error('The cockpit window is not ready yet.')

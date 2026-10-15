@@ -79,15 +79,15 @@ or "Tom, eyes here".
   points the worktree at a fresh main), *Amend*, *Hold* / *Release*. A
   held agent says so in its terminal header, with *release*, in every
   layout.
-- **Intake** has three tabs in the terminal's font, *support*,
-  *sentry* and *spin-offs*, each with its open count.
-  - *spin-offs* are jobs a job's Claude proposed with
-    `~/.claude/mucka-job.sh propose "title"` (brief on stdin), for work
-    that belongs in a PR of its own. Each opens to its brief, with the
-    note box and *Start job*, or *dismiss*. Nothing starts by itself, so
-    one Claude can't set off a chain; the job sheet logs each proposal.
-    Every job's Claude is told about it in its standing rules, and
-    `hooks:install` copies the script and allows it without a prompt.
+- **Intake** has two tabs in the terminal's font, *support* and
+  *sentry*, each with its open count, plus *spin-offs* while any wait.
+  - **Spin-off jobs:** a job's Claude that finds work for a PR of its own
+    asks Tom (AskUserQuestion) whether to spin it off, and only on his yes,
+    or when he asks for one, runs `~/.claude/mucka-job.sh start "title"`
+    (brief on stdin). The cockpit starts the job at once, sourced
+    `job:<parent>`, and the job sheet logs it. *spin-offs* holds the ones
+    still waiting: proposals queued before a yes was needed, and any that
+    failed to start.
   - *support* is the `/admin/support` desk without the browser: the same
     status and kind filters, search, grouping and badges (awaiting reply,
     chase / follow up). Clicking a ticket opens it in full: thread,
@@ -334,6 +334,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-16 — Spin-offs need Tom's yes: a job's Claude asks before starting one, and a yes starts it straight away. Merging is a job's to do when Tom says merge (no --delete-branch), and Job done / Finish turn on auto-merge even when the PR was already open.
 - 2026-10-15 — Jobs can propose spin-off jobs: a job's Claude runs `mucka-job.sh propose`, and the proposal waits in Intake → spin-offs for Tom to start or dismiss.
 - 2026-10-15 — The roadmap is the Mucka app's board: Oversight lane added, Issues gone (its notes show in Intake), every cockpit card imported to the app.
 - 2026-10-15 — Sentry tickets open no roadmap card: Mucka names the bug instead, and every ticketed issue is watched for resolves and regressions whether or not it had a card.

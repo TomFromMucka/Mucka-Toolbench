@@ -6,9 +6,9 @@ import { JobStarter } from './JobStarter'
 import { THEME } from './terminalTheme'
 
 /**
- * Jobs that other jobs' Claudes proposed with `mucka-job.sh propose`. Each
- * opens to its brief, which is what the new job's Claude will start from,
- * so Tom reads it before pressing Start. Nothing here starts by itself.
+ * Spin-offs still waiting for Tom: the ones Claudes queued without asking,
+ * before a spin-off needed his yes, and any that failed to start. Each opens
+ * to its brief, which is what the new job's Claude will start from.
  */
 export function SpinoffsPane({
   proposals,
@@ -23,7 +23,7 @@ export function SpinoffsPane({
   const [error, setError] = useState<string | null>(null)
 
   if (proposals.length === 0) {
-    return <Dim>No spin-offs. A job&apos;s Claude proposes one when it finds work for a PR of its own.</Dim>
+    return <Dim>Nothing waiting. A job&apos;s Claude asks you before it spins off a new job.</Dim>
   }
 
   const dismiss = (id: string): void => {
