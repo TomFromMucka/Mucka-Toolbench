@@ -52,12 +52,16 @@ or "Tom, eyes here".
 **Jobs layout (third choice under Settings → Agents → *Layout*).**
 - Columns: Files (folded until clicked), Intake, the selected job's
   terminal in the centre of the screen, the Job board (On the tools,
-  Idle / On hold), and Mucka folded to a strip on the right (opens by
+  Idle, On hold), and Mucka folded to a strip on the right (opens by
   itself for a confirm). *Waiting on you* is a strip right under the
   terminal's input, in queue order; click one to bring it up. It holds
   everything that's Tom's turn: blocked on a question or permission
-  first, then flagged, then finished with work to look at (there's no
-  separate Check it lane). A Claude that has stopped but left a Monitor
+  first, then flagged, then any Claude that has finished its turn in a
+  worktree that has started: on a branch of its own or with work on it,
+  even once its PR has merged, since Finish still has to park it (there's
+  no separate Check it lane). *Idle* is only what hasn't started: no
+  Claude, or a worktree parked on its slot or main with nothing on it, or
+  a job nobody has spoken to. *On hold* is only what Tom has held. A Claude that has stopped but left a Monitor
   or background command running stays On the tools, tagged *in
   background*, for up to 30 minutes of that command. The 4 and 6
   layouts are unchanged.
@@ -68,7 +72,7 @@ or "Tom, eyes here".
 - Sign-off bar under each job's terminal: *Job done* (Claude checks for
   loose ends, lands the PR with auto-merge, then `/coach job-done` removes
   the folder and branch), *Amend*, *Hold* / *Release* (parks it, tagged,
-  in Idle / On hold; held Sentry jobs don't count toward the auto-start
+  in On hold; held Sentry jobs don't count toward the auto-start
   cap), *Dismiss* (asks first, says what would be lost).
 - The same bar under a fixed worktree agent's terminal: *Finish* (loose
   ends, lands the PR with auto-merge, then `/coach finish` parks it and
@@ -105,7 +109,13 @@ or "Tom, eyes here".
   - *sentry*: *Start job* opens a job whose Claude begins with the issue
     and the groundwork rules. With auto on (header switch), an issue
     Mucka triages as a ticket starts its own job, 3 open at most, the
-    rest queued.
+    rest queued. A ticket opens no roadmap card: Mucka names the bug,
+    and sibling issues share the name. One bug gets one job: an issue
+    whose bug already has an open job is handed to that job as a note
+    instead (Mucka can
+    also name the job, or say not to start one), and the job's Claude
+    gets the note at its next tool call or the end of its turn, through
+    `mucka-pending.sh`.
 
 **Needs you (all layouts).** One queue of agents' and jobs' permission
 prompts and questions, blocked first then oldest. Answered with buttons
@@ -126,10 +136,18 @@ the orange glow.
   and a `voice` tag in the footer.
 - Notes scratchpad — free-form textarea, 600 ms debounced autosave
   to sqlite, flushed on blur and ⌘S.
-- Roadmap kanban — six lanes, drag-and-drop, cards open in a modal.
-  **Issues** sits between Backlog and Next up and holds production
-  errors off Sentry triage, nothing else, so it reads as a straight
-  list of what's broken in production.
+- Roadmap kanban — the Mucka app's board (/admin/roadmap), read and
+  written through Mucka Pro's `scripts/roadmap.ts` the way tickets go
+  through `ticket.ts`, polled every five minutes and kept in sqlite so
+  it shows at boot and offline. Six lanes: **Oversight** (themes the
+  nightly oversight agent proposes from what customers asked Mucka
+  for), Backlog, Next up, Doing, Shipped, Parked. Each lane is ordered
+  as the app orders it, most businesses asking first, so cards drag
+  between lanes but not within one. A card shows its demand,
+  marketability and New badge; the modal lists who asked. Only cards a
+  person added can be deleted. Sentry issues aren't on it: the old
+  Issues lane's notes show in Intake beside their issues and go into
+  the brief of a job started on one.
   **Send to worktree** on an open ticket picks an agent from a
   dropdown (idle ones first, running ones flagged as a restart),
   launches Claude Code in that worktree and pastes the ticket in as
@@ -158,7 +176,7 @@ Read-only (auto-execute):
   `whats_happening`, `get_recent_events`, `get_vercel_status`,
   `get_pr_status`, `get_cockpit_doc`, `get_product_doc`,
   `list_memories`, `get_memory`, `list_roadmap`, `read_pr_diff`,
-  `list_sentry_issues`, `get_sentry_issue`.
+  `list_sentry_issues`, `get_sentry_issue`, `list_jobs`.
 - Plus the SDK's built-in `WebSearch` / `WebFetch` in text mode, so
   Mucka can research a ticket before writing it. Everything else
   built-in (Bash, Read, Write…) is still denied.
@@ -317,6 +335,10 @@ shared primitives in `components/ui/`:
 (newest first — append here when shipping)
 
 - 2026-10-15 — Jobs can propose spin-off jobs: a job's Claude runs `mucka-job.sh propose`, and the proposal waits in Intake → spin-offs for Tom to start or dismiss.
+- 2026-10-15 — The roadmap is the Mucka app's board: Oversight lane added, Issues gone (its notes show in Intake), every cockpit card imported to the app.
+- 2026-10-15 — Sentry tickets open no roadmap card: Mucka names the bug instead, and every ticketed issue is watched for resolves and regressions whether or not it had a card.
+- 2026-10-14 — One Sentry bug, one job: an issue whose bug has an open job goes to that job as a note rather than starting another, and Mucka sees the open jobs when she triages.
+- 2026-10-14 — Idle and On hold are separate columns, and a worktree whose Claude has gone quiet on a branch of its own (a merged PR included) is in Waiting on you, not Idle.
 - 2026-10-12 — Check it merged into Waiting on you (blocked first); a Claude with a Monitor or background command still running stays On the tools; worktree agents get Finish / Amend / Hold.
 - 2026-10-10 — Waiting on you is active work only: a held or finished job stays in Idle / On hold even when its Claude asks something.
 - 2026-10-10 — A terminal's orange flag line from Mucka has a "clear" button, so Tom can dismiss a flag that's out of date.

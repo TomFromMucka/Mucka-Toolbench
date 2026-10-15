@@ -1,5 +1,5 @@
 import type {
-  SentryCardSibling,
+  SentryBugSibling,
   SentryStatusChange,
   SentryTriage,
   SentryVerdict
@@ -39,7 +39,7 @@ function rowToTriage(row: TriageRow): SentryTriage {
     triagedAt: row.triaged_at,
     verdict: isVerdict(row.verdict) ? row.verdict : null,
     reason: row.reason,
-    cardId: row.card_id,
+    bug: row.card_id,
     triageCount: row.triage_count,
     triageUserCount: row.triage_user_count,
     statusCheckedAt: row.status_checked_at
@@ -85,7 +85,7 @@ export function recordTriage(input: {
   issueId: string
   verdict: SentryVerdict
   reason: string
-  cardId?: string | null
+  bug?: string | null
   /** Event + user counts as they stood when the call was made. */
   count?: number
   userCount?: number
@@ -95,10 +95,12 @@ export function recordTriage(input: {
       // The verdict is ruled on an issue that just came off the unresolved
       // poll, so "unresolved, observed now" is a true baseline. Stamping it
       // here keeps a ticket out of the watch pass's silent first read, so a
-      // fix that lands minutes after the card is written still reports.
+      // fix that lands minutes after the verdict still reports.
+      // `card_id` holds the bug she filed it under; the name is from when
+      // a ticket opened a roadmap card.
       `UPDATE sentry_issues
           SET triaged_at = @triagedAt, verdict = @verdict, reason = @reason,
-              card_id = @cardId, triage_count = @count, triage_user_count = @userCount,
+              card_id = @bug, triage_count = @count, triage_user_count = @userCount,
               last_status = 'unresolved', last_substatus = NULL,
               status_checked_at = @triagedAt
         WHERE issue_id = @issueId`
@@ -108,7 +110,7 @@ export function recordTriage(input: {
       triagedAt: Date.now(),
       verdict: input.verdict,
       reason: input.reason,
-      cardId: input.cardId ?? null,
+      bug: input.bug ?? null,
       count: input.count ?? 0,
       userCount: input.userCount ?? 0
     })
@@ -123,6 +125,18 @@ export function markForRetriage(issueId: string): void {
   getDb()
     .prepare(`UPDATE sentry_issues SET triaged_at = NULL WHERE issue_id = ?`)
     .run(issueId)
+}
+
+/** The bug each short id was ticketed under, for the ones that have one. */
+export function bugsByShortId(shortIds: string[]): Map<string, string> {
+  if (shortIds.length === 0) return new Map()
+  const rows = getDb()
+    .prepare<string[], { short_id: string; card_id: string }>(
+      `SELECT short_id, card_id FROM sentry_issues
+        WHERE card_id IS NOT NULL AND short_id IN (${shortIds.map(() => '?').join(', ')})`
+    )
+    .all(...shortIds)
+  return new Map(rows.map((r) => [r.short_id, r.card_id]))
 }
 
 /** Issues seen but not yet triaged — what the triage queue drains. */
@@ -155,9 +169,9 @@ export function getTriage(issueId: string): SentryTriage | null {
 }
 
 /**
- * Ticketed issues the poller keeps an eye on after the verdict. A shipped
- * card stays on the list on purpose — a regression months later is exactly
- * the move worth waking her for, and dropping it once shipped would make
+ * Ticketed issues the poller keeps an eye on after the verdict. A fixed
+ * one stays on the list on purpose — a regression months later is exactly
+ * the move worth waking her for, and dropping it once resolved would make
  * that invisible.
  *
  * Least-recently-checked first (never-checked first of all), because the
@@ -169,7 +183,7 @@ export function listWatchedTickets(): SentryTriage[] {
   const rows = getDb()
     .prepare<[], TriageRow>(
       `SELECT * FROM sentry_issues
-        WHERE card_id IS NOT NULL AND verdict = 'ticket'
+        WHERE verdict = 'ticket'
         ORDER BY status_checked_at ASC, triaged_at DESC`
     )
     .all()
@@ -184,20 +198,20 @@ export function markStatusChecked(issueId: string): void {
 }
 
 /**
- * The other issues sharing a card, and where each stands. Several of the
- * cockpit's cards cover a cluster of related errors, so "this one issue is
- * resolved" is not the same as "this card is done" — she needs to see the
- * rest before moving it.
+ * The other issues filed under the same bug, and where each stands. Sentry
+ * often files one bug as a cluster of issues, so "this one issue is
+ * resolved" is not the same as "this bug is fixed" — she needs to see the
+ * rest before saying so.
  */
-function cardSiblings(cardId: string | null, issueId: string): SentryCardSibling[] {
-  if (!cardId) return []
+function bugSiblings(bug: string | null, issueId: string): SentryBugSibling[] {
+  if (!bug) return []
   const rows = getDb()
     .prepare<[string, string], { short_id: string; last_status: string }>(
       `SELECT short_id, last_status FROM sentry_issues
         WHERE card_id = ? AND issue_id != ?
         ORDER BY short_id ASC`
     )
-    .all(cardId, issueId)
+    .all(bug, issueId)
   return rows.map((r) => ({ shortId: r.short_id, status: r.last_status }))
 }
 
@@ -251,8 +265,8 @@ export function recordStatus(input: {
     title: row.title,
     project: row.project,
     permalink: row.permalink,
-    cardId: row.card_id,
-    cardSiblings: cardSiblings(row.card_id, row.issue_id),
+    bug: row.card_id,
+    bugSiblings: bugSiblings(row.card_id, row.issue_id),
     from: from ?? row.last_status,
     to: input.status,
     substatus: input.substatus,
@@ -280,8 +294,8 @@ export function listPendingStatusChanges(): SentryStatusChange[] {
     title: row.title,
     project: row.project,
     permalink: row.permalink,
-    cardId: row.card_id,
-    cardSiblings: cardSiblings(row.card_id, row.issue_id),
+    bug: row.card_id,
+    bugSiblings: bugSiblings(row.card_id, row.issue_id),
     from: row.pending_from_status ?? row.last_status,
     to: row.last_status,
     substatus: row.last_substatus,

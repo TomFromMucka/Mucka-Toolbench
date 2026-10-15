@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type {
   AgentId,
+  GitStatus,
   JobId,
   PendingAnswer,
   PendingAnswerResult,
@@ -18,10 +19,11 @@ import { useVisibleAgents } from './LayoutContext'
  *
  * Anything blocked on a prompt or a question comes first, oldest first,
  * because a blocked Claude is wasted time. Then anything flagged or asking
- * outside the hook, then everything that has finished and has work for
- * him to look at. Waiting on you and Check it used to be two lanes, split
- * by whether Claude Code's one-minute "waiting for your input" nudge
- * happened to fire; Tom's call (2026-10-12) was one queue, blocked first.
+ * outside the hook, then everything that has finished a turn and needs his
+ * next move: a job he has spoken to, or a worktree that has started.
+ * Waiting on you and Check it used to be two lanes, split by whether
+ * Claude Code's one-minute "waiting for your input" nudge happened to
+ * fire; Tom's call (2026-10-12) was one queue, blocked first.
  */
 export interface QueueEntry {
   /** The agent's or the job's id: whichever this entry is. */
@@ -45,6 +47,22 @@ interface NeedsYouValue {
 
 const FOCUS_EVENT = 'mucka:focus-terminal'
 
+/**
+ * Whether a worktree has started on something, so a Claude that has gone
+ * quiet in it is waiting on Tom rather than idle. A branch of its own
+ * counts even with nothing left on it: a merged PR still needs Finish to
+ * park it. Only a worktree on its slot (or main) with nothing on it is
+ * Idle, which is where Finish leaves it.
+ */
+function hasStarted(git: GitStatus | undefined, openPr: boolean): boolean {
+  if (!git) return openPr
+  const changed = git.modified + git.staged + git.untracked
+  const branch = git.branch
+  const ownBranch =
+    branch !== null && branch !== 'main' && branch !== 'master' && !branch.startsWith('slot/')
+  return changed > 0 || git.ahead > 0 || openPr || ownBranch
+}
+
 const Ctx = createContext<NeedsYouValue | null>(null)
 
 export function NeedsYouProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -55,13 +73,9 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
   const gitStatus = useGitStatus()
   const { summaries } = useGitHubState()
   // Git status re-arrives on every poll; key on the answer so the queue
-  // only rebuilds when an agent gains or loses work.
-  const withWorkKey = agents
-    .filter((a) => {
-      const git = gitStatus[a.id]
-      const changed = git ? git.modified + git.staged + git.untracked : 0
-      return changed > 0 || (git?.ahead ?? 0) > 0 || Boolean(summaries[a.id]?.openPr)
-    })
+  // only rebuilds when an agent starts or goes back to its slot.
+  const startedKey = agents
+    .filter((a) => hasStarted(gitStatus[a.id], Boolean(summaries[a.id]?.openPr)))
     .map((a) => a.id)
     .join(',')
 
@@ -81,11 +95,11 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
 
   const queue = useMemo<QueueEntry[]>(() => {
     // Waiting on you is the active work. Anything Tom has put on hold, or a
-    // job on its way off the board, sits in Idle / On hold and stays out of
+    // job on its way off the board, sits in On hold or Idle and stays out of
     // the queue even when its Claude asks something: he's parked it.
     const activeAgents = agents.filter((a) => !a.held)
     const visible = new Set<string>(activeAgents.map((a) => a.id))
-    const withWork = new Set(withWorkKey.split(','))
+    const started = new Set(startedKey.split(','))
     const activeJobs = jobs.filter((j) => !j.held && j.state !== 'finished')
     const openJobs = new Set<string>(activeJobs.map((j) => j.id))
     const blocked: QueueEntry[] = []
@@ -140,10 +154,10 @@ export function NeedsYouProvider({ children }: { children: React.ReactNode }): R
       const entry = { key: a.id, agentId: a.id, jobId: null, terminalId: a.id, pending: null }
       const status = statusFor(a.id)
       if (a.needsAttention || asking(status)) askingEntries.push(entry)
-      else if (status === 'idle' && withWork.has(a.id)) finishedEntries.push(entry)
+      else if (status === 'idle' && started.has(a.id)) finishedEntries.push(entry)
     }
     return [...blocked, ...askingEntries, ...finishedEntries]
-  }, [pending, agents, statusFor, jobs, jobStatusFor, withWorkKey])
+  }, [pending, agents, statusFor, jobs, jobStatusFor, startedKey])
 
   const placeOf = useCallback(
     (id: string): number | null => {

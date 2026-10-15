@@ -5,11 +5,14 @@ import type {
   GitHubAgentSummary,
   GitStatus,
   JobEvent,
+  JobOverview,
   MemoryListItem,
   MemoryType,
   RoadmapCard,
   RoadmapColumn,
   SentryIssue,
+  SentryJobChoice,
+  SentryJobOutcome,
   SentryTriage,
   SentryVerdict,
   VercelAgentSummary,
@@ -689,8 +692,8 @@ function makeDeployToVercel(deps: ToolDeps) {
 /* ─── Roadmap kanban tools ───────────────────────────────────────────── */
 
 const ROADMAP_COLUMNS: readonly RoadmapColumn[] = [
+  'oversight',
   'backlog',
-  'issues',
   'next',
   'doing',
   'shipped',
@@ -698,8 +701,8 @@ const ROADMAP_COLUMNS: readonly RoadmapColumn[] = [
 ] as const
 
 const ROADMAP_LABEL: Record<RoadmapColumn, string> = {
+  oversight: 'Oversight',
   backlog: 'Backlog',
-  issues: 'Issues',
   next: 'Next up',
   doing: 'Doing',
   shipped: 'Shipped',
@@ -707,12 +710,13 @@ const ROADMAP_LABEL: Record<RoadmapColumn, string> = {
 }
 
 function parseColumn(raw: unknown, label = 'column'): RoadmapColumn {
-  if (typeof raw !== 'string' || !(ROADMAP_COLUMNS as readonly string[]).includes(raw)) {
+  const column = ROADMAP_COLUMNS.find((c) => c === raw)
+  if (!column) {
     throw new Error(
       `${label} must be one of: ${ROADMAP_COLUMNS.join(', ')} — got ${JSON.stringify(raw)}`
     )
   }
-  return raw as RoadmapColumn
+  return column
 }
 
 function parseTags(raw: unknown): string[] {
@@ -724,15 +728,23 @@ function parseTags(raw: unknown): string[] {
 }
 
 function describeCardLine(card: RoadmapCard): string {
-  const bodyExcerpt =
-    card.body.trim().length === 0
-      ? ''
-      : ` — ${card.body.replace(/\s+/g, ' ').trim().slice(0, 100)}${card.body.length > 100 ? '…' : ''}`
+  const text = (card.body.trim() || card.summary || '').replace(/\s+/g, ' ').trim()
+  const bodyExcerpt = text ? ` — ${text.slice(0, 100)}${text.length > 100 ? '…' : ''}` : ''
   const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
+  const facts = [
+    card.origin === 'oversight' && card.marketability === null ? 'new, unscored' : null,
+    card.accounts > 0 ? `${card.accounts} firms asked` : null,
+    card.marketability !== null ? `marketability ${card.marketability}/10` : null,
+    card.pr ? `PR ${card.pr}` : null
+  ].filter((f): f is string => f !== null)
+  const factPart = facts.length > 0 ? ` (${facts.join(', ')})` : ''
   // Emit the full uuid so move/update/delete round-trip without
   // ambiguity. The backend also accepts unique prefixes as a fallback.
-  return `  • ${card.title}${tagPart}\n    id: ${card.id}${bodyExcerpt}`
+  return `  • ${card.title}${tagPart}${factPart}\n    id: ${card.id}${bodyExcerpt}`
 }
+
+/** Shipped holds the whole history; the most recent are what a PM answer needs. */
+const SHIPPED_SHOWN = 25
 
 /* ─── Sentry triage ──────────────────────────────────────────────────── */
 
@@ -809,16 +821,58 @@ function parseVerdict(raw: unknown): SentryVerdict {
   throw new Error(`verdict must be one of ticket, noise, watch — got ${JSON.stringify(raw)}`)
 }
 
+function parseJobChoice(raw: unknown): SentryJobChoice {
+  if (raw === undefined || raw === null || raw === '' || raw === 'start') return { kind: 'start' }
+  if (raw === 'none') return { kind: 'none' }
+  if (typeof raw === 'string') return { kind: 'join', jobId: raw.trim() }
+  throw new Error(`job must be start, none or an open job's id — got ${JSON.stringify(raw)}`)
+}
+
+function describeJobOutcome(outcome: SentryJobOutcome): string {
+  switch (outcome.kind) {
+    case 'started':
+      return `job ${outcome.jobId} started`
+    case 'existing':
+      return `it already has job ${outcome.jobId}`
+    case 'joined':
+      return outcome.sameBug
+        ? `no new job: handed to ${outcome.jobId}, which is already fixing that bug`
+        : `handed to job ${outcome.jobId}`
+    case 'queued':
+      return `queued for a job, number ${outcome.position} in line`
+    case 'not-started':
+      return `no job started: ${outcome.why}`
+  }
+}
+
+/** One open job, with the bug it's fixing when it came from Sentry. */
+export function describeJobLine(job: JobOverview): string {
+  const parts = [
+    job.state === 'ready' ? null : job.state,
+    job.held ? 'on hold' : null,
+    job.pr ? `PR #${job.pr.number} ${job.pr.state}` : null,
+    job.source,
+    job.bug ? `bug ${job.bug}` : null
+  ].filter((p): p is string => p !== null)
+  return `· ${job.id} — ${job.title}${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`
+}
+
+async function listJobsHandler(): Promise<string> {
+  const jobs = await window.mucka.listJobOverview()
+  if (jobs.length === 0) return 'No open jobs.'
+  // A Sentry job is titled with the issue's own text, which is production data.
+  return `${jobs.length} open:\n${fenceUntrusted('Open jobs', jobs.map(describeJobLine).join('\n'))}`
+}
+
 function makeTriageSentryIssue() {
   return async (params: Record<string, unknown>): Promise<string> => {
     const issue = await resolveSentryIssue(params)
     const verdict = parseVerdict(params['verdict'])
     const reason = parseString(params, 'reason').trim()
     if (!reason) throw new Error('reason must not be empty')
-    const cardId =
-      typeof params['card_id'] === 'string' && params['card_id'].trim().length > 0
-        ? (params['card_id'] as string).trim()
-        : null
+    const rawBug = params['bug']
+    const bug = typeof rawBug === 'string' && rawBug.trim() ? rawBug.trim().slice(0, 80) : null
+    const job = parseJobChoice(params['job'])
 
     // The one hard rail on an auto-executing outward write: anything with
     // real users behind it or flagged high priority never gets archived on
@@ -827,7 +881,7 @@ function makeTriageSentryIssue() {
       return (
         `Refused: ${issue.shortId} has ${issue.userCount} users affected` +
         `${issue.priority === 'high' ? ' and is high priority' : ''}, so it can't be archived as noise. ` +
-        'Open a card and triage it as a ticket instead.'
+        'Triage it as a ticket instead.'
       )
     }
 
@@ -836,18 +890,22 @@ function makeTriageSentryIssue() {
     }
     // Main logs the job-sheet line — the record and the audit trail land
     // together rather than depending on two renderer calls both landing.
-    await window.mucka.recordSentryTriage({
+    const outcome = await window.mucka.recordSentryTriage({
       issueId: issue.id,
       verdict,
       reason,
-      cardId,
+      bug,
       count: issue.count,
-      userCount: issue.userCount
+      userCount: issue.userCount,
+      ...(verdict === 'ticket' ? { job } : {})
     })
 
     if (verdict === 'noise') return `${issue.shortId} archived in Sentry — ${reason}`
     if (verdict === 'ticket') {
-      return `${issue.shortId} logged as a ticket${cardId ? ` (card ${cardId})` : ''} — ${reason}`
+      return (
+        `${issue.shortId} logged as a ticket${bug ? ` (bug ${bug})` : ''} — ${reason}` +
+        (outcome ? `. ${describeJobOutcome(outcome)}` : '')
+      )
     }
     return `${issue.shortId} left open and marked watch — ${reason}`
   }
@@ -858,10 +916,15 @@ async function listRoadmapHandler(): Promise<string> {
   if (cards.length === 0) return 'Roadmap is empty.'
   const lines: string[] = []
   for (const col of ROADMAP_COLUMNS) {
-    const inCol = cards
-      .filter((c) => c.column === col)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-    lines.push(`${ROADMAP_LABEL[col]} (${inCol.length})`)
+    // Main hands them over most asked-for first, as the app orders them.
+    const all = cards.filter((c) => c.column === col)
+    const inCol =
+      col === 'shipped'
+        ? [...all].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, SHIPPED_SHOWN)
+        : all
+    lines.push(
+      `${ROADMAP_LABEL[col]} (${all.length}${inCol.length < all.length ? `, latest ${inCol.length} shown` : ''})`
+    )
     if (inCol.length === 0) {
       lines.push('  · empty')
     } else {
@@ -869,7 +932,9 @@ async function listRoadmapHandler(): Promise<string> {
     }
     lines.push('')
   }
-  return lines.join('\n').trim()
+  // Oversight themes are named and summarised by a model from what
+  // customers said, so they're fenced like any other customer text.
+  return fenceUntrusted('Roadmap (from the Mucka app)', lines.join('\n').trim())
 }
 
 async function createRoadmapCardHandler(
@@ -878,7 +943,10 @@ async function createRoadmapCardHandler(
   const title = parseString(params, 'title').trim()
   if (!title) throw new Error('title must not be empty')
   const column = parseColumn(params['column'])
-  const body = typeof params['body'] === 'string' ? (params['body'] as string) : ''
+  if (column === 'oversight') {
+    throw new Error("Oversight is the nightly agent's intake. Put a new card in backlog, or next if Tom says it's a priority.")
+  }
+  const body = typeof params['body'] === 'string' ? params['body'] : ''
   const tags = parseTags(params['tags'])
   const card = await window.mucka.createRoadmapCard({ title, column, body, tags })
   const tagPart = card.tags.length > 0 ? ` [${card.tags.join(', ')}]` : ''
@@ -1165,6 +1233,7 @@ export function buildClientTools(deps: ToolDeps): ClientTools {
     list_sentry_issues: () => listSentryIssuesHandler(),
     get_sentry_issue: (params) => getSentryIssueHandler(params),
     triage_sentry_issue: makeTriageSentryIssue(),
+    list_jobs: () => listJobsHandler(),
 
     list_roadmap: () => listRoadmapHandler(),
     create_roadmap_card: (params) => createRoadmapCardHandler(params),

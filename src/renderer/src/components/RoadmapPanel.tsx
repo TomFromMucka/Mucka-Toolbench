@@ -6,26 +6,20 @@ import {
   DragOverlay,
   PointerSensor,
   closestCorners,
+  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragStartEvent
 } from '@dnd-kit/core'
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy
-} from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type {
-  RoadmapCard,
-  RoadmapColumn
-} from '@shared/types'
+import type { RoadmapCard, RoadmapColumn, RoadmapState } from '@shared/types'
 import { Clipboard } from './Clipboard'
 import type { PanelSizeProps } from './panelSize'
 import { Icon } from './ui/Icon'
 import { RoadmapCardModal } from './RoadmapCardModal'
+import { isNewTheme } from './roadmapFormat'
 
 export function RoadmapPanel({ size, onResize }: PanelSizeProps): React.JSX.Element {
   return (
@@ -41,11 +35,11 @@ export function RoadmapPanel({ size, onResize }: PanelSizeProps): React.JSX.Elem
   )
 }
 
-/* ─── Roadmap kanban (sqlite-backed) ──────────────────────────────────── */
+/* ─── Roadmap kanban (the Mucka app's board) ──────────────────────────── */
 
 const COLUMN_ORDER: RoadmapColumn[] = [
+  'oversight',
   'backlog',
-  'issues',
   'next',
   'doing',
   'shipped',
@@ -53,20 +47,18 @@ const COLUMN_ORDER: RoadmapColumn[] = [
 ]
 
 const COLUMN_LABEL: Record<RoadmapColumn, string> = {
+  oversight: 'Oversight',
   backlog: 'Backlog',
-  issues: 'Issues',
   next: 'Next up',
   doing: 'Doing',
   shipped: 'Shipped',
   parked: 'Parked'
 }
 
+// No lane gets the orange: a lane dot is chrome, not Mucka talking.
 const COLUMN_ACCENT: Record<RoadmapColumn, string> = {
+  oversight: 'var(--pill-scheduled-fg)',
   backlog: 'rgba(234, 233, 232, 0.45)',
-  // Deep red, not the status red — that one sits close enough to the
-  // reserved orange to read as "Mucka is speaking" at dot size. No lane
-  // gets the orange itself: a lane dot is chrome, not Mucka talking.
-  issues: 'var(--red)',
   next: 'rgba(234, 233, 232, 0.7)',
   doing: 'var(--van-white)',
   shipped: 'var(--color-status-ok, #5fb35f)',
@@ -78,9 +70,10 @@ type ModalState =
   | { open: true; card: RoadmapCard | null; defaultColumn: RoadmapColumn }
 
 function RoadmapView(): React.JSX.Element {
-  const [cards, setCards] = useState<RoadmapCard[]>([])
+  const [state, setState] = useState<RoadmapState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const cards = useMemo(() => state?.cards ?? [], [state])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [modal, setModal] = useState<ModalState>({ open: false })
 
@@ -89,10 +82,8 @@ function RoadmapView(): React.JSX.Element {
   )
 
   const load = useCallback(async (): Promise<void> => {
-    setError(null)
     try {
-      const next = await window.mucka.listRoadmap()
-      setCards(next)
+      setState(await window.mucka.getRoadmapState())
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
@@ -109,13 +100,11 @@ function RoadmapView(): React.JSX.Element {
     return off
   }, [load])
 
+  // Main hands the cards over in the app's order (most asked-for first).
   const grouped = useMemo(() => {
     const m = new Map<RoadmapColumn, RoadmapCard[]>()
     for (const col of COLUMN_ORDER) m.set(col, [])
     for (const c of cards) m.get(c.column)?.push(c)
-    for (const col of COLUMN_ORDER) {
-      m.get(col)?.sort((a, b) => a.sortOrder - b.sortOrder)
-    }
     return m
   }, [cards])
 
@@ -133,34 +122,14 @@ function RoadmapView(): React.JSX.Element {
     const dragged = cards.find((c) => c.id === draggedId)
     if (!dragged) return
 
-    const overId = String(over.id)
-    const targetColumn = parseColumnFromOverId(overId, cards)
-    if (!targetColumn) return
+    // Columns only: the app orders each one by demand, so there's no
+    // place within a column to drop into.
+    const targetColumn = parseColumnFromOverId(String(over.id), cards)
+    if (!targetColumn || targetColumn === dragged.column) return
 
-    // Compute target sortOrder.
-    const overCard = cards.find((c) => c.id === overId)
-    const columnList = grouped.get(targetColumn) ?? []
-    let targetSort: number
-    if (overCard) {
-      // Dropped onto a card — take its slot, others shift down.
-      targetSort = overCard.sortOrder
-      // Same-column reorder: if we're moving DOWN past the overCard, target
-      // is the overCard's slot. Otherwise also overCard's slot. The main
-      // moveCard SQL handles re-packing.
-    } else {
-      // Dropped onto a column container (likely an empty column).
-      targetSort = columnList.length
-    }
-
-    // No-op when dropping in same column at same slot.
-    if (dragged.column === targetColumn && dragged.sortOrder === targetSort) return
-
+    setError(null)
     void window.mucka
-      .moveRoadmapCard({
-        id: draggedId,
-        column: targetColumn,
-        sortOrder: targetSort
-      })
+      .moveRoadmapCard({ id: draggedId, column: targetColumn })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
         setError(message)
@@ -188,8 +157,18 @@ function RoadmapView(): React.JSX.Element {
           background: 'var(--surface2)'
         }}
       >
-        <span className="t-label-sm text-dirty-grey">
-          {cards.length} cards · drag between columns
+        <span
+          className="t-label-sm text-dirty-grey"
+          title={
+            state && (state.unassigned.findings > 0 || state.unassigned.tickets > 0)
+              ? `Waiting for tonight's oversight run: ${state.unassigned.findings} findings, ${state.unassigned.tickets} tickets`
+              : undefined
+          }
+        >
+          {cards.length} cards · from the Mucka app
+          {state?.polledAt
+            ? ` · checked ${new Date(state.polledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : ''}
         </span>
         <div className="flex items-center gap-1">
           <button
@@ -212,8 +191,8 @@ function RoadmapView(): React.JSX.Element {
           </button>
           <button
             type="button"
-            onClick={() => void load()}
-            title="Reload roadmap"
+            onClick={() => void window.mucka.refreshRoadmap()}
+            title="Look at the app's roadmap now"
             aria-label="Reload roadmap"
             className="grid size-6 place-items-center rounded-sm transition-colors hover:bg-van-white/10"
             style={{ color: 'var(--dirty-grey)' }}
@@ -223,11 +202,16 @@ function RoadmapView(): React.JSX.Element {
         </div>
       </div>
 
+      {error || state?.error ? (
+        <p className="px-3 py-1 t-body-md" style={{ color: 'var(--red)' }}>
+          {error ?? state?.error}
+          {!error && cards.length > 0 ? ' (showing the last copy)' : ''}
+        </p>
+      ) : null}
       {loading ? (
         <p className="px-3 py-2 t-body-md text-dirty-grey">Loading…</p>
-      ) : error ? (
-        <p className="px-3 py-2 t-body-md text-orange">{error}</p>
       ) : (
+
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -269,8 +253,7 @@ function parseColumnFromOverId(
   cards: RoadmapCard[]
 ): RoadmapColumn | null {
   if (overId.startsWith('col:')) {
-    const c = overId.slice(4)
-    return COLUMN_ORDER.includes(c as RoadmapColumn) ? (c as RoadmapColumn) : null
+    return COLUMN_ORDER.find((c) => `col:${c}` === overId) ?? null
   }
   return cards.find((c) => c.id === overId)?.column ?? null
 }
@@ -341,41 +324,35 @@ function KanbanColumn({
         </div>
       </div>
 
-      <SortableContext
-        items={cards.map((c) => c.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 py-1.5">
-          {cards.length === 0 ? (
-            <p
-              className="px-1 py-3 text-center text-[0.7rem]"
-              style={{ color: 'rgba(234, 233, 232, 0.35)' }}
-            >
-              empty
-            </p>
-          ) : (
-            cards.map((card) => (
-              <SortableCard key={card.id} card={card} onOpen={onOpenCard} />
-            ))
-          )}
-        </div>
-      </SortableContext>
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 py-1.5">
+        {cards.length === 0 ? (
+          <p
+            className="px-1 py-3 text-center text-[0.7rem]"
+            style={{ color: 'rgba(234, 233, 232, 0.35)' }}
+          >
+            empty
+          </p>
+        ) : (
+          cards.map((card) => <DraggableCard key={card.id} card={card} onOpen={onOpenCard} />)
+        )}
+      </div>
     </div>
   )
 }
 
-function SortableCard({
+function DraggableCard({
   card,
   onOpen
 }: {
   card: RoadmapCard
   onOpen: (c: RoadmapCard) => void
 }): React.JSX.Element {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.id })
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: card.id
+  })
+  // The overlay follows the pointer; the card itself stays put, dimmed.
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+    transform: isDragging ? undefined : CSS.Translate.toString(transform),
     opacity: isDragging ? 0.35 : 1
   }
   return (
@@ -421,7 +398,8 @@ function KanbanCardChrome({
       >
         {card.title}
       </div>
-      {card.body.trim().length > 0 ? (
+      <CardFacts card={card} />
+      {card.body.trim().length > 0 || card.summary ? (
         <div
           className="mt-1 leading-snug"
           style={{
@@ -434,7 +412,7 @@ function KanbanCardChrome({
             overflow: 'hidden'
           }}
         >
-          {card.body}
+          {card.body.trim() || card.summary}
         </div>
       ) : null}
       {card.tags.length > 0 ? (
@@ -454,6 +432,26 @@ function KanbanCardChrome({
           ))}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/** Demand and scoring, as the app's board shows them. Nothing to show for a card nobody has asked for. */
+function CardFacts({ card }: { card: RoadmapCard }): React.JSX.Element | null {
+  const facts = [
+    isNewTheme(card) ? 'New' : null,
+    card.accounts > 0 ? `${card.accounts} firm${card.accounts === 1 ? '' : 's'}` : null,
+    card.marketability !== null ? `${card.marketability}/10` : null,
+    card.pr
+  ].filter((f): f is string => f !== null)
+  if (facts.length === 0) return null
+  return (
+    <div
+      className="mt-0.5 font-mono text-[0.6rem]"
+      style={{ color: 'var(--dirty-grey)' }}
+      title={card.accounts > 0 ? `${card.mentions} mentions from ${card.accounts} businesses` : undefined}
+    >
+      {facts.join(' · ')}
     </div>
   )
 }
