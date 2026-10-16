@@ -335,6 +335,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-16 — File paths in a terminal (`docs/plan.md`, `src/x.ts:42`) are ⌘-clickable and open in the file viewer, resolved against that terminal's worktree. Claude Code prints them as plain text, so the terminal finds them itself.
 - 2026-10-16 — Spin-offs are for unrelated work only: a job keeps related follow-ups, or lists them in its PR description as a next step, instead of offering to split them into more jobs.
 - 2026-10-16 — Browser previews no longer get stranded over layouts without a right column: a cockpit reload hides them until a pane claims them again, and a zero-size slot hides its view outright.
 - 2026-10-16 — The Jobs screen stays on what you're reading: once your job closes, whatever it falls back to becomes your pick, instead of following the front of the waiting queue and jumping whenever it changes.
