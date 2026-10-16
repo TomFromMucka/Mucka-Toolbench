@@ -10,7 +10,7 @@
 #
 # Keep in sync with the `publish:` block below in electron-builder.yml.
 owner: TomFromMucka
-repo: Mucka-Toolbench
+repo: Mucka-Toolbench-Releases
 provider: github
 releaseType: release
 updaterCacheDirName: mucka-toolbench-updater

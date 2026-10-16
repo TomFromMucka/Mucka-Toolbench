@@ -74,6 +74,9 @@ echo "→ Signing identity present: $EXPECTED_IDENTITY"
 
 VERSION="$(node -p "require('./package.json').version")"
 TAG="v${VERSION}"
+# Public, app files only, so the source repo can stay private. Must match
+# the publish block in electron-builder.yml and build/app-update.yml.
+RELEASES_REPO="TomFromMucka/Mucka-Toolbench-Releases"
 
 # Create the release up front.
 #
@@ -85,11 +88,12 @@ TAG="v${VERSION}"
 # up published with their zip and latest-mac.yml missing, which the updater
 # can see but can't download. With the release already there, both publishers
 # skip creation and just upload.
-if gh release view "$TAG" >/dev/null 2>&1; then
+if gh release view "$TAG" -R "$RELEASES_REPO" >/dev/null 2>&1; then
   echo "→ Release $TAG already exists — uploading into it."
 else
   echo "→ Creating release ${TAG}…"
-  gh release create "$TAG" --title "$VERSION" --generate-notes
+  # Generated notes would list the private repo's PRs in public.
+  gh release create "$TAG" -R "$RELEASES_REPO" --title "$VERSION" --notes "Mucka Toolbench $VERSION"
 fi
 
 echo "→ Building + publishing…"
@@ -101,13 +105,13 @@ npx electron-builder --mac --publish always
 echo "→ Verifying assets…"
 missing=""
 for want in "latest-mac.yml" "mucka-toolbench-${VERSION}-arm64-mac.zip"; do
-  gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx "$want" || missing="$missing $want"
+  gh release view "$TAG" -R "$RELEASES_REPO" --json assets --jq '.assets[].name' | grep -qx "$want" || missing="$missing $want"
 done
 if [ -n "$missing" ]; then
   echo "  Release $TAG is INCOMPLETE — missing:$missing" >&2
   echo "  Delete the partial assets and rerun:" >&2
-  echo "    gh release view $TAG --json assets --jq '.assets[].name' | xargs -I{} gh release delete-asset $TAG {} -y" >&2
+  echo "    gh release view $TAG -R $RELEASES_REPO --json assets --jq '.assets[].name' | xargs -I{} gh release delete-asset -R $RELEASES_REPO $TAG {} -y" >&2
   exit 1
 fi
 
-echo "✓ Release published. Check https://github.com/TomFromMucka/Mucka-Toolbench/releases"
+echo "✓ Release published. Check https://github.com/${RELEASES_REPO}/releases"
