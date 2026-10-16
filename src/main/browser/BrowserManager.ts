@@ -80,6 +80,17 @@ export function isPreviewableUrl(raw: string): boolean {
 export function bindBrowserManager(window: BrowserWindow): void {
   parentWindow = window
   broadcaster = window.webContents
+  // A reload throws the page away without running any pane's cleanup, so
+  // the views would stay wherever the old page put them, painting over a
+  // layout that may have no browser at all. Each pane that mounts in the
+  // new page pushes its bounds again.
+  window.webContents.on('did-start-navigation', (details) => {
+    if (!details.isMainFrame || details.isSameDocument) return
+    for (const slotId of SLOT_IDS) {
+      slots[slotId].bounds = null
+      applyBounds(slotId)
+    }
+  })
 }
 
 export function unbindBrowserManager(): void {
@@ -126,8 +137,11 @@ function emit(): void {
 
 function applyBounds(slotId: BrowserSlotId): void {
   const slot = slots[slotId]
+  // Zero size is how a pane that's going away asks to be hidden; hide it
+  // outright rather than trusting a 0×0 view not to paint.
+  const shown = slot.bounds !== null && slot.bounds.width > 0 && slot.bounds.height > 0
   for (const tab of slot.tabs) {
-    if (tab.id === slot.activeTabId && slot.bounds) {
+    if (tab.id === slot.activeTabId && shown && slot.bounds) {
       tab.view.setBounds(slot.bounds)
       tab.view.setVisible(true)
     } else {

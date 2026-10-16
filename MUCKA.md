@@ -334,6 +334,7 @@ shared primitives in `components/ui/`:
 
 (newest first — append here when shipping)
 
+- 2026-10-16 — Browser previews no longer get stranded over layouts without a right column: a cockpit reload hides them until a pane claims them again, and a zero-size slot hides its view outright.
 - 2026-10-16 — Spin-offs need Tom's yes: a job's Claude asks before starting one, and a yes starts it straight away. Merging is a job's to do when Tom says merge (no --delete-branch), and Job done / Finish turn on auto-merge even when the PR was already open.
 - 2026-10-15 — Jobs can propose spin-off jobs: a job's Claude runs `mucka-job.sh propose`, and the proposal waits in Intake → spin-offs for Tom to start or dismiss.
 - 2026-10-15 — The roadmap is the Mucka app's board: Oversight lane added, Issues gone (its notes show in Intake), every cockpit card imported to the app.
