@@ -49,7 +49,7 @@ function readString(key: string): string | null {
 }
 
 export function Workstation(): React.JSX.Element {
-  const { reload } = useAgentsState()
+  const { reload, loading: agentsLoading } = useAgentsState()
   const agents = useVisibleAgents()
   const { showRightColumn, isJobs } = useLayout()
   const gitStatus = useGitStatus()
@@ -99,7 +99,7 @@ export function Workstation(): React.JSX.Element {
 
   const { queue, focusTerminal } = useNeedsYou()
 
-  const { jobs } = useJobs()
+  const { jobs, loaded: jobsLoaded } = useJobs()
   const [jobPick, setJobPick] = useState<string | null>(() => readString(STORAGE_JOB))
   // What's on screen in Jobs: Tom's pick while it still exists (a job or
   // an agent), otherwise whoever needs him first, then the newest job,
@@ -117,14 +117,25 @@ export function Workstation(): React.JSX.Element {
   )
   const currentJobRecord = jobs.find((j) => j.id === currentWork) ?? null
   const currentAgentId = agents.find((a) => a.id === currentWork)?.id ?? null
-  const selectWork = useCallback((id: string): void => {
-    setJobPick(id)
+  const selectWork = useCallback((id: string): void => setJobPick(id), [])
+
+  // Whatever's on screen becomes the pick, so a fallback doesn't keep
+  // re-resolving under Tom while he reads it: without this, once his job
+  // closed the screen followed the front of the queue and jumped every time
+  // it changed. Only once both lists have loaded, or a startup render with
+  // no jobs yet would overwrite the saved pick.
+  if (jobsLoaded && !agentsLoading && currentWork !== null && currentWork !== jobPick) {
+    setJobPick(currentWork)
+  }
+
+  useEffect(() => {
+    if (!jobPick) return
     try {
-      localStorage.setItem(STORAGE_JOB, id)
+      localStorage.setItem(STORAGE_JOB, jobPick)
     } catch {
       /* storage disabled */
     }
-  }, [])
+  }, [jobPick])
   const lastJumpRef = useRef<string | null>(null)
 
   // ⌘J walks the queue. Answering an agent drops it out, so repeated
