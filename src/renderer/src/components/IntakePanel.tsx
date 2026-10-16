@@ -137,7 +137,7 @@ export function IntakePanel({
   return (
     <Clipboard
       title="Intake"
-      subtitle={error ?? 'support · sentry · spin-offs'}
+      subtitle={error ?? 'support · sentry'}
       bodyClassName="min-h-0"
       rightSlot={
         auto ? (
@@ -178,9 +178,11 @@ export function IntakePanel({
           <TabButton active={tab === 'sentry'} onClick={() => pick('sentry')}>
             sentry {status?.kind === 'ok' ? issues.length : '…'}
           </TabButton>
-          <TabButton active={tab === 'spin-offs'} onClick={() => pick('spin-offs')}>
-            spin-offs {proposals.length}
-          </TabButton>
+          {proposals.length > 0 || tab === 'spin-offs' ? (
+            <TabButton active={tab === 'spin-offs'} onClick={() => pick('spin-offs')}>
+              spin-offs {proposals.length}
+            </TabButton>
+          ) : null}
         </div>
         {tab === 'support' ? (
           <TicketsPane state={tickets} now={now} onSelect={onSelect} />

@@ -13,19 +13,28 @@ const PROPOSALS_DIR = join(homedir(), '.claude', 'mucka-jobs', 'proposals')
 const ID = /^p-\d+-\d+$/
 
 /**
- * Picks up the jobs a job's Claude proposes with `~/.claude/mucka-job.sh
- * propose`, and records them for Intake. Nothing here starts a job: a
- * spin-off waits for Tom, so one Claude can't set off a chain of them.
+ * Picks up the jobs a job's Claude starts with `~/.claude/mucka-job.sh
+ * start`, records each one and starts it. The Claude runs that only once Tom
+ * has said yes in its conversation (its job rules make it ask), so the yes
+ * is the approval and there's no second tap here.
+ *
+ * Proposals from before 16 Oct, when Claudes queued them without asking,
+ * stay pending in Intake until Tom starts or dismisses them.
  */
 export class SpinoffWatcher {
   private readonly emit: (proposals: JobProposal[]) => void
+  private readonly start: (proposalId: string) => Promise<unknown>
   private timer: NodeJS.Timeout | null = null
 
-  constructor(emit: (proposals: JobProposal[]) => void) {
-    this.emit = emit
+  constructor(deps: {
+    emit: (proposals: JobProposal[]) => void
+    start: (proposalId: string) => Promise<unknown>
+  }) {
+    this.emit = deps.emit
+    this.start = deps.start
   }
 
-  start(): void {
+  watch(): void {
     this.scan()
     this.timer = setInterval(() => this.scan(), POLL_MS)
   }
@@ -68,9 +77,19 @@ export class SpinoffWatcher {
     if (!insertProposal({ id, parentJob: job.id, title, brief, createdAt: at })) return false
     logEvent({
       source: 'system',
-      kind: 'jobs.spinoff_proposed',
-      message: `"${job.title.slice(0, 60)}" proposed a new job: ${title}. It's in Intake, under spin-offs.`,
-      tone: 'attention'
+      kind: 'jobs.spinoff_started',
+      message: `"${job.title.slice(0, 60)}" spun off a new job, with Tom's yes: ${title}.`,
+      tone: 'normal'
+    })
+    this.start(id).catch((err: unknown) => {
+      // Left pending, so it waits in Intake for Tom to start by hand.
+      logEvent({
+        source: 'system',
+        kind: 'jobs.spinoff_failed',
+        message: `Couldn't start the spin-off "${title}": ${err instanceof Error ? err.message : String(err)}. It's in Intake, under spin-offs.`,
+        tone: 'attention'
+      })
+      this.publish()
     })
     return true
   }

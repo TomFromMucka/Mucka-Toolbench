@@ -9,7 +9,7 @@
  * into ~/.claude/settings.json as the PermissionRequest hook plus the
  * PostToolUse / Stop / UserPromptSubmit hooks that clear it, plus Pre/PostToolUse
  * hooks that tell mucka-agent-state.sh a Claude is working again. Also copies
- * mucka-job.sh, which a job's Claude runs to propose a spin-off job. Hooks are
+ * mucka-job.sh, which a job's Claude runs to start a spin-off job Tom said yes to. Hooks are
  * user-wide, but the script exits at once unless $MUCKA_TERMINAL is set,
  * so only Claudes the cockpit launched are affected.
  *
@@ -57,16 +57,18 @@ settings.hooks ??= {}
 
 const changes = []
 
-// Proposing a spin-off only writes a file for Tom to look at, so it needs no
-// permission prompt of its own: Start in Intake is his yes. Both spellings,
-// because the rule matches the command as Claude types it.
+// `mucka-job.sh start` starts a job, so it gets no allow rule: the Claude
+// asks Tom first, and its run is checked like any other command. The rules
+// an older install added for `propose` (which only queued a proposal) go.
 const jobScript = join(claudeDir, 'mucka-job.sh')
-settings.permissions ??= {}
-settings.permissions.allow ??= []
-for (const rule of [`Bash(${jobScript} propose:*)`, 'Bash(~/.claude/mucka-job.sh propose:*)']) {
-  if (settings.permissions.allow.includes(rule)) continue
-  settings.permissions.allow.push(rule)
-  changes.push(`permission: ${rule}`)
+const retired = [`Bash(${jobScript} propose:*)`, 'Bash(~/.claude/mucka-job.sh propose:*)']
+const allow = settings.permissions?.allow
+if (Array.isArray(allow)) {
+  for (const rule of retired) {
+    if (!allow.includes(rule)) continue
+    allow.splice(allow.indexOf(rule), 1)
+    changes.push(`removing permission: ${rule}`)
+  }
 }
 for (const want of WANTED) {
   const { command } = want
@@ -91,7 +93,11 @@ if (changedScripts.length === 0 && changes.length === 0) {
 for (const { source, target } of changedScripts) {
   console.log(`${apply ? 'Copying' : 'Would copy'} ${source} → ${target}`)
 }
-for (const c of changes) console.log(`${apply ? 'Adding' : 'Would add'} ${c}`)
+for (const c of changes) {
+  const removing = c.startsWith('removing ')
+  const verb = removing ? (apply ? 'Removing' : 'Would remove') : apply ? 'Adding' : 'Would add'
+  console.log(`${verb} ${removing ? c.slice('removing '.length) : c}`)
+}
 
 if (!apply) {
   console.log('\nNothing written. Re-run with `npm run hooks:install -- --apply` to install.')
