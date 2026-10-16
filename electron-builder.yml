@@ -8,7 +8,7 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  # The repo is public and so are its releases. electron-builder packs
+  # The releases are public. electron-builder packs
   # whatever sits in the folder, tracked or not, so keep out anything
   # local to the machine that builds: .claude/settings.local.json shipped
   # in every release up to 0.6.0.
@@ -82,5 +82,8 @@ npmRebuild: false
 publish:
   provider: github
   owner: TomFromMucka
-  repo: Mucka-Toolbench
+  # Releases live in a public repo of their own so this one can be
+  # private: the updater downloads without signing in. Keep in sync with
+  # build/app-update.yml and RELEASES_REPO in scripts/release-mac.sh.
+  repo: Mucka-Toolbench-Releases
   releaseType: release
