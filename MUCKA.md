@@ -81,8 +81,9 @@ or "Tom, eyes here".
   layout.
 - **Intake** has two tabs in the terminal's font, *support* and
   *sentry*, each with its open count, plus *spin-offs* while any wait.
-  - **Spin-off jobs:** a job's Claude that finds work for a PR of its own
-    asks Tom (AskUserQuestion) whether to spin it off, and only on his yes,
+  - **Spin-off jobs:** a job's Claude that finds unrelated work (another
+    area, found in passing; related follow-ups stay in the job or go in
+    the PR description as a next step) asks Tom (AskUserQuestion) whether to spin it off, and only on his yes,
     or when he asks for one, runs `~/.claude/mucka-job.sh start "title"`
     (brief on stdin). The cockpit starts the job at once, sourced
     `job:<parent>`, and the job sheet logs it. *spin-offs* holds the ones
@@ -335,6 +336,9 @@ shared primitives in `components/ui/`:
 (newest first — append here when shipping)
 
 - 2026-10-16 — File paths in a terminal (`docs/plan.md`, `src/x.ts:42`) are ⌘-clickable and open in the file viewer, resolved against that terminal's worktree. Claude Code prints them as plain text, so the terminal finds them itself.
+- 2026-10-16 — Spin-offs are for unrelated work only: a job keeps related follow-ups, or lists them in its PR description as a next step, instead of offering to split them into more jobs.
+- 2026-10-16 — Browser previews no longer get stranded over layouts without a right column: a cockpit reload hides them until a pane claims them again, and a zero-size slot hides its view outright.
+- 2026-10-16 — The Jobs screen stays on what you're reading: once your job closes, whatever it falls back to becomes your pick, instead of following the front of the waiting queue and jumping whenever it changes.
 - 2026-10-16 — Spin-offs need Tom's yes: a job's Claude asks before starting one, and a yes starts it straight away. Merging is a job's to do when Tom says merge (no --delete-branch), and Job done / Finish turn on auto-merge even when the PR was already open.
 - 2026-10-15 — Jobs can propose spin-off jobs: a job's Claude runs `mucka-job.sh propose`, and the proposal waits in Intake → spin-offs for Tom to start or dismiss.
 - 2026-10-15 — The roadmap is the Mucka app's board: Oversight lane added, Issues gone (its notes show in Intake), every cockpit card imported to the app.
