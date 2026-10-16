@@ -3,6 +3,8 @@ import type { AgentStatus, Job, JobBrief, JobId, JobStatusEvent } from '@shared/
 
 interface JobsValue {
   jobs: Job[]
+  /** False until the first list arrives, so an empty `jobs` isn't mistaken for "no jobs". */
+  loaded: boolean
   /** What the job's Claude last reported. Idle until it reports anything. */
   jobStatusFor: (id: JobId) => AgentStatus
   /**
@@ -16,6 +18,7 @@ const Ctx = createContext<JobsValue | null>(null)
 
 export function JobsProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [jobs, setJobs] = useState<Job[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [statuses, setStatuses] = useState<Partial<Record<JobId, AgentStatus>>>({})
 
   useEffect(() => {
@@ -35,9 +38,14 @@ export function JobsProvider({ children }: { children: React.ReactNode }): React
     if (!api) return
     let alive = true
     void api.listJobs().then((list) => {
-      if (alive) setJobs(list)
+      if (!alive) return
+      setJobs(list)
+      setLoaded(true)
     })
-    const off = api.onJobsUpdate((list) => setJobs(list))
+    const off = api.onJobsUpdate((list) => {
+      setJobs(list)
+      setLoaded(true)
+    })
     return () => {
       alive = false
       off()
@@ -51,8 +59,8 @@ export function JobsProvider({ children }: { children: React.ReactNode }): React
   }, [])
 
   const value = useMemo<JobsValue>(
-    () => ({ jobs, jobStatusFor, createJob }),
-    [jobs, jobStatusFor, createJob]
+    () => ({ jobs, loaded, jobStatusFor, createJob }),
+    [jobs, loaded, jobStatusFor, createJob]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
