@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -7,6 +7,10 @@ import '@xterm/xterm/css/xterm.css'
 import type { AgentId, JobId, TerminalId } from '@shared/types'
 import { requestPreviewNavigation } from '../state/previewBus'
 import { useFocusRequests } from '../state/NeedsYouContext'
+import { useAgentsState } from '../state/AgentsContext'
+import { useJobs } from '../state/JobsContext'
+import { FileViewerModal } from './FileViewerModal'
+import { fileLinkProvider } from './terminalFileLinks'
 import { TERMINAL_FONT, THEME } from './terminalTheme'
 
 /** A terminal belongs to exactly one agent or one job. */
@@ -75,6 +79,18 @@ export function AgentTerminal({
   // ResizeObserver and zsh redraws its prompt, spamming the terminal
   // with empty `$ ` lines.
   const lastPtySizeRef = useRef<{ cols: number; rows: number } | null>(null)
+  const [viewing, setViewing] = useState<string | null>(null)
+  const { agents } = useAgentsState()
+  const { jobs } = useJobs()
+  const root =
+    (agentId
+      ? agents.find((a) => a.id === agentId)?.worktreePath
+      : jobs.find((j) => j.id === jobId)?.worktreePath) ?? null
+  // Read when a link is clicked, not at mount: the terminal outlives renders.
+  const rootRef = useRef(root)
+  useEffect(() => {
+    rootRef.current = root
+  }, [root])
 
   useEffect(() => {
     onDataRef.current = onData
@@ -144,6 +160,9 @@ export function AgentTerminal({
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.loadAddon(new WebLinksAddon(openLink))
+    term.registerLinkProvider(
+      fileLinkProvider(term, () => rootRef.current, setViewing)
+    )
     term.open(host)
 
     // WebGL renderer. Must be loaded *after* open() — it needs the element.
@@ -334,5 +353,10 @@ export function AgentTerminal({
     )
   )
 
-  return <div ref={hostRef} className="size-full bg-[#1a1612]" />
+  return (
+    <>
+      <div ref={hostRef} className="size-full bg-[#1a1612]" />
+      <FileViewerModal path={viewing} onClose={() => setViewing(null)} />
+    </>
+  )
 }
